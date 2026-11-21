@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.12·据需求重建）
+# 招商获客业务域 PRD（V1.13·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -56,6 +56,7 @@
 - **签约草稿补录租金条款（第四轮裁决第 4 条「合同草稿可编辑补录」）**：`signIntent` 仍按意向 `rent_terms` 起草、不改；意向条款没有月租的签约草稿，须在合同工作台草稿上「编辑租金条款」补录月租（押金随之按「收取月数×月租」重算）后才能提交审批，非纯提成合同月租为 0 提交即被拒（「请先在草稿上补录月租」）。
 - **实现保证（AUD-002/003 修复，2026-07-21）**：签约转换 = 一次原子业务事务——`signIntent` 公有入口 `@Transactional`，自动建商户 → 即建 `business_entity_bindings`（`binding_type` 四主体、`active`，稳定幂等键按意向派生）→ 合同 draft → 合同绑到来源意向 → 审计留痕（`leasing.intent.signed`，语义=合同草稿已起草，不表示线索已签约）；**任一步失败整体回滚，无孤儿商户/绑定/合同**。幂等重签命中同一商户与同一 active 绑定、不重复建。绑定创建仅在「无既有 `merchant_id`、签约自动建档」路径触发（带既有商户签约，其主体绑定由治理域主体绑定页管理，不在此重建）。
 - **实现现状（2026-11-20 第十八批 BG 段第 261 条 261-B20-R1）**：签约按意向认出已签约——意向已绑定合同（`leasing_intents.contract_id`，只由签约写入）时再签，不论是否同一请求编号、是否同一人，都返回首次起草的合同并提示已完成，不再建商户与四主体绑定、不重复记 `leasing.intent.signed`；尚未签约的，同一请求编号在途重发在共用幂等层串行。依据 PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」、PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+- **实现现状（2026-11-20 第十八批 BW 段第 385 条）**：①签约商户可不选（385-R1）——招商工作台「签约商户」下拉的空选项为「不选：签约后按线索自动建正式商户档案」，不选即不传 `merchant_id`，`signIntent` 按线索自动建正式商户档案（带入联系人与联系方式、意向业态、面积、位置）并建四类主体绑定（经营、结算主体缺省指向合同主体）；选了既有商户则合同挂到该商户，不另建档案与绑定；契约 `LeasingSignRequest.merchant_id` 为选填。②跟进历史的带入（385-R2）——不复制到商户侧：商户档案详情「招商跟进历史」按来源线索读出（来源线索＝合同挂在该商户名下的意向所属线索；含线索本身与该线索各意向的跟进，逐条显示时间、方式、内容，新的在前；没有记录显示「没有招商跟进记录」），接口 `GET /api/v1/leasing/merchants/{merchant_id}/follow-ups`（`listLeasingFollowUpsForMerchant`，`LeasingMerchantFollowUpService.listForMerchant`）；读者与商户档案同口径——持 `merchant.profile.view`，该商户经营项目须在本人可触及范围内，否则 403 `PROJECT_SCOPE_MISMATCH`，商户不存在 404 `MERCHANT_NOT_FOUND`。依据 PGM:500「线索经初步接触、需求确认、方案报价、商务谈判推进到签约，签约后自动转为正式商户档案。」、PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」
 - **合同起草原子性（AUD-002）**：`ContractService.createDraft` 亦已 `@Transactional`——字段/空间校验前置于落库（校验失败零脏写）、空间存在性+租期重叠早检在保存前完成、幂等命中(重放)也必过业务校验后才返回既有草稿；失败草稿整体回滚，重试走完整校验、无半成品可复用。
 
 
@@ -98,7 +99,7 @@
 - 意向：`GET/POST /leasing/intents`、`POST /intents/{id}/advance`（推进阶段，关键阶段触发主管确认）、`POST /intents/{id}/sign`（签约→转商户）
 - 品牌库：`GET/POST /leasing/brands`、`POST /brands/{id}/blacklist`
 - 黑名单例外放行：`GET/POST /leasing/blacklist-exceptions`（第十八批第 30 条，见 §4）
-- 跟进：`GET/POST /leasing/follow-ups`
+- 跟进：`GET/POST /leasing/follow-ups`；商户档案详情读来源线索的跟进：`GET /leasing/merchants/{merchant_id}/follow-ups`（第十八批 BW 段 385-R2，见 §6）
 - 失败留痕（第十八批 I 段第 90 条，PGM L738、L899）：招商各写入口失败时落 OpenAPI 声明的 `x-audit-event-failure`（独立事务，业务回滚也保留）。
 - **实现缺口（M08 仅登记）**：当前 Controller 没有 `POST /leads/{id}/to-intent`，实际以 `POST /intents` 携带 `leadId` 建意向，须补端点并与 OpenAPI 对齐；`createIntent` 以随机 ID 新建，未见按幂等键去重，不能声称全部写操作均已幂等。签约链对合同草稿、自动建商户与四主体绑定使用按意向派生的稳定幂等键；其余写操作的幂等边界须逐项实现和验证。所有现有及后续写操作均须保持项目隔离与审计留痕。
 
@@ -119,6 +120,7 @@
 
 | 日期 | 类型 | 章节 | 内容 |
 |---|---|---|---|
+| 2026-11-20 | 改 | 版本、§6、§9 | 版本升至 V1.13：第十八批 BW 段第 385 条——招商工作台签约商户可不选，不选即按线索自动建正式商户档案并建四类主体绑定，契约 `LeasingSignRequest.merchant_id` 改为选填（385-R1）；商户档案详情按来源线索带出招商跟进历史，新增 `GET /leasing/merchants/{merchant_id}/follow-ups`（385-R2）（PGM:500、PGM:502）。 |
 | 2026-11-20 | 改 | 版本、§6 | 版本升至 V1.12：第十八批 BG 段第 261 条 261-B20-R1——签约按意向认出已签约，重发与再签同一意向返回首次合同并提示已完成、不重复留痕（PGM:528⑤、PGM:303）。 |
 | 2026-10-29 | 改 | 版本、§9 | 版本升至 V1.11：第十八批 I 段第 90 条——新建线索、指派、改状态、新建意向、推进意向、签约、新建品牌、拉黑/解黑品牌、新建跟进九个写入口在权限码、幂等键、范围、校验或业务冲突被拒时落 OpenAPI 声明的失败事件（`LeasingController.failureAudited`，独立事务）；黑名单例外放行申请的权限码只在服务层核，被拒落 `leasing.blacklist_exception.request_failed`（PGM L738、L899、L502） |
 | 2026-10-29 | 改 | §7 | V1.10 同版续记：18G 复核修正——签约起草合同草稿的所属项目按 `leasing.convert` 核，不另要 `contract.draft.manage`（PGM L659） |

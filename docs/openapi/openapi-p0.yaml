@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.93
+  version: V0.94
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -29596,7 +29596,7 @@ paths:
       x-audit-event-success: leasing.intent.signed
       x-audit-event-failure: leasing.intent.sign_failed
       x-auth-context: staff-token
-      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。第十八批 G 段（第 82 条）：意向须在 leasing.convert 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。第十八批 BG 段第 261 条 261-B20-R1：意向已签约（已绑定合同）时再签，不论是否同一请求编号，都返回首次起草的合同并提示已完成，不再建商户与主体绑定、不重复留痕。
+      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。第十八批 G 段（第 82 条）：意向须在 leasing.convert 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。第十八批 BG 段第 261 条 261-B20-R1：意向已签约（已绑定合同）时再签，不论是否同一请求编号，都返回首次起草的合同并提示已完成，不再建商户与主体绑定、不重复留痕。第十八批 BW 段第 385 条 385-R1（PGM:500「签约后自动转为正式商户档案」）：merchant_id 选填——不传即签约后自动转为正式商户档案（带入线索联系人与联系方式、意向业态、面积、位置），并建四类主体绑定，经营与结算主体缺省指向合同主体（默认同一公司）；传既有商户 id 则合同挂到该商户，不另建商户档案与主体绑定。
       parameters:
         - name: intent_id
           in: path
@@ -29761,6 +29761,38 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/merchants/{merchant_id}/follow-ups:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingFollowUpsForMerchant
+      summary: 商户档案的招商跟进历史(来源线索)
+      description: 第十八批 BW 段第 385 条 385-R2（PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史」）：商户档案详情按来源线索读出招商跟进历史，不复制到商户侧。来源线索＝签约起草的合同挂在该商户名下的意向所属线索（leasing_intents.contract_id → contracts.merchant_id）；返回这些线索本身的跟进与其各意向的跟进，按创建时间倒序（同时刻按 id），page 默认 1、size 默认 500（上限 500）；没有来源线索时返回空列表。条目字段同 listLeasingFollowUps：id、ref_type（lead 线索／intent 意向）、ref_id、method、content、next_plan_at、operator_user_id、project_id、created_at。读者与商户档案同口径：不持 merchant.profile.view 403 PERMISSION_DENIED；商户账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED；不带项目口径的平台级账号（平台管理员、最高权限）不限，其余须该商户的经营项目（主项目加经审批追加的项目）里任一在本入口权限码可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH；商户不存在 404 MERCHANT_NOT_FOUND。
+      x-permission: merchant.profile.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - name: merchant_id
+          in: path
+          required: true
+          description: 商户 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -30454,9 +30486,10 @@ paths:
       tags:
         - contract
       operationId: listSpaceExpiryColorRules
-      summary: 查到期着色分类
+      summary: 查到期着色分类(按综合体)
+      description: 第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：返回该综合体自己的在用着色分类，该综合体一条在用的都没有时返回平台默认（project_id 为空的行），两者不叠加；不带 project_id 取本人所在综合体，没有本人综合体的平台管理员与最高权限不带只返回平台默认；项目须在 contract.space.color.manage 可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。行含 id、project_id（为空＝平台默认）、category_name、color、threshold_days、seq、active。
       x-permission: contract.space.color.manage
-      x-data-scope: platform
+      x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
@@ -30467,7 +30500,7 @@ paths:
         - name: project_id
           in: query
           required: false
-          description: 综合体 id(空=平台默认)。
+          description: 综合体项目 id（不带取本人所在综合体；平台管理员与最高权限不带只返回平台默认）。
           schema:
             type: string
             maxLength: 64
@@ -30488,10 +30521,10 @@ paths:
       tags:
         - contract
       operationId: saveSpaceExpiryColorRule
-      summary: 配置到期着色分类(颜色+提前天数)
-      description: 第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），不再多建一条着色分类。
+      summary: 配置到期着色分类(按综合体，颜色+提前天数，可改可移除)
+      description: 第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），不再多建一条着色分类。第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配」；PGM:659）：着色分类只作用于一个综合体——落请求 project_id 所指项目，不带取本人所在综合体；平台管理员与最高权限必须指定，否则 400 VALIDATION_FAILED「必须指定综合体项目」；项目须在 contract.space.color.manage 可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN（范围闸在幂等层之前）。386-R3：带 id 即修改本综合体在用的这一条（分类名、颜色、提前天数），平台默认行、别的综合体的行、已移除的行 404 NOT_FOUND「着色分类不存在」；active=false 即移除（停用，配置列表与铺位看板不再取到；本综合体最后一条移除后回落平台默认），缺省 true。提前天数须大于 0，否则 400 VALIDATION_FAILED。
       x-permission: contract.space.color.manage
-      x-data-scope: platform
+      x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: true
@@ -30519,7 +30552,7 @@ paths:
         - contract
       operationId: listSpaceRentalStatus
       summary: 铺位平面图着色数据源(可租/已租/即将到期)
-      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。第十八批 G 段 82b-R3：平台管理员照旧；其余账号只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集（不在范围内返回空表）。
+      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。第十八批 G 段 82b-R3：平台管理员照旧；其余账号只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集（不在范围内返回空表）。第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配」）：已租铺位的即将到期按铺位所在综合体自己的在用着色分类判定（命中提前天数最紧一档，着该档颜色），该综合体未配置时按平台默认，两者不叠加。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30532,7 +30565,7 @@ paths:
         - name: project_id
           in: query
           required: false
-          description: 综合体 id(空=平台默认)。
+          description: 综合体项目 id（不带＝可触及的全部综合体的铺位；即将到期各按铺位所在综合体自己的着色分类判定，该综合体未配置时按平台默认）。
           schema:
             type: string
             maxLength: 64
@@ -74967,7 +75000,6 @@ components:
       description: 请求载荷 LeasingSignRequest（V161 意向签约转合同，四类主体默认同公司）。
       additionalProperties: false
       required:
-        - merchant_id
         - contract_subject_id
       properties:
         idempotency_key:
@@ -74976,7 +75008,7 @@ components:
           maxLength: 128
         merchant_id:
           type: string
-          description: 商户 id。
+          description: 既有商户 id；不传＝签约后自动转为正式商户档案（带入线索联系人与联系方式、意向业态、面积、位置，四类主体默认指向合同主体同一公司）。
           maxLength: 64
         contract_subject_id:
           type: string
@@ -75369,7 +75401,7 @@ components:
           maxLength: 500
     SpaceExpiryColorRuleRequest:
       type: object
-      description: 请求载荷 SpaceExpiryColorRuleRequest（配置到期着色分类）。
+      description: 请求载荷 SpaceExpiryColorRuleRequest（配置到期着色分类；按综合体，带 id 即修改本综合体的这一条，active=false 即移除）。
       additionalProperties: false
       required:
         - category_name
@@ -75382,7 +75414,7 @@ components:
           maxLength: 128
         project_id:
           type: string
-          description: 综合体 id(空=平台默认)。
+          description: 综合体项目 id（不带取本人所在综合体；平台管理员与最高权限必须指定）。
           maxLength: 64
         category_name:
           type: string
@@ -75399,6 +75431,13 @@ components:
         seq:
           type: integer
           description: 排序。
+        id:
+          type: string
+          description: 已有着色分类编号；带上即修改本综合体在用的这一条（平台默认行、别的综合体的行、已移除的行 404 NOT_FOUND）。
+          maxLength: 64
+        active:
+          type: boolean
+          description: false＝移除（停用）；缺省 true。
     ContractRentBillRequest:
       type: object
       description: 请求载荷 ContractRentBillRequest（生成某期合同租金应收）。

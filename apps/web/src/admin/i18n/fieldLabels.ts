@@ -1,4 +1,4 @@
-// 文件版本：V0.51
+// 文件版本：V0.52
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3109,6 +3109,8 @@ export const VALUE_LABELS: Record<string, string> = {
   contract_deposit_refund_wait_saved: "押金退还等待期已保存",
   sensitive_operation_range_saved: "敏感操作授权范围已保存",
   contract_color_rule_added: "合同颜色规则已添加",
+  contract_color_rule_updated: "着色分类已修改",
+  contract_color_rule_removed: "着色分类已移除",
   stored_value_exit_notice_policy_saved: "储值退出公示规则已保存",
   ticket_expiry_reminder_policy_saved: "门票到期提醒规则已保存",
   saved_bottle_reminder_policy_saved: "存酒到期提醒节点已保存",

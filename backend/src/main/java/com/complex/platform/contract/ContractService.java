@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -1404,50 +1404,56 @@ public class ContractService implements com.complex.platform.finance.Termination
         return exception instanceof ApiException api ? api.code() : "INTERNAL_ERROR";
     }
 
+    /**
+     * 第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配……）」；PGM:659「在所分配的权限内
+     * 可以查看、处理该角色可查看项目的数据」）：着色分类落到一个综合体，项目须在 contract.space.color.manage 可触及范围内（不带取本人综合体，
+     * 平台管理员与最高权限须指定），范围闸在幂等层之前。
+     */
     public SpaceExpiryColorRuleRecord saveColorRule(SpaceExpiryColorRuleRequest request) {
         authorizationService.requirePermission("contract.space.color.manage");
         SpaceExpiryColorRuleRequest actual = requireRequest(request);
-        return once("saveSpaceExpiryColorRule", actual.idempotencyKey(), actual, () -> saveColorRuleOnce(actual), SpaceExpiryColorRuleRecord.class);
+        String projectId = authorizationService.requireReachableProject(actual.projectId(), "contract.space.color.manage",
+                AuthorizationService.PROJECT_OUT_OF_REACH);
+        return once("saveSpaceExpiryColorRule", actual.idempotencyKey(), actual, () -> saveColorRuleOnce(actual, projectId),
+                SpaceExpiryColorRuleRecord.class);
     }
 
-    private SpaceExpiryColorRuleRecord saveColorRuleOnce(SpaceExpiryColorRuleRequest actual) {
+    /**
+     * 386-R3（BSM:1354 同句：着色分类的分类名、颜色、提前天数可配；括号只把六种铺位租赁状态排除在后台增删之外）：带编号即改本综合体在用的这一条
+     * （平台默认行、别的综合体的行、已移除的行 404），active=false 即移除（停用；本综合体最后一条移除后回落平台默认）。
+     */
+    private SpaceExpiryColorRuleRecord saveColorRuleOnce(SpaceExpiryColorRuleRequest actual, String projectId) {
         int days = actual.thresholdDays() == null ? 0 : actual.thresholdDays();
         if (days <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "提醒天数必须大于 0");
         }
+        String ruleId = trimToNull(actual.id());
+        if (ruleId != null && repository.listColorRules(projectId).stream()
+                .noneMatch(r -> ruleId.equals(r.id()) && projectId.equals(r.projectId()))) {
+            throw ApiException.notFound("NOT_FOUND", "着色分类不存在");
+        }
+        boolean active = actual.active() == null || actual.active();
         SpaceExpiryColorRuleRecord saved = repository.saveColorRule(new SpaceExpiryColorRuleRecord(
-                "secr_" + UUID.randomUUID(), trimToNull(actual.projectId()),
+                ruleId == null ? "secr_" + UUID.randomUUID() : ruleId, projectId,
                 requireText(actual.categoryName(), "category_name"), requireText(actual.color(), "color"),
-                days, actual.seq() == null ? 0 : actual.seq(), true));
+                days, actual.seq() == null ? 0 : actual.seq(), active));
         auditEventService.recordSuccess("contract.color_rule_saved", "contract.space.color.manage",
                 "space_expiry_color_rule", saved.id(), null, actual.idempotencyKey(),
-                Map.of("threshold_days", days));
+                Map.of("threshold_days", days, "active", active));
         return saved;
     }
 
+    /** 386-R1：该综合体自己的着色分类，没有则平台默认；不带取本人综合体，平台管理员与最高权限不带只返回平台默认。 */
     public List<SpaceExpiryColorRuleRecord> listColorRules(String projectId) {
-        return repository.listColorRules(trimToNull(projectId));
+        return trimToNull(projectId) == null && authorizationService.currentProjectScopeQuietly().isEmpty()
+                ? repository.listColorRules(null)
+                : repository.listColorRules(authorizationService.requireReachableProject(projectId, "contract.space.color.manage",
+                        AuthorizationService.PROJECT_OUT_OF_REACH));
     }
 
-    /** 铺位平面图数据源：每铺租赁状态 + 套用着色分类（已租按距到期命中最紧一档→即将到期着该色）。 */
+    /** 铺位平面图数据源：每铺租赁状态；即将到期按铺位所在综合体自己的着色分类（没有则平台默认）在查询内判定，命中最紧一档着该色（386-R1）。 */
     public List<SpaceRentalStatusRecord> spaceRentalStatus(String projectId) {
-        String pid = trimToNull(projectId);
-        LocalDate asOf = LocalDate.now(LocalZone.ID);
-        List<SpaceExpiryColorRuleRecord> rules = repository.listColorRules(pid).stream()
-                .sorted((a, b) -> Integer.compare(a.thresholdDays(), b.thresholdDays())).toList();
-        List<SpaceRentalStatusRecord> out = new ArrayList<>();
-        for (SpaceRentalStatusRecord raw : spaceRentalRaw(pid, asOf)) {
-            if (!"let".equals(raw.rentalStatus()) || raw.daysToExpiry() == null) {
-                out.add(raw);
-                continue;
-            }
-            SpaceExpiryColorRuleRecord hit = rules.stream()
-                    .filter(r -> raw.daysToExpiry() <= r.thresholdDays()).findFirst().orElse(null);
-            out.add(hit == null ? raw
-                    : new SpaceRentalStatusRecord(raw.spaceId(), raw.spaceName(), "expiring", hit.color(),
-                            raw.daysToExpiry()));
-        }
-        return out;
+        return spaceRentalRaw(trimToNull(projectId), LocalDate.now(LocalZone.ID));
     }
 
     /**

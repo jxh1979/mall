@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminDataState } from "../components/AdminDataState";
@@ -539,13 +539,13 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
       setFormError(TEXT.noIntent);
       return;
     }
-    if (!signMerchantId) { setFormError("请选择签约商户。"); return; }
     if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户编号顶替。"); return; }
     if (signTurnoverOnly && !(Number(signDepositYuan) > 0)) { setFormError("纯提成合同须填写合同约定押金（元），不得为零。"); return; }
     if (!signEffectiveDate || !signExpiryDate) { setFormError("请填写合同生效日和到期日。"); return; }
     const request = {
       idempotencyKey: nextKey("leasing-intent-sign"),
-      merchantId: signMerchantId,
+      // 第十八批 BW 段第 385 条 385-R1（PGM:500「……签约后自动转为正式商户档案。」）：不选既有商户就不发，后端按线索自动建正式商户档案。
+      merchantId: signMerchantId || undefined,
       contractSubjectId: signSubjectId,
       operationSubjectId: signSubjectId,
       settlementSubjectId: signSubjectId,
@@ -758,7 +758,7 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
               <label>意向空间<select data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)}><option value="">请选择空间</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="requirement_confirmed">需求确认</option><option value="proposal_quoted">方案报价</option><option value="negotiation">商务谈判</option><option value="pending_signing">待签约</option></select></label>
               {KEY_STAGES.includes(targetStage) ? <label>最终审批人<select data-testid="leasing-intent-final-approver" value={intentApprover} onChange={(e) => setIntentApprover(e.target.value)}><option value="">不指定（直接上级确认）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label> : null}
-              <label>签约商户<select data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)}><option value="">请选择商户</option>{merchantList.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.merchantName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+              <label>签约商户<select data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)}><option value="">不选：签约后按线索自动建正式商户档案</option>{merchantList.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.merchantName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同主体<select data-testid="leasing-sign-subject" value={signSubjectId} onChange={(e) => setSignSubjectId(e.target.value)}><option value="">请选择经营主体</option>{entities.map((x) => <option key={x.id} value={x.id}>{(x.entityName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同生效日<CnDatePicker data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={setSignEffectiveDate} /></label>
               <label>合同到期日<CnDatePicker data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={setSignExpiryDate} /></label>

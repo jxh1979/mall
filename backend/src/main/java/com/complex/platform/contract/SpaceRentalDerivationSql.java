@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 /**
  * CG-09 铺位租赁状态推导共用 SQL 片段（PGM「合同运营细则」：「铺位租赁状态随意向与合同自动联动并在平面图着色（洽谈中、已租、即将到期等），
@@ -14,7 +14,7 @@ package com.complex.platform.contract;
  * <ul>
  *   <li>已退租：该合同存在落账前的退租结算单（{@code contract_settlements.status ∈ 待结算/有争议/有争议，诉讼仲裁}，含 move_out / expiry /
  *       early_termination 三种触发，不论合同是否仍 effective），或该合同已不在生效租期内（expired / terminated / 过期未扫）而没有已落账的结算单；</li>
- *   <li>已租：该合同 effective 且 as_of 未过 expiry_date 且无未结清结算单（即将到期由 service 按着色分类再判）；</li>
+ *   <li>已租：该合同 effective 且 as_of 未过 expiry_date 且无未结清结算单（即将到期按铺位所在综合体自己的着色分类（没有则平台默认）在铺位看板查询内判定）；</li>
  *   <li>洽谈中：铺位有招商意向；</li>
  *   <li>空置：结算单已落账（押金抵扣中/欠费追缴中/已结清——第三轮控制席约定「铺位转空置……保持在终审落账时，不随新状态推迟」）或从未绑约；
  *       只有已签约未生效合同的铺位不算已退租。</li>

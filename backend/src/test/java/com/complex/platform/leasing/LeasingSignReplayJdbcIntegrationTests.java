@@ -1,6 +1,6 @@
 package com.complex.platform.leasing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,10 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +46,7 @@ class LeasingSignReplayJdbcIntegrationTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private JdbcLeasingRepository leasingRepository;
+    @Autowired private PlatformRepository platformRepository;
 
     private final String s = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "prj_b20_" + s;
@@ -93,6 +97,32 @@ class LeasingSignReplayJdbcIntegrationTests {
         assertThat(count("merchants WHERE project_id = ?", project)).isEqualTo(merchants);
         assertThat(count("contracts WHERE contract_subject_id = ?", subject)).isEqualTo(contracts).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT contract_id FROM leasing_intents WHERE id = ?", String.class, intentId)).isEqualTo(contractId);
+    }
+
+    /**
+     * 第十八批 BW 段第 385 条 385-R1（PGM:500「……推进到签约，签约后自动转为正式商户档案。」；PGM:502「签约转商户自动带入联系人与联系方式、
+     * 意向业态/面积/位置、……四类主体默认指向同一公司、后续可拆为不同公司。」）：招商工作台不选签约商户即不带 merchant_id，首签按线索建正式商户档案
+     * （联系人、联系电话、业态、位置、所属项目）并建四主体绑定（经营、合同、结算主体都指向合同主体）。守护用例：后端本就如此，本段只放开页面。
+     */
+    @Test
+    void firstSignWithoutMerchantCarriesLeadIntoFormalMerchant() throws Exception {
+        String first = sign(salesA, body("b20-sign-auto-" + s)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<String> merchantIds = jdbc.queryForList("SELECT id FROM merchants WHERE project_id = ?", String.class, project);
+        assertThat(merchantIds).hasSize(1);
+        String merchantId = merchantIds.get(0);
+        assertThat((String) JsonPath.read(first, "$.data.merchant_id")).isEqualTo(merchantId);
+        MerchantRecord merchant = platformRepository.findMerchantById(merchantId).orElseThrow();
+        assertThat(merchant.contactName()).isEqualTo("回归联系人");
+        assertThat(merchant.contactPhone()).isEqualTo("13800002222");
+        assertThat(merchant.merchantType()).isEqualTo("retail");
+        assertThat(merchant.mallBlockCode()).isEqualTo("sp_b20_" + s);
+        assertThat(merchant.projectId()).isEqualTo(project);
+        List<Map<String, Object>> bindings = jdbc.queryForList("SELECT operation_entity_id, contract_entity_id, settlement_entity_id "
+                + "FROM business_entity_bindings WHERE merchant_id = ?", merchantId);
+        assertThat(bindings).hasSize(1);
+        assertThat(bindings.get(0)).containsEntry("operation_entity_id", subject).containsEntry("contract_entity_id", subject)
+                .containsEntry("settlement_entity_id", subject);
     }
 
     private String body(String key) {

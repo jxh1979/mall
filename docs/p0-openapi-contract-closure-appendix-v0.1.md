@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.93
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.94
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1402 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1403 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2804 | 人工事件矩阵正文未覆盖 2755 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1402 | 人工任务映射正文未逐项覆盖 1396 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 2806 | 人工事件矩阵正文未覆盖 2757 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1403 | 人工任务映射正文未逐项覆盖 1397 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 862 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -178,7 +178,7 @@
 | `contract.scope_request.raise` | staff-token | platform | 1 | requestContractScopeGrant | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.dispute.resolve` | staff-token | platform | 1 | resolveContractDispute | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.manage` | staff-token | platform | 3 | settleContract, listContractSettlements, checkContractSettlementDocuments | OpenAPI 补充，以本附录为准 |
-| `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
+| `contract.space.color.manage` | staff-token | project | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
 | `contract.view` | staff-token | merchant, platform | 4 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts, getRentToSales | 已在权限矩阵正文出现 |
 | `customer.account.manage` | staff-token | platform, project | 9 | lookupCustomerAccountByPhone, suspendCustomerAccount, reinstateCustomerAccount, getCustomerRestrictionSetting, configureCustomerRestrictionSetting, getCustomerFrequentEntryAlertSetting, configureCustomerFrequentEntryAlertSetting, getCustomerChurnAlertSetting, configureCustomerChurnAlertSetting | OpenAPI 补充，以本附录为准 |
 | `customer.blacklist.approve` | staff-token | project | 2 | approveCustomerBlacklistRequest, rejectCustomerBlacklistRequest | OpenAPI 补充，以本附录为准 |
@@ -367,7 +367,7 @@
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.approve` | staff-token | project-merchant | 1 | approveDeleteMerchant | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 11 | createMerchant, updateMerchant, assignMerchantProject, archiveMerchant, unarchiveMerchant, requestDeleteMerchant, configureMerchantPendingClearAlert, configureMerchantTableTransferLimit, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
-| `merchant.profile.view` | staff-token | project-merchant | 6 | listMerchants, getMerchantPendingClearAlert, getMerchantTableTransferLimit, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
+| `merchant.profile.view` | staff-token | platform, project-merchant | 7 | listMerchants, getMerchantPendingClearAlert, getMerchantTableTransferLimit, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects, listLeasingFollowUpsForMerchant | 已在权限矩阵正文出现 |
 | `merchant.service_work_order.approve` | staff-token | project-merchant | 1 | approveDeleteMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.assign` | staff-token | platform, project-merchant | 5 | listMerchantServiceWorkOrderPolicies, saveMerchantServiceWorkOrderPolicy, saveMerchantServiceWorkOrderCloseMethod, assignMerchantServiceWorkOrder, listMerchantServiceWorkOrderOwnerCandidates | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.close` | staff-token | project-merchant | 5 | closeMerchantServiceWorkOrder, cancelMerchantServiceWorkOrderByStaff, archiveMerchantServiceWorkOrder, unarchiveMerchantServiceWorkOrder, requestDeleteMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
@@ -2464,6 +2464,8 @@
 | `not_applicable` | failure | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listLeasingFollowUpsForMerchant` | `GET` | `/api/v1/leasing/merchants/{merchant_id}/follow-ups` | P0-待归类 | `merchant.profile.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listLeasingFollowUpsForMerchant` | `GET` | `/api/v1/leasing/merchants/{merchant_id}/follow-ups` | P0-待归类 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
@@ -4309,6 +4311,7 @@
 | P0-待归类 | `listLeasingBlacklistExceptions` | `GET` | `/api/v1/leasing/blacklist-exceptions` | 招商黑名单例外放行单清单 | `leasing.lead.manage` | `leasing.blacklist_exception.viewed` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | 招商品牌/客户库清单 | `leasing.brand.manage` | `leasing.brand.viewed` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | 跟进记录(按 ref 查) | `leasing.lead.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listLeasingFollowUpsForMerchant` | `GET` | `/api/v1/leasing/merchants/{merchant_id}/follow-ups` | 商户档案的招商跟进历史(来源线索) | `merchant.profile.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | 招商意向清单 | `leasing.intent.manage` | `leasing.intent.viewed` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | 招商线索清单 | `leasing.lead.manage` | `leasing.lead.viewed` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | 待跟进线索(3 天未跟进) | `leasing.lead.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -4341,7 +4344,7 @@
 | P0-待归类 | `listSettlementTransactions` | `GET` | `/api/v1/settlement/transactions` | 通票核销结算流水列表 | `finance.settlement.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listSiteEntryHistory` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}/history` | 查看各轮施工材料与验收记录 | `facility.site_entry.view_assigned` | `facility.site_entry.history_viewed` / `facility.site_entry.history_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSiteEntryReports` | `GET` | `/api/v1/facility/site-entry-reports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `facility.site_entry.view_assigned` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| P0-待归类 | `listSpaceExpiryColorRules` | `GET` | `/api/v1/contracts/expiry-color-rules` | 查到期着色分类 | `contract.space.color.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listSpaceExpiryColorRules` | `GET` | `/api/v1/contracts/expiry-color-rules` | 查到期着色分类(按综合体) | `contract.space.color.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listSpaceRentalStatus` | `GET` | `/api/v1/contracts/space-rental-status` | 铺位平面图着色数据源(可租/已租/即将到期) | `contract.draft.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listStaffAppFunctions` | `GET` | `/api/v1/terminals/staff-app-functions` | 员工 App 本端可用功能（按设备类型下发） | `not_applicable` | `not_applicable` / `not_applicable` | staff_work_phone, staff_private_phone, tablet | operation 级补充 |
 | P0-待归类 | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | 机构管理员查看本机构下属工作完成情况 | `partner.subordinate.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -4433,7 +4436,7 @@
 | P0-待归类 | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | 保存商户服务工单处理时限（工单类型×优先级一格） | `merchant.service_work_order.assign` | `merchant_service.work_order_policy_saved` / `merchant_service.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | 配置本项目停车业务参数（值与上下限同配） | `parking.config.manage` | `parking.policy_saved` / `parking.policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | 配置非积分商户账单异议期及上下限(按项目) | `settlement.config.manage` | `settlement.objection_period.configured` / `settlement.objection_period.config_failed` | web | operation 级补充 |
-| P0-待归类 | `saveSpaceExpiryColorRule` | `POST` | `/api/v1/contracts/expiry-color-rules` | 配置到期着色分类(颜色+提前天数) | `contract.space.color.manage` | `contract.color_rule_saved` / `contract.color_rule_save_failed` | web | operation 级补充 |
+| P0-待归类 | `saveSpaceExpiryColorRule` | `POST` | `/api/v1/contracts/expiry-color-rules` | 配置到期着色分类(按综合体，颜色+提前天数，可改可移除) | `contract.space.color.manage` | `contract.color_rule_saved` / `contract.color_rule_save_failed` | web | operation 级补充 |
 | P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
 | P0-待归类 | `serviceOrderPaymentCode` | `GET` | `/api/v1/services/orders/{id}/payment-code` | 出示公司统一收款码(H批代收;个人码流程已废弃) | `service.order.create` | `service.payment_code.presented` / `service.payment_code.present_failed` | staff_work_phone, web, app | operation 级补充 |
 | P0-待归类 | `setMyServicePaymentCode` | `POST` | `/api/v1/services/payment-code` | 录入我的收款码(履约人) | `service.order.perform` | `service.payment_code.saved` / `service.payment_code.save_failed` | web | operation 级补充 |
