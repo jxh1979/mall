@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-21T17:08:29.278Z",
+  "generated_at": "2026-11-21T18:08:36.202Z",
   "git": {
-    "head": "7402d2f51bb37828d66bf76b7d25c9dcbd61486c",
-    "head_short": "7402d2f5",
-    "branch": "feature/business-code-batch84-20261106",
+    "head": "3add82263f3002c4f00c6ebd74986dc572e50cb5",
+    "head_short": "3add8226",
+    "branch": "feature/business-code-batch90-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "388045eb6dc10c435c41bcb518c9249261b1ef68ee30fe1bc3906a2a2e2f1cbf",
-    "source_fingerprint_file_count": 3640,
+    "source_fingerprint": "4b60181a61a29e8b82bf08a6a36803b546a9404bcc2ff1c71b0bc0eac4fc492e",
+    "source_fingerprint_file_count": 3652,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 678,
-    "tests": 7265,
+    "suites": 682,
+    "tests": 7283,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-21T17:05:13.213Z",
+    "latest_mtime": "2026-11-21T18:06:49.016Z",
     "passed": true
   },
   "web_unit_source": {
@@ -115,6 +115,7 @@
       "apps/web/src/admin/pages/AmusementSessionsPage.capacity-and-ending.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.entitlementsoftdelete.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/AmusementSessionsPage.internalprice.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.test.tsx",
       "apps/web/src/admin/pages/AmusementVerificationRecordsPage.capacityleft.test.tsx",
@@ -222,6 +223,7 @@
       "apps/web/src/admin/pages/FinanceDividendCloseoutPanel.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendLoansPanel.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendTaxRatePanel.test.tsx",
+      "apps/web/src/admin/pages/FinanceDividendsPage.amusement.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.hold.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.legal.test.tsx",
@@ -432,8 +434,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 371,
-    "test_count_from_source": 2048
+    "file_count": 373,
+    "test_count_from_source": 2057
   },
   "web_build": {
     "dist_index_exists": true,
@@ -454,15 +456,15 @@
     "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CZOAvwLs.js",
+        "path": "apps/web/dist/assets/main-DJ760fZl.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-21T17:05:22.361Z"
+        "mtime": "2026-11-21T18:06:58.457Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-21T17:05:22.364Z"
+      "mtime": "2026-11-21T18:06:58.460Z"
     },
     "no_main_bundle_warning_expected": true
   },
