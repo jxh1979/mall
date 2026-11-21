@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.02
+# P0 OpenAPI Operation 验收矩阵 V1.03
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1415 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1419 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -412,6 +412,7 @@
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `TicketTypePublishRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | `listTicketTypeRuleVersions` | 票种规则版本（跨域组合通票） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | `withdrawTicketTypeRuleVersion` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.rule_version.withdrawn` | `ticket_type.rule_version.withdraw_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | `listTicketTypeConcessionApplications` | 票种的商户让利申请（运营配票选用） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/refundable-enable-requests` | `requestTicketRefundableEnable` | 申请开启票种可退（逐个票种、经审批） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.refundable_enable.submitted` | `ticket_type.refundable_enable.submit_failed` |
 | ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/sale-settings` | `updateTicketTypeSaleSettings` | 修改票种售卖设置（暂停售卖、开售与停售时间） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.sale_settings_changed` | `ticket_product.sale_settings_change_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/archive` | `archiveTicketType` | 存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.archived` | `ticket_product.archive_failed` |
@@ -901,6 +902,9 @@
 | merchant-portal | `GET` | `/api/v1/merchant-portal/ticket-settlements` | `listMerchantPortalTicketSettlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | `approveMerchantPortalPayeeAccountChange` | 收款方财务负责人审批更换收款账户 | `object` | `merchant.portal.payee_account.approve` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 是 | `merchant_portal.payee_account.approved` | `merchant_portal.payee_account.approve_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/notices` | `listMerchantPortalNotices` | 商户专区·通告(本商户) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
+| merchant-portal | `GET` | `/api/v1/merchant-portal/concession-ticket-types` | `listMerchantConcessionTicketTypes` | 商户专区·可申请让利的票种（本商户） | `-` | `merchant.portal.concession.apply` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
+| merchant-portal | `GET` | `/api/v1/merchant-portal/concession-applications` | `listMerchantConcessionApplications` | 商户专区·让利申请（本商户） | `-` | `merchant.portal.concession.apply` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
+| merchant-portal | `POST` | `/api/v1/merchant-portal/concession-applications` | `submitMerchantConcessionApplication` | 商户专区·提交并确认让利申请 | `MerchantConcessionApplicationRequest` | `merchant.portal.concession.apply` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 是 | `merchant_portal.concession_application.submitted` | `merchant_portal.concession_application.submit_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/fee-statement` | `getMerchantPortalFeeStatement` | 商户专区·费用总表与当期综合账单(本商户) | `-` | `merchant.billing.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `merchant_portal.fee_statement.viewed` | `merchant_portal.fee_statement.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/unread-bills` | `getMerchantPortalUnreadBills` | 商户专区·首页未读账单提醒(本商户) | `-` | `merchant.billing.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/contracts` | `listMerchantPortalContracts` | 商户专区·我的合同(只读关键信息) | `-` | `contract.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `merchant_portal.contract.viewed` | `merchant_portal.contract.view_failed` |

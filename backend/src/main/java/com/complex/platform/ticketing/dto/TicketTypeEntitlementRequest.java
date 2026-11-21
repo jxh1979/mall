@@ -18,7 +18,10 @@ public record TicketTypeEntitlementRequest(
         // S6/V376 配置入口：免费/赠送权益成本承担方（2026-08-01 拍板：赠送类必填、无默认——漏标拒保存/拒发布）。
         // platform_funded=平台出资型(进赠送权益预估成本预扣·核销按内部结算价与提供商户结算)；
         // merchant_concession=商户让利型(平台不承担成本·不与商户结算·不进预扣)。非赠送类可空。
-        String costBearer
+        String costBearer,
+        // 第十八批 BV 段 264-R2（第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」）：cost_bearer 为 merchant_concession 时必填，
+        // 须是该权益提供商户在商户专区为本票提交并确认、尚未用于本票其他权益的让利申请编号。
+        String concessionApplicationId
 ) {
 
     /** 兼容构造（costBearer 缺省 null）：非赠送类绑定的既有测试/调用零改动；赠送类绑定必须走全参构造显式标明。 */
@@ -27,6 +30,15 @@ public record TicketTypeEntitlementRequest(
             Integer totalTimes, Long valueAmountCent, String effectiveRule, Integer numPeople,
             Long componentPriceCent) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, entitlementTemplateId, quantity,
-                totalTimes, valueAmountCent, effectiveRule, numPeople, componentPriceCent, null);
+                totalTimes, valueAmountCent, effectiveRule, numPeople, componentPriceCent, null, null);
+    }
+
+    /** 兼容构造（concessionApplicationId 缺省 null）：不带让利申请的既有调用零改动。 */
+    public TicketTypeEntitlementRequest(String idempotencyKey, String operatorNote,
+            List<String> evidenceAttachmentIds, String entitlementTemplateId, Integer quantity,
+            Integer totalTimes, Long valueAmountCent, String effectiveRule, Integer numPeople,
+            Long componentPriceCent, String costBearer) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, entitlementTemplateId, quantity,
+                totalTimes, valueAmountCent, effectiveRule, numPeople, componentPriceCent, costBearer, null);
     }
 }

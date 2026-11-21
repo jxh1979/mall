@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -407,9 +407,12 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + typeId + "/entitlements").with(session(admin, "platform_admin", "org_1", null))
                 .contentType(MediaType.APPLICATION_JSON).content("""
                         {"idempotency_key": "c156-bind-%s", "entitlement_template_id": "%s", "quantity": 1,
-                         "total_times": 1, "num_people": 1, "component_price_cent": 0%s}
+                         "total_times": 1, "num_people": 1, "component_price_cent": 0%s%s}
                         """.formatted(UUID.randomUUID(), templateId,
-                        costBearer == null ? "" : ", \"cost_bearer\": \"" + costBearer + "\"")));
+                        costBearer == null ? "" : ", \"cost_bearer\": \"" + costBearer + "\"",
+                        // 第十八批 BV 段 264-R2：商户让利型须带该商户为本票提交并确认的让利申请。
+                        "merchant_concession".equals(costBearer)
+                                ? ", \"concession_application_id\": \"" + ConcessionApplicationFixture.confirmed(jdbc, typeId, templateId) + "\"" : "")));
     }
 
     /** 售出该通票后发到客人手上的餐饮权益（专属该餐厅、纯赠送）；单次票，同人份带一项入场。 */

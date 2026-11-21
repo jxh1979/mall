@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -896,9 +896,12 @@ class ExclusiveDirectPayDomainShareJdbcIntegrationTests {
         mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + type + "/entitlements").with(session(admin, "platform_admin", "org_1", null))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c176-bind-%s", "entitlement_template_id": "%s", "quantity": 1,
-                                 "total_times": 1, "num_people": 1, "component_price_cent": %d%s}
+                                 "total_times": 1, "num_people": 1, "component_price_cent": %d%s%s}
                                 """.formatted(UUID.randomUUID(), templateId, componentPriceCent,
-                                costBearer == null ? "" : ", \"cost_bearer\": \"" + costBearer + "\"")))
+                                costBearer == null ? "" : ", \"cost_bearer\": \"" + costBearer + "\"",
+                                // 第十八批 BV 段 264-R2：商户让利型须带该商户为本票提交并确认的让利申请。
+                                "merchant_concession".equals(costBearer)
+                                        ? ", \"concession_application_id\": \"" + ConcessionApplicationFixture.confirmed(jdbc, type, templateId) + "\"" : "")))
                 .andExpect(status().isOk());
     }
 

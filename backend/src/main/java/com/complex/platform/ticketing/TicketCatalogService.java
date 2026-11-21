@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -66,6 +66,10 @@ public class TicketCatalogService {
     // 第十八批 AJ 段 236-R3：跨域组合通票票种规则版本（字段注入免改构造点；单测未注入＝不识别跨域、发布与改动行为不变）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     TicketTypeRuleVersionService ruleVersions;
+
+    // 第十八批 BV 段 264-R2（第十八批裁决 78）：标商户让利型的绑定须选该商户为本票提交并确认、未被占用的让利申请（字段注入免改构造点；单测未注入＝不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    TicketConcessionApplicationService concessionApplications;
 
     // 第十八批 AW 段 294-R1：单一酒吧门票发布前查本项目本酒吧综合服务费已转正（字段注入免改构造点；单测未注入＝不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -584,6 +588,16 @@ public class TicketCatalogService {
                 now,
                 now
         );
+        if (TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(binding.costBearer())) {
+            // 第十八批裁决 80（BSM:751「商户让利的零元免费权益不结算」）：有价格的权益行不许选商户让利型；排在选用之前，让利申请也只能用于零元权益。
+            if (binding.componentPriceCent() != null && binding.componentPriceCent() > 0L) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "「" + template.name() + "」有价格，只有零元权益才能选商户让利");
+            }
+            // 第十八批 BV 段 264-R2（BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78）：已持票种锁，后续闸拒绝时选用随事务回滚。
+            if (concessionApplications != null) {
+                concessionApplications.claim(binding, ticketType, template, actual.concessionApplicationId());
+            }
+        }
         boolean published = "published".equals(ticketType.status());
         java.util.List<TicketTypeEntitlementRecord> current = repository.listTicketTypeEntitlements(ticketType.id());
         boolean crossDomain = published && crossDomain(ticketType, current);

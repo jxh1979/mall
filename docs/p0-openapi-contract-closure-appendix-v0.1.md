@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.02
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.03
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1415 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2830 | 人工事件矩阵正文未覆盖 2781 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1415 | 人工任务映射正文未逐项覆盖 1409 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 868 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1419 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 446 | 人工权限矩阵正文未覆盖 345 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2838 | 人工事件矩阵正文未覆盖 2789 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1419 | 人工任务映射正文未逐项覆盖 1413 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 869 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -362,6 +362,7 @@
 | `merchant.penalty.bounds.manage` | staff-token | project | 1 | saveMerchantPenaltyBounds | OpenAPI 补充，以本附录为准 |
 | `merchant.penalty.record` | staff-token | project | 2 | listMerchantPenalties, recordMerchantPenalty | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.card_exit_notice.publish` | staff-token | merchant | 2 | listMyMerchantCardExitNotices, publishMerchantCardExitNotice | OpenAPI 补充，以本附录为准 |
+| `merchant.portal.concession.apply` | staff-token | merchant | 3 | listMerchantConcessionTicketTypes, listMerchantConcessionApplications, submitMerchantConcessionApplication | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
@@ -451,7 +452,7 @@
 | `ticket.price_variant.manage` | staff-token | platform, project-channel | 5 | createTicketPriceRule, archiveTicketPriceRule, unarchiveTicketPriceRule, requestDeleteTicketPriceRule, createTicketDistributionMerchantRate | 已在权限矩阵正文出现 |
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
 | `ticket.product.manage` | staff-token | platform, project | 13 | updateTicketQrRefreshConfig, createTicketType, configureTicketTypeMinGiftCups, bindTicketTypeEntitlement, publishTicketType, withdrawTicketTypeRuleVersion, requestTicketRefundableEnable, updateTicketTypeSaleSettings, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing ... | 已在权限矩阵正文出现 |
-| `ticket.product.view` | staff-token | platform, project | 7 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, listTicketTypeRuleVersions, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.view` | staff-token | platform, project | 8 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, listTicketTypeRuleVersions, listTicketTypeConcessionApplications, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
 | `ticket.refund.approve` | staff-token | project-order | 5 | confirmTicketRefundPayout, createTicketRefundPaymentConfirmation, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 2 | requestTicketRefund, requestTicketSafetyEvent | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | -, project-order | 3 | listTicketRefunds, listTicketSafetyEvents, listTicketRefundLines | OpenAPI 补充，以本附录为准 |
@@ -2098,6 +2099,8 @@
 | `merchant_expense.reversed` | success | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
 | `merchant_expense.summary_view_failed` | failure | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
 | `merchant_expense.summary_viewed` | success | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
+| `merchant_portal.concession_application.submit_failed` | failure | `submitMerchantConcessionApplication` | `POST` | `/api/v1/merchant-portal/concession-applications` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
+| `merchant_portal.concession_application.submitted` | success | `submitMerchantConcessionApplication` | `POST` | `/api/v1/merchant-portal/concession-applications` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.view_failed` | failure | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.viewed` | success | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.fee_statement.view_failed` | failure | `getMerchantPortalFeeStatement` | `GET` | `/api/v1/merchant-portal/fee-statement` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
@@ -2498,6 +2501,10 @@
 | `not_applicable` | success | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantConcessionApplications` | `GET` | `/api/v1/merchant-portal/concession-applications` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantConcessionApplications` | `GET` | `/api/v1/merchant-portal/concession-applications` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantConcessionTicketTypes` | `GET` | `/api/v1/merchant-portal/concession-ticket-types` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantConcessionTicketTypes` | `GET` | `/api/v1/merchant-portal/concession-ticket-types` | P0-待归类 | `merchant.portal.concession.apply` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantFeeNotificationRecipients` | `GET` | `/api/v1/merchant-billing/fee-notification-recipients` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantFeeNotificationRecipients` | `GET` | `/api/v1/merchant-billing/fee-notification-recipients` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPenalties` | `GET` | `/api/v1/merchant-penalties` | ANA-风控分析 | `merchant.penalty.record` | 接口级事件，以本附录为准 |
@@ -2618,6 +2625,8 @@
 | `not_applicable` | failure | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listSupplyEntities` | `GET` | `/api/v1/inventory/supply-entities` | INV-库存存酒 | `inventory.supply_entity.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listSupplyEntities` | `GET` | `/api/v1/inventory/supply-entities` | INV-库存存酒 | `inventory.supply_entity.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listTicketTypeConcessionApplications` | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listTicketTypeConcessionApplications` | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listTraceCodeOutboundOrders` | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listTraceCodeOutboundOrders` | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
@@ -4352,6 +4361,8 @@
 | P0-待归类 | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | 待跟进线索(3 天未跟进) | `leasing.lead.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listMediaPerformanceShows` | `GET` | `/api/v1/settlement/media-shows` | 逐场演出合同记录列表 | `media.performance.view` | `media_show.listed` / `media_show.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
+| P0-待归类 | `listMerchantConcessionApplications` | `GET` | `/api/v1/merchant-portal/concession-applications` | 商户专区·让利申请（本商户） | `merchant.portal.concession.apply` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
+| P0-待归类 | `listMerchantConcessionTicketTypes` | `GET` | `/api/v1/merchant-portal/concession-ticket-types` | 商户专区·可申请让利的票种（本商户） | `merchant.portal.concession.apply` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMerchantFeeNotificationRecipients` | `GET` | `/api/v1/merchant-billing/fee-notification-recipients` | 查询商户费用通知接收人 | `merchant.billing.manage` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | 商户专区·我的合同(只读关键信息) | `contract.view` | `merchant_portal.contract.viewed` / `merchant_portal.contract.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | 商户专区·通告(本商户) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
@@ -4520,6 +4531,7 @@
 | P0-待归类 | `submitFacilityInspectionRecord` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/records` | 提交巡检记录 | `facility.inspection.manage` | `facility.inspection_record_submitted` / `facility.inspection_record_submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | 提交三个付账日或钱路指派规则(待另一人审批) | `settlement.config.manage` | `settlement.internal_pay_day_rule.submitted` / `settlement.internal_pay_day_rule.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
+| P0-待归类 | `submitMerchantConcessionApplication` | `POST` | `/api/v1/merchant-portal/concession-applications` | 商户专区·提交并确认让利申请 | `merchant.portal.concession.apply` | `merchant_portal.concession_application.submitted` / `merchant_portal.concession_application.submit_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | 商户专区·结算单异议留言 | `merchant.portal.settlement.dispute` | `merchant_portal.settlement.disputed` / `merchant_portal.settlement.dispute_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `submitSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/submit` | 外包提交进场报备（进入物业审核） | `facility.site_entry.submit_assigned` | `facility.site_entry.submit_assigned` / `facility.site_entry.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitTicketPointsBillingRule` | `POST` | `/api/v1/loyalty/ticket-points-billing/rules` | 提交全国积分账期审批 | `ticket.points.billing.manage` | `ticket.points.billing.rule.submitted` / `ticket.points.billing.rule.submitted.failed` | web | operation 级补充 |
@@ -4702,6 +4714,7 @@
 | TIC-票务权益 | `listTicketRefunds` | `GET` | `/api/v1/ticketing/refunds` | 查询退款单列表 | `ticket.refund.view` | `ticket_refund.viewed` / `ticket_refund.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | TIC-票务权益 | `listTicketSafetyEvents` | `GET` | `/api/v1/ticketing/safety-events` | 查询通票安全事件 | `ticket.refund.view` | `ticket_safety_event.viewed` / `ticket_safety_event.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | TIC-票务权益 | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | 查询门票转赠记录(客服纠纷排查,只读) | `ticket.transfer.read` | `ticket_transfer.viewed` / `ticket_transfer.view_failed` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketTypeConcessionApplications` | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | 票种的商户让利申请（运营配票选用） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypeGiftCoverage` | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | 票面赠酒清单（按酒吧分组） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | 票种规则版本（跨域组合通票） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |

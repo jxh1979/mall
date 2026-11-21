@@ -1,4 +1,4 @@
-// 文件版本：V0.31
+// 文件版本：V0.32
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -84,6 +84,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-MER-008", label: "我的分红", route: "/admin/merchant-zone/dividends" },
   { pageId: "ADM-MER-009", label: "员工车辆", route: "/admin/merchant-zone/staff-vehicles" },
   { pageId: "ADM-MER-010", label: "我的证照", route: "/admin/merchant-zone/licenses" },
+  { pageId: "ADM-MER-011", label: "让利申请", route: "/admin/merchant-zone/concession-applications" },
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
@@ -427,7 +428,7 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
 
 // 账号形态裁决（fix/web-critical）：商户专区/外包工作台页面只对匹配形态渲染菜单；
 // 平台账号（admin）菜单不出现这些项，直链进入显示业务化提示（不放请求打 403/400）。
-const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007", "ADM-MER-008", "ADM-MER-009", "ADM-MER-010"]);
+const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007", "ADM-MER-008", "ADM-MER-009", "ADM-MER-010", "ADM-MER-011"]);
 const vendorOnlyPages = new Set(["ADM-VND-001", "ADM-VND-002", "ADM-VND-003", "ADM-VND-004"]);
 
 test.describe("batch05 procurement and business day browser acceptance", () => {
