@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -840,7 +840,13 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED", "金额必须大于 0");
         }
         Instant now = now();
-        CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
+        // 第十八批 CA 段第 392 条 392-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交
+        // 不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；第十八批裁决 50）：锁前没查到编号才锁卡行，锁后按编号再查一次——同一编号
+        // 同时到达（柜台双击确认、超时同编号重发）时，后到者在卡行锁上等先到者提交，再查即读到第一次的退款流水，走下面同一段重放。
+        // 锁前已查到（顺序重提）的不锁卡、行为不变。existing 只赋值这一次（重放块的 lambda 引用它）。
+        CustomerStoredValueTransactionRecord beforeLock = idempotentTxn(idempotencyKey);
+        CustomerStoredValueAccountRecord account = beforeLock == null ? requireAccountForUpdate(customerId, projectId, merchantId) : null;
+        CustomerStoredValueTransactionRecord existing = beforeLock != null ? beforeLock : idempotentTxn(idempotencyKey);
         if (existing != null) {
             // M724-F10（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」；枚举速查第 86 行「商户员工只能管理本商户发行的储值卡」）：
             // 返回第一次的结果之前，先核对当前主体能不能管这笔流水所在的那张卡——按流水实际所属的卡判，不信请求里传的商户字段。
@@ -864,7 +870,6 @@ public class StoredValueService {
                     ? idempotencyKey.substring(COUNTER_REFUND_KEY_PREFIX.length()) : idempotencyKey);
             return first;
         }
-        CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；PGM:528「④看不到别的商户和别的项目的数据」）：
         // 首次提交同核商户与项目——商户账号只办本商户卡，卡带项目的只办本人项目（柜台退款原先只比商户）。
         StoredValueRefundLookupService.requireRefundScope(authorizationService, account,

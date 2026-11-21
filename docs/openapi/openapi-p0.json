@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.96",
+    "version": "V0.97",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -25866,7 +25866,7 @@
         ],
         "operationId": "refundStoredValueAccount",
         "summary": "会员储值退卡/退余额（后台）",
-        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。",
+        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -55400,7 +55400,7 @@
         ],
         "operationId": "counterRefundStoredValueAccount",
         "summary": "会员储值到店柜台退款（商户预收卡唯一可达退款路径）",
-        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。",
+        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -64148,7 +64148,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。"
+        "description": "PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。发起人对已撤回的转赠再撤回（重复点击、网络重发，含同时到达）：返回该转赠并带 replayed=true、提示已完成，不再留痕 voucher_transfer.revoked（第十八批 CA 段第 393 条 393-R1；PGM:303、PGM:528⑤）。"
       }
     },
     "/api/v1/customer/voucher-transfers/preview": {

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.24
+文档版本：V1.25
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11403,3 +11403,45 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18CK 文档组（D-docs）落地位置：① docs/third-party-business-access-product-prd-v0.1.md 升一版，在 §11 已确认第 6 条下、18BN 那条实现现状之后加一条实现现状（第 418 条 418-R1、第 419 条 419-R1、419-R2）：统一 Webhook（receiveIntegrationTypedWebhook）与机器人上报（reportIntegrationRobotTaskEvent）免后台登录、不过终端总开关闸（SecurityConfig.publicApiPaths；TerminalMasterSwitchInterceptor.PROVIDER_CALLBACK），凭签名 X-Signature、时间戳和一次性随机数核验身份（ThirdPartyScaffoldingService.verifyWebhookSignature），缺签名或签名不符、时间戳超出前后 5 分钟、随机数重放都回 401；仍受 integration.{type}.sync 开关门控，机器人上报为 integration.robot.sync；放行只限这两条路径。统一 Webhook 与开放平台 Webhook 的回执为统一包络，event_id 与 deduplicated 在 data 下（schema WebhookAccepted、response WebhookAccepted）。§13 变更日志加一行。② docs/operation-traceability-and-terminal-switch-prd-v0.1.md 升一版，在 §5.6「"无法确认"包含"确认不了这是哪个端"」条末补一句：非终端通道另含这两个第三方回调，按整串路径豁免，仍受开关门控，/api/v1/integration/ 下后台集成管理的写请求照旧过闸。变更日志加一行。依据：BSM:1511「当前还没有真实供应商接口资料，所以先开发自己的系统和开放接口：第三方可以在身份核验后读取或回写平台数据；后续拿到第三方对接资料后，再把第三方能力接进来。」；BSM:1579「机器人到达是被动留痕：由机器人上报的任务状态自动记录时间和点位。」；第 419 条依第 232 条「OpenAPI 与代码一致」先例。测试：文档组不写用例，对应实现用例为 CallbackOneShotJdbcIntegrationTests.callbacksNeedNoStaffSessionOrTerminalIdentity、CallbackOneShotJdbcIntegrationTests.callbacksFailingVerificationReturn401、TerminalMasterSwitchInterceptorTests（K1 段）。本组新增操作 0 个，迁移 0 个。没改第三方集成开发设计 §7.3 和契约包 §5、§9 的旧回执约定：属设计旁见，由控制席另行登记。
 - 18CK 合并前变基（2026-11-21）：本段自 6068f50e 变基到 origin/main be4a2a15；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.96、决策台账 V1.24，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CK 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 17d7ace9 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7216 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2027；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 11:48 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CA 落地位置补记（2026-11-20）：第十八批 CA 段（batch99）按 18CA 只读设计实现待开发清单第 392、393 条（储值退卡与转赠撤回重复提交组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CA 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CA 段，batch99）实现待开发清单第 392、393 条（18CA 只读设计 b99-audit/d6-ca.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 392-R1、393-R1。设计旁见（客人端门票转赠撤回重复提交同样不带已完成提示，与第 393 条同根）设计旁见由控制席另行登记为待核实新条目（第 424 条起），本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2bd98895 开工（第六轮 13 段并行），变基到 6068f50e 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 第十八批 CA 段落地位置补记（第 392、393 条；本段新增操作 0 个、迁移 0 个，预留 V748～V751 未用；只改 refundStoredValueAccount、counterRefundStoredValueAccount、revokeCustomerVoucherTransfer 三个既有操作的说明）：
+  一、第 392 条 392-R1（储值退卡锁账户行后按编号再查一次）。
+  - 改法：StoredValueService.doRefund 锁前先按编号查流水，没查到才 requireAccountForUpdate 锁卡行，锁后再按编号查一次。查到就走原有重放块：按流水所属卡 StoredValueRefundLookupService.requireRefundScope、verifyIdempotentReplay、verifyRefundReplayRequest、IdempotentReplayContext.markReplayed（柜台退款去 svcr_ 前缀），返回第一次的退款流水并带 replayed=true、提示已完成。
+  - 效果：同一编号同时到达（柜台双击「确认柜台退卡」、超时同编号重发）时，后到者等先到者提交后返回第一次的结果，不再报 409 已销户、余额不足或重复记录，钱只退一次。按顺序重提的请求仍在锁前命中、不锁卡，行为不变。
+  - 落地位置：线上退款 StoredValueService.refund（refundStoredValueAccount）与柜台退款 StoredValueService.counterRefund（counterRefundStoredValueAccount）都经过 doRefund，改这一处两条路径都覆盖。
+  - 依据：PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；第十八批裁决 50（XM-ONESHOT-RETURN，「实现时把本机草稿当参考、在现主干上重写」，参考草稿 2f31be04 的 doRefund 锁后复查，复用现行重放块）。
+  - 测试：StoredValueRefundSameKeyConcurrencyJdbcIntegrationTests 的 aDoubleClickedCounterRefundReturnsTheFirstTransactionToTheLaterOne、aSameKeyGeneralCardRefundArrivingWhileTheFirstIsRunningGetsTheFirstTransaction。
+  二、第 393 条 393-R1（发起人对已撤回的转赠再撤回时，返回该转赠并提示已完成）。
+  - 改法：VoucherTransferService.revoke 两处已撤回分支在 return 前调用 IdempotentReplayContext.markCurrentReplayed()。一处是锁前读到 revoked，一处是条件更新 0 行后重读为 revoked。两处都排在转赠不存在 404、非发起人 403 和 MemberWalletController.revokeVoucherTransfer 的综合体开关之后。
+  - 效果：revokeCustomerVoucherTransfer 响应带 replayed=true、提示已完成，不再留痕 voucher_transfer.revoked。不接幂等层，不改成必须带请求编号。revoked 只由发起人撤回写入，所以「已撤回再撤回」就是同一次操作重复提交（按常理定）。
+  - 依据：PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」。
+  - 测试：VoucherTransferRevokeReplayJdbcIntegrationTests 的 revokingAnAlreadyRevokedTransferAgainReturnsItAndSaysItIsAlreadyCompleted、aSameKeyRevokeArrivingWhileTheFirstIsRunningSaysItIsAlreadyCompleted。
+  三、设计旁见三条由控制席另行登记为待核实新条目，本段不改：后台写操作后用 POST 查询刷新会撤下已完成提示；小程序不订阅已完成提示；门票转赠撤回 TicketTransferService.revoke 同形缺口。
+- 18CA 契约落地（K-contract）：新增操作 0 个，迁移 0 个，只就地改三个既有操作的 description，其余契约属性全部不变。
+  - 392-R1：refundStoredValueAccount 与 counterRefundStoredValueAccount 的 description 末尾补「同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。」。对应代码：StoredValueService.doRefund，由 LoyaltyController.refundStoredValue、counterRefundStoredValue 调用。依据：PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；第十八批裁决 50。测试：StoredValueRefundSameKeyConcurrencyJdbcIntegrationTests。
+  - 393-R1：revokeCustomerVoucherTransfer 的 description 末尾补「发起人对已撤回的转赠再撤回（重复点击、网络重发，含同时到达）：返回该转赠并带 replayed=true、提示已完成，不再留痕 voucher_transfer.revoked（第十八批 CA 段第 393 条 393-R1；PGM:303、PGM:528⑤）。」，x-idempotency-required 仍为 false。对应代码：VoucherTransferService.revoke，由 MemberWalletController.revokeVoucherTransfer 调用。依据：PGM:303 末句、PGM:528⑤。测试：VoucherTransferRevokeReplayJdbcIntegrationTests。
+  - 响应里的 replayed 字段沿用既有 SuccessResponse 结构，没有新 schema。
+- 18CA 汇合段 J（e2e 与门禁）：
+  - e2e：tests/e2e 不改。本段只改后端 StoredValueService.doRefund（392-R1）、VoucherTransferService.revoke（393-R1），以及契约 refundStoredValueAccount、counterRefundStoredValueAccount、revokeCustomerVoucherTransfer 的说明。full-admin-remaining 对储值退卡页 ADM-CUS-006 只断言页面与查卡按钮可见，不提交退卡；e2e 里没有撤回券转赠、柜台退款或线上退款的提交步骤，也没有专门的假响应，所以不受影响。本段没改视觉基线页面，截图基线没有重拍。
+  - 门禁结论：
+    - 后端全量（重建空库）0 红。
+    - 后台前端 typecheck 0 错，vitest 全过。
+    - 客人三个工作区（customer-core、customer-app、customer-miniapp）单测全过。
+    - 安卓员工端单测全过，android-app 编译通过。
+    - chromium 后台五份 spec 全过。
+    - 四份生成物重生成后和工作树一致，不用改。
+    - verify:p0-contract 全过，OpenAPI 的 yaml 与 json 一致。
+    - 本段增量：新增操作 0 个，没有迁移；只改既有操作 refundStoredValueAccount、counterRefundStoredValueAccount、revokeCustomerVoucherTransfer 的说明，不改结构与 schema。
+    - 新增回归测试 StoredValueRefundSameKeyConcurrencyJdbcIntegrationTests、VoucherTransferRevokeReplayJdbcIntegrationTests 在全量中通过。
+- 18CA 文档组（第 392、393 条，无迁移，新增操作 0 个）：
+  改法：两份 PRD 各补一条实现现状、修订表各加一行、标题版本各升一次。没有新增业务规则，人工权限矩阵、契约包、任务映射表、事件矩阵都不扩表。
+  落地位置：
+  - 储值产品 PRD（docs/member-loyalty-and-stored-value-product-prd-v0.1.md）§7：第 278 条实现现状之后补 392-R1。储值退卡（refundStoredValueAccount、counterRefundStoredValueAccount，同走 StoredValueService.doRefund）同一请求编号两笔同时到达时，后到者等先到者提交，然后返回第一次的退款流水并提示已完成（SuccessResponse.replayed=true），钱只退一次。后到者不再报已销户、余额或本金不足、重复记录，页面不再报退卡失败。返回前照旧按流水所属的卡核退款范围。
+  - 积分与虚拟券产品 PRD（docs/points-and-voucher-product-prd-v1.0.md）§11.3 转赠：补 393-R1。发起人对已撤回的转赠再撤回（revokeCustomerVoucherTransfer，VoucherTransferService.revoke，含两笔同时到达），返回该转赠并提示已完成（replayed=true），券不再变动，不重复留痕 voucher_transfer.revoked。转赠不存在、非发起人、综合体客人端已关这些拒绝照旧在前。
+  依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；392 另据第十八批裁决 50。
+  测试：本组不新增测试。行为由 A1 段 StoredValueRefundSameKeyConcurrencyJdbcIntegrationTests、VoucherTransferRevokeReplayJdbcIntegrationTests 覆盖。
+- 18CA 合并前变基（2026-11-21）：本段自 6068f50e 变基到 origin/main 6c002faf；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.97、决策台账 V1.25，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 35e57790 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7220 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2027；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 12:44 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
