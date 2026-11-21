@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -148,8 +148,8 @@ const STATUS_LABELS: Record<string, string> = {
   template: "按模板",
   route: "按路线",
   // 巡检异常处理模式
-  light: "轻度告警",
-  to_work_order: "转工单",
+  light: "轻记录/重转整改工单分级",
+  to_work_order: "全部转整改工单",
   // 设备告警来源
   iot: "物联网",
   // 抄表方式

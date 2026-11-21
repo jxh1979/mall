@@ -15,4 +15,5 @@ public record FacilityInspectionRecordSubmitRequest(
         String note,
         String abnormalNote,
         String inspectorId,
+        String abnormalLevel,
         String idempotencyKey) {}

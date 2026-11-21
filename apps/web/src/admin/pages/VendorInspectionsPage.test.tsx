@@ -18,11 +18,11 @@ function envelope(items: unknown[]): Response {
   );
 }
 
-function makeApi(): AdminApi {
+function makeApi(tasks: unknown[] = TASKS, templates: unknown[] = TEMPLATES): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/templates")) return Promise.resolve(envelope(TEMPLATES));
-    if (url.includes("/tasks")) return Promise.resolve(envelope(TASKS));
+    if (url.includes("/templates")) return Promise.resolve(envelope(templates));
+    if (url.includes("/tasks")) return Promise.resolve(envelope(tasks));
     return Promise.resolve(envelope([]));
   }));
   return new AdminApi("test-token");
@@ -30,9 +30,9 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(tasks: unknown[] = TASKS, templates: unknown[] = TEMPLATES) {
   const props: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(tasks, templates),
     user: { id: "u1", username: "vendor", accountType: "outsourced_vendor" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -108,7 +108,7 @@ describe("VendorInspectionsPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("vendor-inspection-template-row-tpl-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
     expect(drawer.textContent).toContain("安防模板");
-    expect(drawer.textContent).toContain("转工单");
+    expect(drawer.textContent).toContain("全部转整改工单");
     expect(drawer.textContent).not.toContain("to_work_order");
   });
 });
@@ -200,5 +200,60 @@ describe("VendorInspectionsPage 记录与异常上报不写死留痕、巡检人
     const report = body(posts("report-exception")[0]!);
     expect(report.abnormal_note).toBe("消防门闭门器损坏");
     for (const key of ["inspector_id", "photos", "qr_code"]) expect(report).not.toHaveProperty(key);
+  });
+});
+
+// 第十八批 CG 段第 410 条 410-R2（PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式」）：
+// 分级模式（模板 abnormal_mode=light）的任务上报异常须由巡检人选轻重。
+describe("VendorInspectionsPage 分级模式选异常轻重（第 410 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/inspections");
+  });
+
+  const GRADED_TASKS = [
+    { id: "it-g", title: "消防通道巡检", inspection_type: "fire", status: "in_progress", schedule_mode: "template", assignee_id: "u-9", template_id: "tpl-g" },
+    ...TASKS,
+  ];
+  const GRADED_TEMPLATES = [
+    { id: "tpl-g", name: "消防通道模板", inspection_type: "fire", cycle_days: 1, abnormal_mode: "light", active: true, checklist: ["消防通道"] },
+    ...TEMPLATES,
+  ];
+
+  function posts(action: string) {
+    return vi.mocked(globalThis.fetch).mock.calls.filter(([input, init]) => (init as RequestInit | undefined)?.method === "POST" && String(input).endsWith(`/${action}`));
+  }
+
+  it("不选轻重上报异常被拦下、不发请求；选重后上报请求体带 abnormal_level=heavy", async () => {
+    renderPage(GRADED_TASKS, GRADED_TEMPLATES);
+    await waitFor(() => expect((screen.queryByTestId("vendor-inspection-select-it-g") as HTMLInputElement | null)?.checked).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId("vendor-inspection-abnormal-level")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("vendor-inspection-exception-note"), { target: { value: "消防通道被杂物堵住" } });
+    fireEvent.click(screen.getByTestId("vendor-inspection-report-exception"));
+    await waitFor(() => expect(screen.queryByTestId("vendor-inspection-error")?.textContent).toBe("请选择异常分级：轻记录或重转整改工单"));
+    expect(posts("report-exception")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("vendor-inspection-abnormal-level"), { target: { value: "heavy" } });
+    await waitFor(() => expect((screen.getByTestId("vendor-inspection-report-exception") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("vendor-inspection-report-exception"));
+    await waitFor(() => expect(posts("report-exception")).toHaveLength(1));
+    expect(JSON.parse(String((posts("report-exception")[0]![1] as RequestInit).body)).abnormal_level).toBe("heavy");
+  });
+
+  it("记录：结果为异常时不选轻重被拦下、不发请求；选重后记录请求体带 abnormal_level=heavy", async () => {
+    renderPage(GRADED_TASKS, GRADED_TEMPLATES);
+    await waitFor(() => expect((screen.queryByTestId("vendor-inspection-select-it-g") as HTMLInputElement | null)?.checked).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId("vendor-inspection-abnormal-level")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("vendor-inspection-result"), { target: { value: "abnormal" } });
+    fireEvent.change(screen.getByTestId("vendor-inspection-abnormal-note"), { target: { value: "消防通道被杂物堵住" } });
+    fireEvent.click(screen.getByTestId("vendor-inspection-record"));
+    await waitFor(() => expect(screen.queryByTestId("vendor-inspection-error")?.textContent).toBe("请选择异常分级：轻记录或重转整改工单"));
+    expect(posts("records")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("vendor-inspection-abnormal-level"), { target: { value: "heavy" } });
+    await waitFor(() => expect((screen.getByTestId("vendor-inspection-record") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("vendor-inspection-record"));
+    await waitFor(() => expect(posts("records")).toHaveLength(1));
+    expect(JSON.parse(String((posts("records")[0]![1] as RequestInit).body)).abnormal_level).toBe("heavy");
   });
 });

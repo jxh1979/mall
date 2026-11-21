@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +63,7 @@ class BarPourStandardLossJdbcIntegrationTests {
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at) VALUES(?,'出酒酒吧','bar','active',?,now(),now())",
                 bar, project);
         // 本酒吧损耗率阈值 10%（值与上下限同配），按后台「组织与商户」酒吧商户行「损耗率阈值」的请求形状。
-        mockMvc.perform(put("/api/v1/platform/merchants/" + bar + "/pour-loss-rate").with(staff())
+        mockMvc.perform(put("/api/v1/platform/merchants/" + bar + "/pour-loss-rate").with(master())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"pour-loss-" + s + "\",\"value_pct\":10,\"min_pct\":5,\"max_pct\":20}"))
                 .andExpect(status().isOk());
@@ -126,6 +127,16 @@ class BarPourStandardLossJdbcIntegrationTests {
         return mockMvc.perform(put("/api/v1/inventory/warehouses/" + warehouse + "/pour-device").with(staff())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"pour-device-" + warehouse + "\",\"pour_device_equipped\":" + equipped + "}"));
+    }
+
+    /** 第十八批 CG 段第 408 条：损耗率阈值只由持授权 U 盘密钥的最高权限本人调整。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, "token", List.of())).postProcessRequest(request);
+        };
     }
 
     /** 真实授权链：平台员工＋商户资料管理（损耗率阈值）、出品（bar.order.create）与库房管理权限码。 */

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -164,7 +164,7 @@ public class PlatformController {
         return ApiResponse.ok(service.getPercentParam(merchantId, MerchantPercentParamRecord.Param.POUR_LOSS_RATE));
     }
 
-    /** 第十八批 C 段第 17 条：配置酒吧损耗率阈值（值、下限、上限同填，下限不小于 1；权限同商户资料写口）。 */
+    /** 第十八批 C 段第 17 条：配置酒吧损耗率阈值（值、下限、上限同填，下限不小于 1；权限同商户资料写口，且须最高权限本人（第十八批 CG 段第 408 条））。 */
     @PutMapping("/merchants/{merchant_id}/pour-loss-rate")
     public ApiResponse<MerchantPercentParamRecord> configurePourLossRate(
             @PathVariable("merchant_id") String merchantId,

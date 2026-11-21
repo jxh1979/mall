@@ -93,7 +93,7 @@ class FacilityInspectionServiceTests {
         FacilityInspectionTaskRecord task = service.createTask(taskReq(null, "environment", "manual", null));
         FacilityInspectionTaskRecord started = service.start(task.id(), action("k_start"));
 
-        FacilityInspectionRecordRecord record = service.submitRecord(started.id(), submit("normal", null, "k_submit"));
+        FacilityInspectionRecordRecord record = service.submitRecord(started.id(), submit("normal", null, null, "k_submit"));
 
         FacilityInspectionTaskRecord closed = inspections.tasks.get(task.id());
         assertThat(record.taskId()).isEqualTo(task.id());
@@ -135,14 +135,14 @@ class FacilityInspectionServiceTests {
         assertThatThrownBy(() -> scoped.start("task_other", action("k_start_other")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
         FacilityInspectionTaskRecord started = scoped.start("task_own", action("k_start_own"));
-        FacilityInspectionRecordRecord record = scoped.submitRecord(started.id(), submit("normal", null, "k_submit_own"));
+        FacilityInspectionRecordRecord record = scoped.submitRecord(started.id(), submit("normal", null, null, "k_submit_own"));
 
         assertThat(started.status()).isEqualTo("in_progress");
         assertThat(record.taskId()).isEqualTo("task_own");
         // 第十八批 AP 段第 229 条 229-R8（BSM:940「……该次登录会话定位到操作人并留痕……」）：巡检人取提交账号，请求体所填（usr_inspector）不采信。
         assertThat(record.inspectorId()).isEqualTo("usr_vendor_s");
         assertThat(inspections.tasks.get("task_own").status()).isEqualTo("closed");
-        assertThatThrownBy(() -> scoped.submitRecord("task_other_started", submit("normal", null, "k_submit_other")))
+        assertThatThrownBy(() -> scoped.submitRecord("task_other_started", submit("normal", null, null, "k_submit_other")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
         assertThatThrownBy(() -> scoped.recheck("task_rectifying", action("k_recheck")))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -175,13 +175,28 @@ class FacilityInspectionServiceTests {
         FacilityInspectionTaskRecord task = service.createTask(taskReq(template.id(), null, "manual", null));
         service.start(task.id(), action("k_start"));
 
-        service.submitRecord(task.id(), submit("abnormal", "门禁松动", "k_abnormal"));
+        service.submitRecord(task.id(), submit("abnormal", "门禁松动", "light", "k_abnormal"));
 
         FacilityInspectionTaskRecord closed = inspections.tasks.get(task.id());
         assertThat(closed.status()).isEqualTo("closed");
         assertThat(closed.workOrderId()).isNull();
         assertThat(inspections.records.get(0).abnormalNote()).isEqualTo("门禁松动");
         assertThat(events).isEmpty();
+    }
+
+    // 第十八批 CG 段第 410 条（PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式」）：分级模式下巡检人选重，转整改中并发巡检异常事件。
+    @Test
+    void abnormalGradedHeavyPublishesEventAndRectifies() {
+        FacilityInspectionTemplateRecord template = service.createTemplate(templateReq("facility", 3, "light", true));
+        FacilityInspectionTaskRecord task = service.createTask(taskReq(template.id(), null, "manual", null));
+        service.start(task.id(), action("k_start"));
+
+        service.submitRecord(task.id(), submit("abnormal", "消防通道被杂物堵住", "heavy", "k_heavy"));
+
+        assertThat(inspections.tasks.get(task.id()).status()).isEqualTo("rectifying");
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOfSatisfying(FacilityInspectionAbnormalEvent.class,
+                event -> assertThat(event.taskId()).isEqualTo(task.id()));
     }
 
     @Test
@@ -201,7 +216,7 @@ class FacilityInspectionServiceTests {
                 List.of(Map.of("name", "B1 fire pump room"))));
         service.start(task.id(), action("k_start"));
 
-        service.submitRecord(task.id(), submit("abnormal", "消防泵房渗水", "k_abnormal"));
+        service.submitRecord(task.id(), submit("abnormal", "消防泵房渗水", null, "k_abnormal"));
 
         FacilityInspectionTaskRecord rectifying = inspections.tasks.get(task.id());
         assertThat(rectifying.status()).isEqualTo("rectifying");
@@ -222,11 +237,11 @@ class FacilityInspectionServiceTests {
     @Test
     void rejectsIllegalTransitionsAndMissingAbnormalNote() {
         FacilityInspectionTaskRecord task = service.createTask(taskReq(null, "security", "manual", null));
-        assertThatThrownBy(() -> service.submitRecord(task.id(), submit("normal", null, "k_submit")))
+        assertThatThrownBy(() -> service.submitRecord(task.id(), submit("normal", null, null, "k_submit")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("INVALID_STATE"));
 
         service.start(task.id(), action("k_start"));
-        assertThatThrownBy(() -> service.submitRecord(task.id(), submit("abnormal", null, "k_bad")))
+        assertThatThrownBy(() -> service.submitRecord(task.id(), submit("abnormal", null, null, "k_bad")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -248,17 +263,17 @@ class FacilityInspectionServiceTests {
         return new FacilityInspectionRecheckConfirmRequest("note", key);
     }
 
-    private FacilityInspectionRecordSubmitRequest submit(String result, String abnormalNote, String key) {
+    private FacilityInspectionRecordSubmitRequest submit(String result, String abnormalNote, String abnormalLevel, String key) {
         return new FacilityInspectionRecordSubmitRequest(result, List.of("https://cdn.example/inspection.jpg"),
                 "qr_1", new BigDecimal("31.2304"), new BigDecimal("121.4737"),
-                List.of(Map.of("item", "door", "result", result)), "note", abnormalNote, "usr_inspector", key);
+                List.of(Map.of("item", "door", "result", result)), "note", abnormalNote, "usr_inspector", abnormalLevel, key);
     }
 
     private FacilityInspectionExceptionReportRequest exceptionReq(String key) {
         return new FacilityInspectionExceptionReportRequest(List.of("https://cdn.example/inspection.jpg"),
                 "qr_1", new BigDecimal("31.2304"), new BigDecimal("121.4737"),
                 List.of(Map.of("item", "door", "result", "abnormal")), "note",
-                "door is broken", "ignored_inspector", key);
+                "door is broken", "ignored_inspector", "light", key);
     }
 
     private FacilityInspectionTaskRecord task(String id, String status, String assigneeId, String projectId) {

@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -72,7 +72,7 @@ class FacilityInspectionWebShape229Tests {
     void outsourcedExceptionReportKeepsNoFabricatedEvidence() throws Exception {
         String body = mockMvc.perform(post("/api/v1/facility/inspections/tasks/" + task("pending", vendorId) + "/report-exception").with(vendor)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "f229-exception-" + digits, "abnormal_note", "消防门闭门器损坏"))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "f229-exception-" + digits, "abnormal_note", "消防门闭门器损坏", "abnormal_level", "light"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         JsonNode record = json.readTree(body).path("data");

@@ -74,6 +74,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const [note, setNote] = React.useState("");
   const [abnormalNote, setAbnormalNote] = React.useState("");
   const [exceptionNote, setExceptionNote] = React.useState("");
+  const [abnormalLevel, setAbnormalLevel] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该巡检任务/模板完整字段（枚举中文·时间中文·处理人可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -106,6 +107,9 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
   const visibleTemplates = templates.filter((row) => row.id === selected?.templateId);
+  // 第十八批 CG 段第 410 条（PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式」）：
+  // 所选任务的模板为全部转整改工单才不分级；不挂模板或找不到模板按分级，异常须由巡检人选轻重。
+  const graded = selected !== null && templates.find((row) => row.id === selected.templateId)?.abnormalMode !== "to_work_order";
 
   // 无权限副资源不请求（根因修）：巡检模板端点需 facility.inspection.template.view，页面基础权限 facility.inspection.view_assigned 不含之。
   const canInspectionTemplate = hasPermissions(effectivePermissions, ["facility.inspection.template.view"]);
@@ -145,11 +149,17 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       setFormError("请选择一条巡检任务");
       return;
     }
+    const levelNeeded = graded && result === "abnormal";
+    if (levelNeeded && !abnormalLevel) {
+      setFormError("请选择异常分级：轻记录或重转整改工单");
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("vendor-inspection-record"),
       result,
       note: note.trim() || undefined,
       abnormalNote: result === "abnormal" ? abnormalNote : undefined,
+      abnormalLevel: levelNeeded ? abnormalLevel : undefined,
       checklistResult: [],
     };
     await runAction("vendor_inspection_recorded", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/records`, request));
@@ -164,6 +174,10 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       setFormError("异常说明不能为空");
       return;
     }
+    if (graded && !abnormalLevel) {
+      setFormError("请选择异常分级：轻记录或重转整改工单");
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("vendor-inspection-exception"),
       gpsLat: null,
@@ -171,6 +185,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       checklistResult: [{ item: selected.title ?? selected.id, result: "abnormal" }],
       note: note.trim() || undefined,
       abnormalNote: exceptionNote.trim(),
+      abnormalLevel: graded ? abnormalLevel : undefined,
     };
     await runAction("vendor_inspection_exception_reported", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/report-exception`, request));
   }
@@ -263,6 +278,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
               <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">正常</option><option value="abnormal">异常</option></select></label>
               <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
               <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>
+              {graded ? <label>异常分级<select data-testid="vendor-inspection-abnormal-level" value={abnormalLevel} onChange={(event) => setAbnormalLevel(event.target.value)}><option value="">请选择分级</option><option value="light">轻记录</option><option value="heavy">重转整改工单</option></select></label> : null}
               <label>异常上报说明<input data-testid="vendor-inspection-exception-note" value={exceptionNote} onChange={(event) => setExceptionNote(event.target.value)} /></label>
             </div>
             <div className="admin-form-row" data-testid="vendor-inspection-actions">

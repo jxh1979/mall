@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.19·据需求重建）
+# 楼宇运营业务域 PRD（V1.20·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -31,7 +31,7 @@
 | 工单 `facility_work_orders` | `source` | `merchant_self` / `platform` / `equipment_alarm` / `inspection` / `customer` / `lending_overdue`（V564 起 CHECK 与 `FacilityWorkOrderService.SOURCES` 均为 6 值） | 商户自助 / 平台 / 设备告警 / 巡检异常 / 客人投诉（V540，只经客人端建单） / 借用逾期未归还（第十八批第 18 条，V564，系统自动生成）；后两类后台人工建单 400 `VALIDATION_FAILED`。 |
 | 工单 `facility_work_orders` | `status` | `pending_assign` / `assigned` / `processing` / `pending_review` / `pending_acceptance` / `accepted` / `closed` / `suspended` / `overtime` | 待派单 / 已派单 / 处理中 / 待回访 / 待验收 / 已验收 / 已关闭 / 已挂起 / 已超时；`accepted`＝主管已验收、待提单方确认（HP-F02，V531 起可达）。**（2026-08-04 第三轮用户裁决 UD-05 / DEC-R6-13 定稿）** 九态**按工单类型分支适用，不是全类顺序链**——①**保洁等无争议类**：处理人完成即结（`processing` → `closed`）；②**投诉类**：须**提单方确认**（`processing` → `pending_review` → `closed`），客人端投诉的提单方即客人；③**复杂类**（大型设备报修等）：须**主管验收 ＋ 提单方确认双闸**——现行实现：关联设备的报修完工进 `pending_acceptance`，主管验收与提单方确认先后不限，主管先验收为 `accepted`，两项齐全才 `closed`，不经 `pending_review`。原「待回访 → 待验收全类顺序链」读法作废。「复杂类」判定口径按第十二批操作员裁决 2026-10-21 第 12 条为关联设备的报修，见 §3 |
 | 巡检模板/任务 | `inspection_type` | `security` / `fire` / `facility` / `environment` | 安防 / 消防 / 设施设备 / 环境卫生；**能耗抄表不属巡检类型**，走能耗域独立抄表流程（2026-08-04 第三轮用户裁决 UD-04 / DEC-R6-12 定稿为四类，ENUM「楼宇巡检类型」条已同批改为四类，见 §0）。DB CHECK 4 值与裁决一致，无需改造 |
-| 巡检模板 | `abnormal_mode` | `light` / `to_work_order` | 轻记录闭环 / 转整改工单闭环 |
+| 巡检模板 | `abnormal_mode` | `light` / `to_work_order` | 「轻记录/重转整改工单」分级 / 全部转整改工单（PGM:846，见 §4） |
 | 巡检任务 `facility_inspection_tasks` | `status` | `pending` / `in_progress` / `normal` / `abnormal` / `rectifying` / `rechecked` / `closed` | 待执行 / 执行中 / 正常 / 发现异常 / 整改中 / 已复检 / 已关闭 |
 | 巡检任务 | `schedule_mode` | `template` / `manual` / `route` | 模板自动排 / 主管手动排 / 点位路线排 |
 | 巡检记录 `facility_inspection_records` | `result` | `normal` / `abnormal` | 正常 / 异常 |
@@ -171,7 +171,7 @@
 - 定时排程由 `FacilityInspectionScheduleJob` 承担，开关为 `facility.inspection.scheduled.enabled=true`，默认固定延迟 `${facility.inspection.scheduled.fixed-delay-ms:300000}`。
 - 现场留痕落 `facility_inspection_records`：照片 `photos`、二维码 `qr_code`、GPS `gps_lat/gps_lng`、检查清单结果 `checklist_result`、备注、异常说明、巡检人（取提交账号，请求体不收巡检人；第十八批 AP 段第 229 条 229-R8）、记录时间。
 - 正常记录：任务从 `in_progress` 写 `normal` 后立即 `closed`。
-- 异常记录必须填 `abnormal_note`。模板 `abnormal_mode=light` 时写 `abnormal` 后直接 `closed`；`to_work_order` 时写 `abnormal` → `rectifying`，发布 `FacilityInspectionAbnormalEvent` 自动生成整改工单（外包巡检账号对派给本人的任务提交异常记录或上报异常同样自动生成，提单方记该账号；第十八批 BS 段第 379 条），整改完成后 `recheck` → `rechecked`，主管确认 `supervisor-confirm` → `closed`。
+- 异常记录必须填 `abnormal_note`。模板 `abnormal_mode=light`（「轻记录/重转整改工单」分级，不挂模板的任务同此）时，提交异常记录与上报异常须带 `abnormal_level`（`light` 轻记录、`heavy` 重转整改工单，由发现异常的巡检人提交时选），缺或非法 400 `VALIDATION_FAILED`，记录不落、任务状态不变；`light` 写 `abnormal` 后直接 `closed`、不建工单；`heavy` 与 `to_work_order`（全部转整改工单，不读 `abnormal_level`）同走 `abnormal` → `rectifying`，发布 `FacilityInspectionAbnormalEvent` 自动生成整改工单（外包巡检账号对派给本人的任务提交异常记录或上报异常同样自动生成，提单方记该账号；第十八批 BS 段第 379 条），整改完成后 `recheck` → `rechecked`，主管确认 `supervisor-confirm` → `closed`。后台「楼宇运营工作台」巡检记录区与「外包巡检任务」页在分级模式下由巡检人选「轻记录」或「重转整改工单」，未选不提交（第十八批 CG 段第 410 条，PGM:846）。
 - 巡检闭环与游乐安全巡检分离；本域只覆盖楼宇安防/消防/设施设备/环境卫生。
 
 **关键端点（实际 Controller）**
@@ -302,3 +302,4 @@
 | 2026-11-20 | 改 | 版本、§3 商户服务工单 | 版本升至 V1.17：第十八批 BI 段第 261 条 261-B17-R1——商户服务工单关闭类入口同一请求编号重复提交返回第一次的结果并提示已完成；派单、处理、关单、商户确认、取消先锁工单行再判状态，两端同时办只认先到的一笔 | PGM:528⑤；PGM:303；BSM:1385；第十八批裁决 50；待开发清单第 261 条 |
 | 2026-11-20 | 改 | 版本、§3、§4、§5A | 版本升至 V1.18：第十八批 BJ 段第 261 条 261-B18-R1～R3——设施工单八个写入口、楼宇巡检七个写入口、进场报备新建与提交进场与审核，同一请求编号重复提交返回第一次的结果并提示已完成；设施工单派单改为先锁工单行，两名主管同时派单只认先到的一笔 | PGM:528⑤；PGM:303；第十八批裁决 50；待开发清单第 261 条 |
 | 2026-11-20 | 改 | 版本、§4 楼宇巡检异常记录 | 版本升至 V1.19：第十八批 BS 段第 379 条 379-R1——巡检异常自动建整改工单的账号口径同发布方：外包巡检员对派给本人的「转工单」模板任务提交异常记录或上报异常，照常落记录并自动建整改工单（提单方记该账号；此前整笔 403 回滚） | BSM:657「……设备告警与巡检异常自动转工单。」；PGM:842「巡检任务分派到人，现场扫码或定位留痕，发现异常生成整改工单。」；PGM:681；待开发清单第 379 条 |
+| 2026-11-20 | 改 | 版本、§1 巡检模板 `abnormal_mode` 行、§4 异常记录条 | 版本升至 V1.20：第十八批 CG 段第 410 条 410-R1、410-R2——巡检模板「轻记录/重转整改工单」分级模式（`light`，不挂模板的任务同此）下，提交异常记录与上报异常须由巡检人选 `abnormal_level`（缺或非法 400），轻记录写 `abnormal` 后关闭、不建工单，重转整改工单与全部转整改工单（`to_work_order`）同走 `rectifying` 并自动生成整改工单；后台楼宇运营工作台巡检记录区与外包巡检任务页在分级模式下选轻重；两种模式显示名按 HTML 原词 | PGM:846；PGM:842；待开发清单第 410 条 |

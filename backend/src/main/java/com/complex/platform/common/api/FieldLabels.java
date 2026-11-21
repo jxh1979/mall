@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.57
+// 文件版本：V0.58
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -572,6 +572,7 @@ public final class FieldLabels {
         p("incident_id", "事件单号");
         p("exception_id", "异常单号");
         p("abnormal_note", "异常说明");
+        p("abnormal_level", "异常分级");
         p("alert_id", "告警编号");
         p("alert_type", "告警类型");
         p("hit_id", "命中记录");

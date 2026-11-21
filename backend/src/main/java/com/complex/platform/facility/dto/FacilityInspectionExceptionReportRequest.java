@@ -14,4 +14,5 @@ public record FacilityInspectionExceptionReportRequest(
         String note,
         String abnormalNote,
         String inspectorId,
+        String abnormalLevel,
         String idempotencyKey) {}
