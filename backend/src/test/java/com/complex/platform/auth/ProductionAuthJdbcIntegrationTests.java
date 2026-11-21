@@ -65,6 +65,10 @@ class ProductionAuthJdbcIntegrationTests {
         assertThat(refreshToken).startsWith("p0_prod_refresh_");
         assertThat(sessionId).startsWith("sess_");
         assertThat(login.at("/data/user/account_type").asText()).isEqualTo("platform_admin");
+        // 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：登录成功的留痕记登录的账号，不落「普通员工」、操作人为空。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT actor_type || '/' || actor_id FROM audit_events WHERE event_name = 'auth.login.succeeded' AND business_id = ?",
+                String.class, sessionId)).isEqualTo("platform_admin/" + login.at("/data/user/id").asText());
 
         jdbcTemplate.queryForObject("""
                 SELECT access_token_hash, refresh_token_hash
@@ -80,6 +84,10 @@ class ProductionAuthJdbcIntegrationTests {
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("OK"));
+
+        // 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：访问令牌过期（网页 401 后自动续期）时这次请求没有登录主体，
+        // 续期成功的留痕仍记该账号（refresh 只核令牌哈希、不核访问令牌是否过期，续期会重设过期时刻）。
+        jdbcTemplate.update("UPDATE auth_sessions SET access_expires_at = now() - interval '1 minute' WHERE id = ?", sessionId);
 
         MvcResult refreshResult = mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Authorization", "Bearer " + accessToken)
@@ -99,6 +107,9 @@ class ProductionAuthJdbcIntegrationTests {
         String rotatedRefreshToken = refreshed.at("/data/refresh_token").asText();
         assertThat(rotatedAccessToken).isNotEqualTo(accessToken);
         assertThat(rotatedRefreshToken).isNotEqualTo(refreshToken);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT actor_type || '/' || actor_id FROM audit_events WHERE event_name = 'auth.token.refreshed' AND business_id = ?",
+                String.class, sessionId)).isEqualTo("platform_admin/" + login.at("/data/user/id").asText());
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Authorization", "Bearer " + rotatedAccessToken)
@@ -275,6 +286,12 @@ class ProductionAuthJdbcIntegrationTests {
         assertThat(cookies).anyMatch(cookie -> cookie.startsWith("XSRF-TOKEN="));
         JsonNode login = objectMapper.readTree(loginResult.getResponse().getContentAsString());
         String accessToken = login.at("/data/access_token").asText();
+        // 第十八批 CH 段第 412 条 412-R1（PGM:899）：U 盘破窗登录成功的留痕记最高权限本人。
+        String masterSessionId = login.at("/data/session_id").asText();
+        assertThat(jdbcTemplate.queryForList("SELECT event_name || '/' || actor_type FROM audit_events"
+                + " WHERE event_name IN ('auth.master.session_issued', 'auth.master.login_succeeded')"
+                + " AND (business_id = ? OR metadata->>'session_id' = ?)", String.class, masterSessionId, masterSessionId))
+                .containsExactlyInAnyOrder("auth.master.session_issued/master_authority", "auth.master.login_succeeded/master_authority");
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM access_users WHERE id = 'usr_master_authority' AND username = 'master-authority' AND account_type = 'master_authority'",

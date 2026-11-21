@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.05
+  version: V1.06
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -4604,7 +4604,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于创建证据事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于创建证据事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 CH 段第 411 条 411-R1（PGM:683；BSM:576）：登记的证据事件，商户归属取登记人——商户账号记本商户；平台管理员、最高权限与不挂商户的账号不带商户，不因不挂商户被拒。
   /api/v1/evidence/reviews:
     post:
       tags:

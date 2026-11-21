@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -132,6 +132,7 @@ class EvidenceEventServiceTests {
     void listEventsFiltersToMerchantScope() {
         // Merchant A creates an event
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_a"));
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor("usr_m_a", "user", "staff", "org_1", "m_a", "active"));
         service.createEvents(new EventBatchRequest(
@@ -141,6 +142,7 @@ class EvidenceEventServiceTests {
 
         // Merchant B creates an event
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor("usr_m_b", "user", "staff", "org_1", "m_b", "active"));
         service.createEvents(new EventBatchRequest(

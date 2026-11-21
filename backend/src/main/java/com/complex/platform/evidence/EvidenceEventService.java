@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -700,7 +700,8 @@ public class EvidenceEventService {
         if (events.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "events is required");
         }
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        // 第十八批 CH 段第 411 条 411-R1（PGM:683；BSM:576）：登记人不挂商户的记空商户（最高权限与不挂商户的稽核、治理账号不再 403）。
+        String merchantId = authorizationService.currentMerchantIdQuietly().orElse(null);
         Instant receivedAt = Instant.now();
         List<EvidenceEventRecord> records = events.stream()
                 .map(event -> toRecord(deviceCode, trimToNull(actual.staffId()), event, receivedAt, merchantId))
