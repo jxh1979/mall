@@ -1,5 +1,5 @@
 package com.complex.platform.integration;
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -92,8 +92,10 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     }
 
     @Override
-    public OpenApiEventRecord saveOpenEvent(OpenApiEventRecord event) {
-        jdbcTemplate.update("""
+    public boolean saveOpenEvent(OpenApiEventRecord event) {
+        // 第十八批 BN 段 261-B23-R1：同一幂等键只落一次——重投或同时投递的后到者在该唯一约束上等先到者提交后不写，不覆盖已有事件；
+        // 事件编号撞上别的幂等键的事件时主键冲突，按 409 DUPLICATE_KEY 拒收。
+        return jdbcTemplate.update("""
                 INSERT INTO open_api_events (
                     id, endpoint_key, provider_code, event_name, idempotency_key,
                     signature_valid, event_status, payload_json, result_json,
@@ -104,13 +106,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     :signature_valid, :event_status, CAST(:payload_json AS jsonb),
                     CAST(:result_json AS jsonb), :failure_reason, :received_at, :processed_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    event_status = EXCLUDED.event_status,
-                    result_json = EXCLUDED.result_json,
-                    failure_reason = EXCLUDED.failure_reason,
-                    processed_at = EXCLUDED.processed_at
-                """, openEventParameters(event));
-        return event;
+                ON CONFLICT (endpoint_key, provider_code, idempotency_key) DO NOTHING
+                """, openEventParameters(event)) == 1;
     }
 
     @Override
@@ -704,22 +701,32 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     }
 
     @Override
-    public RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record) {
-        jdbcTemplate.update("""
+    public boolean saveRobotTaskEvent(RobotTaskEventRecord record) {
+        // 第十八批 BN 段 261-B23-R2：事件号按合作方与幂等键派生，重投或同时投递的后到者不写（该表只增不改不删，DO NOTHING 不触发）。
+        return jdbcTemplate.update("""
                 INSERT INTO integration_robot_task_events (
                     id, robot_task_ref, event_type, handover_id, payload, reported_at
                 )
                 VALUES (
                     :id, :robot_task_ref, :event_type, :handover_id, CAST(:payload AS jsonb), :reported_at
                 )
+                ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", record.id())
                 .addValue("robot_task_ref", record.robotTaskRef())
                 .addValue("event_type", record.eventType())
                 .addValue("handover_id", record.handoverId())
                 .addValue("payload", writeJson(record.payload()))
-                .addValue("reported_at", timestampWithTimeZone(record.reportedAt())));
-        return record;
+                .addValue("reported_at", timestampWithTimeZone(record.reportedAt()))) == 1;
+    }
+
+    @Override
+    public Optional<RobotTaskEventRecord> findRobotTaskEventById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, robot_task_ref, event_type, handover_id, payload, reported_at
+                  FROM integration_robot_task_events
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapRobotTaskEvent).stream().findFirst();
     }
 
     @Override

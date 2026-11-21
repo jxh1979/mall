@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.91",
+    "version": "V0.92",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -149,6 +149,7 @@
         ],
         "operationId": "receiveOpenWebhook",
         "summary": "第三方或供应商回调",
+        "description": "第十八批 BN 段第 261 条 261-B23-R1（PGM:528⑤、PGM:303）：回调信封按（端点、合作方、幂等键）只落一条，同一幂等键重投或同时投递返回首次事件编号与 deduplicated=true，不覆盖原事件；event_id 已被别的回调占用时 409 DUPLICATE_KEY。",
         "security": [
           {
             "WebhookSignature": []
@@ -8546,7 +8547,7 @@
         ],
         "operationId": "reportIntegrationRobotTaskEvent",
         "summary": "机器人任务事件上报（被动留痕）",
-        "description": "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。",
+        "description": "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。第十八批 BN 段第 261 条 261-B23-R2（PGM:528⑤、PGM:303）：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一合作方（X-Provider）同一幂等键重投或同时投递只落一条被动留痕，返回首条记录并带 replayed=true、提示已完成；成功留痕 integration.robot_reported 的 metadata 带 deduplicated（重投照记）。",
         "x-permission": "not_applicable",
         "x-data-scope": "open-endpoint",
         "x-terminal-allowed": [],
@@ -8625,7 +8626,7 @@
         ],
         "operationId": "receiveIntegrationTypedWebhook",
         "summary": "第三方统一 webhook 入口（开关门控）",
-        "description": "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。",
+        "description": "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。第十八批 BN 段第 261 条 261-B23-R1（PGM:528⑤、PGM:303）：同一类型同一幂等键重投或同时投递只落一条，返回首次事件编号与 deduplicated=true；event_id 已被别的回调占用时 409 DUPLICATE_KEY，不覆盖原事件；成功留痕 integration.webhook_received 的 metadata 带 deduplicated（重投照记）。",
         "x-permission": "not_applicable",
         "x-data-scope": "open-endpoint",
         "x-terminal-allowed": [],
@@ -18588,7 +18589,7 @@
         ],
         "operationId": "importPartnerVoucherRedemption",
         "summary": "导入合作方券核销回流",
-        "description": "第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：接收合作方（餐厅自己的系统）核销后经对账文件回流的一条核销：按券码找到已发权益并扣一次，内部价采购券同时按内部结算价给合作方挂应付（source_type=partner_voucher），免费营销券不结算。同一合作方同一 external_redemption_ref 再次导入直接返回原记录，不重复扣次、不重复挂账。entitlement_code 必填，缺失 400 VALIDATION_FAILED；redeemed_at 不填取当前时间；source 不填记 reconciliation_file。券码没有对应权益 404 ENTITLEMENT_NOT_FOUND；该权益不是合作方券 400 NOT_PARTNER_VOUCHER；剩余次数已用完、权益不在生效中或所属父票不在生效中 409 ENTITLEMENT_USED_UP；挂应付时落账营业日已封账 409 DAY_CLOSE_LOCKED。第十八批 BB 段第 279 条 279-R1（PGM:966「已拍板：所有有过程的业务动作都必须留痕」）：导入人与时间记入操作留痕，成功与按同一外部单号重复导入都记 ticket.partner_voucher_redemption.imported（重复导入 metadata.duplicate=true），失败（含权限、范围、校验与状态冲突）记 ticket.partner_voucher_redemption.import_failed；留痕的幂等键栏记 external_redemption_ref（本接口按合作方加外部核销单号去重，不按 idempotency_key）。第 280 条 280-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:659「数据的项目与商户隔离不提供关闭开关，与导出脱敏同例。」）：券码所属订单的项目须在操作人按 verification.execute 可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；订单没有所属项目的只有平台管理员能导入；同一外部单号重放也先判。",
+        "description": "第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：接收合作方（餐厅自己的系统）核销后经对账文件回流的一条核销：按券码找到已发权益并扣一次，内部价采购券同时按内部结算价给合作方挂应付（source_type=partner_voucher），免费营销券不结算。同一合作方同一 external_redemption_ref 再次导入直接返回原记录，不重复扣次、不重复挂账。entitlement_code 必填，缺失 400 VALIDATION_FAILED；redeemed_at 不填取当前时间；source 不填记 reconciliation_file。券码没有对应权益 404 ENTITLEMENT_NOT_FOUND；该权益不是合作方券 400 NOT_PARTNER_VOUCHER；剩余次数已用完、权益不在生效中或所属父票不在生效中 409 ENTITLEMENT_USED_UP；挂应付时落账营业日已封账 409 DAY_CLOSE_LOCKED。第十八批 BB 段第 279 条 279-R1（PGM:966「已拍板：所有有过程的业务动作都必须留痕」）：导入人与时间记入操作留痕，成功与按同一外部单号重复导入都记 ticket.partner_voucher_redemption.imported（重复导入 metadata.duplicate=true），失败（含权限、范围、校验与状态冲突）记 ticket.partner_voucher_redemption.import_failed；留痕的幂等键栏记 external_redemption_ref（本接口按合作方加外部核销单号去重，不按 idempotency_key）。第 280 条 280-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:659「数据的项目与商户隔离不提供关闭开关，与导出脱敏同例。」）：券码所属订单的项目须在操作人按 verification.execute 可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；订单没有所属项目的只有平台管理员能导入；同一外部单号重放也先判。第十八批 BN 段第 261 条 261-B08-R1（PGM:303、PGM:528⑤）：同一张券同一外部核销单号重复导入或同时提交只认先到的一笔，后到者返回首次记录并带 replayed=true、提示已完成，不重复扣次、不重复挂应付；该单号已登记在同一合作方另一张券上时 409 PARTNER_VOUCHER_REDEMPTION_CONFLICT，不扣次、不挂应付。",
         "x-permission": "verification.execute",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -18602,6 +18603,7 @@
           "ENTITLEMENT_NOT_FOUND",
           "NOT_PARTNER_VOUCHER",
           "ENTITLEMENT_USED_UP",
+          "PARTNER_VOUCHER_REDEMPTION_CONFLICT",
           "DAY_CLOSE_LOCKED",
           "CROSS_PROJECT_FORBIDDEN"
         ],
@@ -97473,7 +97475,8 @@
         "additionalProperties": false,
         "required": [
           "robot_task_ref",
-          "event_type"
+          "event_type",
+          "idempotency_key"
         ],
         "properties": {
           "robot_task_ref": {

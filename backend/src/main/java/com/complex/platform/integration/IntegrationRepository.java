@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +17,21 @@ public interface IntegrationRepository {
 
     Optional<OpenApiEventRecord> findOpenEventById(String endpointKey, String eventId);
 
-    OpenApiEventRecord saveOpenEvent(OpenApiEventRecord event);
+    /** 第十八批 BN 段 261-B23-R1：按 (endpoint_key, provider_code, idempotency_key) 只写一次；true＝本次写入，false＝同一幂等键已有事件、未写。 */
+    boolean saveOpenEvent(OpenApiEventRecord event);
+
+    /**
+     * 第十八批 BN 段 261-B23-R1（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；
+     * PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：落回调信封；同一幂等键已有事件（重投或同时投递的后到者）时不写，
+     * 返回首次事件编号并标已去重。
+     */
+    default WebhookAcceptedResponse acceptOpenEvent(OpenApiEventRecord event) {
+        if (saveOpenEvent(event)) {
+            return new WebhookAcceptedResponse(event.id(), false);
+        }
+        return new WebhookAcceptedResponse(findOpenEventByIdempotency(event.endpointKey(), event.providerCode(), event.idempotencyKey())
+                .orElseThrow().id(), true);
+    }
 
     List<ProviderAdapterRecord> listProviderAdapters();
 
@@ -114,7 +128,10 @@ public interface IntegrationRepository {
     }
 
     // ── R5 T14 第三方接口/开关预留骨架 ───────────────────────────────────────────
-    RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record);
+    /** 第十八批 BN 段 261-B23-R2：按事件号只写一次；true＝本次写入，false＝同一事件号已有、未写。 */
+    boolean saveRobotTaskEvent(RobotTaskEventRecord record);
+
+    Optional<RobotTaskEventRecord> findRobotTaskEventById(String id);
 
     VideoAnchorRecord saveVideoAnchor(VideoAnchorRecord record);
 

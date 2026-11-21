@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -629,6 +629,23 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public CustomerCheckInRecord checkIn(String customerToken, CustomerCheckInRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
         String terminal = sessionTerminal(customerToken);
+        // 第十八批 BN 段第 261 条 261-B13-R1（PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销」、
+        // 行末「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；
+        // 第十八批裁决 50）：带请求编号的签到走幂等层——同一编号重复提交（含网络重发同编号并发：后到者等先到者提交）返回第一次的签到结果并提示已完成、
+        // 只加一次积分。编号原样传入，与请求上下文里取到的编号逐字相同，重放才记为本请求的重复提交。不带编号的照旧。
+        if (request != null && request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
+            return executeWrite(
+                    "customerCheckIn:" + customer.id(),
+                    request.idempotencyKey(),
+                    request,
+                    CustomerCheckInRecord.class,
+                    "customer.checked_in",
+                    "customer.check_in_failed",
+                    "not_applicable",
+                    "customer_check_in",
+                    () -> loyaltyService.checkIn(customer.id(), terminal)
+            );
+        }
         try {
             CustomerCheckInRecord checkIn = loyaltyService.checkIn(customer.id(), terminal);
             auditEventService.recordSuccess(
@@ -1755,6 +1772,10 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         }
         if (value instanceof CustomerPointsRedemptionRecord record) {
             return record.id();
+        }
+        // 261-B13-R1：签到按客人留痕（与不带编号时 customer.checked_in 的 business_id 一致）。
+        if (value instanceof CustomerCheckInRecord record) {
+            return record.customerId();
         }
         return null;
     }

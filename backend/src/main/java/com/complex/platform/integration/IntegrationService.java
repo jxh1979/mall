@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 
@@ -179,7 +179,8 @@ public class IntegrationService {
                         if (!mappingResult.mapping().isEmpty()) {
                             resultJson.put("mapping", mappingResult.mapping());
                         }
-                        repository.saveOpenEvent(new OpenApiEventRecord(
+                        // 第十八批 BN 段 261-B23-R1：同时投递的后到者（上面先查没查到）在落库处按同一幂等键返回首次事件、标已去重，不覆盖。
+                        return repository.acceptOpenEvent(new OpenApiEventRecord(
                                 eventId,
                                 endpointKey,
                                 provider,
@@ -193,7 +194,6 @@ public class IntegrationService {
                                 now,
                                 now
                         ));
-                        return new WebhookAcceptedResponse(eventId, false);
                     });
             auditEventService.recordSuccess(
                     "api_call.logged",

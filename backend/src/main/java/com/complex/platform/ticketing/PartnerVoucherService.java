@@ -2,6 +2,7 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.ticketing.dto.PartnerVoucherConfigRequest;
@@ -13,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -33,14 +35,16 @@ public class PartnerVoucherService {
     private final FinanceService settlementPort;
     private final AuthorizationService authorization;
     private final AuditEventService audit;
+    private final JdbcTemplate jdbc;
 
     @Autowired
     public PartnerVoucherService(TicketingRepository repository, @Lazy FinanceService settlementPort,
-            AuthorizationService authorization, AuditEventService audit) {
+            AuthorizationService authorization, AuditEventService audit, JdbcTemplate jdbc) {
         this.repository = repository;
         this.settlementPort = settlementPort;
         this.authorization = authorization;
         this.audit = audit;
+        this.jdbc = jdbc;
     }
 
     /** 配置某票务权益模板为第三方券(通票包含该权益即附赠此券)。 */
@@ -99,10 +103,20 @@ public class PartnerVoucherService {
         PartnerVoucherConfigRecord config = repository.findPartnerVoucherConfig(issued.entitlementTemplateId())
                 .orElseThrow(() -> ApiException.badRequest("NOT_PARTNER_VOUCHER", "该权益不是合作方券"));
         if (externalRef != null) {
+            // 第十八批 BN 段 261-B08-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」、「同一次操作重复提交时，返回第一次的结果并提示已完成。」；
+            // PGM:528「⑤同一笔操作重复提交不重复生效」）：同一合作方同一外部核销单号先取事务级咨询锁，同时到达的后到者等先到者提交后按单号命中首笔。
+            // 命中同一张券 → 返回首次记录并提示已完成；单号已登记在另一张券上 → 这张券没扣，按冲突拒绝（同一合作方一个单号只容一条回流，uq_pvr_ext）。
+            jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", rs -> {},
+                    "partner-voucher-redemption:" + config.partnerId() + "|" + externalRef);
             Optional<PartnerVoucherRedemptionRecord> existing =
                     repository.findPartnerVoucherRedemptionByExternalRef(config.partnerId(), externalRef);
             if (existing.isPresent()) {
-                return imported(existing.get(), externalRef, true);
+                if (!issued.id().equals(existing.get().issuedEntitlementId())) {
+                    throw ApiException.conflict("PARTNER_VOUCHER_REDEMPTION_CONFLICT", "该外部核销单号已登记在另一张券上，请核对对账文件");
+                }
+                PartnerVoucherRedemptionRecord first = imported(existing.get(), externalRef, true);
+                IdempotentReplayContext.markCurrentReplayed();
+                return first;
             }
         }
         Instant redeemedAt = actual.redeemedAt() == null ? Instant.now() : actual.redeemedAt();

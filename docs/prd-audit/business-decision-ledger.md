@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.18
+文档版本：V1.19
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10955,3 +10955,78 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：SiteEntryCompletionJdbcIntegrationTests 加 createReviewAndSubmitReplaySameKey（新建同编号重发只建一张；审核、提交进场同编号重发返回第一次的结果；审核后换编号再驳回仍 400）。
   文档：楼宇运营 PRD §3、§4、§5A 补实现现状并记变更日志。
 - 18BJ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 6ddf9331 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7172 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 16:11 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BN 落地位置补记（2026-11-20）：第十八批 BN 段（batch86）按 18BN 只读设计实现待开发清单第 261 条 261-B05-R1、261-B13-R1、261-B08-R1、261-B23-R1、261-B23-R2（第 261 条后端四批（客人储值支付、签到、第三方券回流、回调落库））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BN 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BN 段，batch86）实现待开发清单第 261 条 261-B05-R1、261-B13-R1、261-B08-R1、261-B23-R1、261-B23-R2（18BN 只读设计 b86-audit/d-one-a.json、b86-audit/d-one-b.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计。设计旁见两条（后台储值退卡页同编号双击并发、转赠撤回重复提交不带已完成提示）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BN 落地位置补记·261-B05-R1（客人储值支付：同一请求重复提交提示已完成，订单已被别的渠道付清时本次不生效并提示）：
+  改法：StoredValueService.payOwnTicketOrder（公开入口 StoredValueService.payTicketOrder，operationId payCustomerTicketOrderWithStoredValue）把「本请求扣款流水已在」的判断（扣款键为 ticketsv_ 加订单号与请求编号的散列）提到已取消判断之后、待支付判断之前。命中时调 IdempotentReplayContext.markCurrentReplayed，再返回订单现状：部分付与付足两种重复提交都返回订单现状，响应带 replayed=true 与「该操作已完成（重复提交，返回首次结果）」，不再扣款。删去「订单已付直接返回」：订单已付清而不是本请求付的（在线付款等别的渠道先付清），落到既有的 409 ORDER_NOT_PAYABLE「订单不在待支付状态」，不扣款，与 TicketOrderService 对已付订单发起在线付款的口径一致。payTicketOrder 方法说明同步。不加错误码、不加锁（原已锁订单行）、不加迁移；客人三端与 MemberWalletController 不改。
+  依据：
+  - PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销」，行末「同一次操作重复提交时，返回第一次的结果并提示已完成。」，「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」及其括号内「其余自动失效并提示；支付回调、核销、充值到账同理」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - 第十八批裁决 50（操作员选「逐批核实、照草稿重做（推荐）」）
+  契约：不改（payCustomerTicketOrderWithStoredValue 的失败码原已含 ORDER_NOT_PAYABLE，原已声明须带请求编号）。
+  测试：TicketOrderSplitPaymentJdbcIntegrationTests 加 3 条。
+  - sameKeyResubmitAfterFullStoredValuePayRepliesCompletedWithoutSecondDebit：储值付足后同编号再提交 200，带已完成标记与提示，订单已付；卡余额只扣一次，储值收款 1 笔，扣款流水 1 条。修复前第二次不带已完成标记。
+  - sameKeyResubmitAfterPartialStoredValuePayRepliesCompletedWithoutSecondDebit：部分付 3000 后同编号再提交 200，带已完成标记，订单仍待付、待付 7000、余额 17000。修复前不带已完成标记。
+  - storedValuePayAfterOrderPaidOnlineIsRejectedWithoutDebit：在线付清后两次以新编号储值支付，都 409 ORDER_NOT_PAYABLE，余额不变，无扣款流水。修复前 200。
+  M006StoredValuePaymentTests 两条连付用例（appOrderPaysItsAmountOnceFromTheSelectedOwnCard，projectStoredValueCardUsesTheOriginalOrderProjectOnly 可付分支）的模拟仓储改为读回已保存的扣款流水，断言不变。
+  文档：票务权益核销 PRD 第 8.2 节实现现状补一句。
+- 18BN 落地位置补记·261-B13-R1（签到带请求编号走幂等层：同一编号重复提交，含网络重发同编号并发，返回第一次的签到结果并提示已完成、只加一次积分）：
+  改法：CustomerService.checkIn（operationId customerCheckIn）在请求带非空白 idempotency_key 时改走本类 executeWrite（经 AuditedOperationExecutor.executeWrite 进 IdempotencyService）。操作号为 customerCheckIn:客人号，编号原样传入，动作为 LoyaltyService.checkIn。效果：同一编号重复提交返回第一次的签到结果并提示已完成，只加一次积分；同编号并发时，后到者在幂等占位上等先到者提交，再返回第一次的结果（占位等待上限 5 秒，超时回「请求正在处理中」）。不带编号的照旧。CustomerService.businessId 加认 CustomerCheckInRecord、取客人号，customer.checked_in 的 business_id 与原写法一致。带编号路径上的成功、失败事件改由执行器写：成功事件明细为空，连签天数与所得积分仍在同一事务的 member.checked_in 上；失败事件不带 business_id。这两处与 createCustomerTicketOrder、redeemCustomerPoints 一致。不改 LoyaltyService、不加锁、不加迁移。
+  依据：
+  - PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销」，行末「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - BSM:830「客人每日签到记连续天数，按连续天数阶梯奖励积分。」
+  - 第十八批裁决 50
+  契约：不改（CustomerCheckInRequest.idempotency_key 原已写「幂等键；同键重复提交返回首次结果。」，customerCheckIn 的 x-idempotency-required 仍为 false）。
+  测试：新增 CustomerCheckInOnceJdbcIntegrationTests 2 条（不开测试事务、真实接口、蛇形键）。
+  - sameKeyResubmitReturnsTheFirstCheckInAndAwardsOnce：同编号签到后再提交两次，都 200，带已完成标记与提示，签到记录编号、连签、所得积分与第一次相同；积分余额只加一次，签到 1 行，签到积分流水 1 条；换新编号 409 ALREADY_CHECKED_IN。修复前第二次 409。
+  - sameKeyArrivingWhileTheFirstIsStillRunningGetsTheFirstResult：持锁方用 SQL 在独立事务里锁住积分账户行；同编号两笔先后经真实接口到达，观测到 2 个会话在锁上等待后放行。先到者 200、返回首次结果；后到者 200、带已完成标记，签到记录编号相同；余额只加一次，连签 3，签到 1 行，签到积分流水 1 条。修复前两笔都 200、都不带标记，后到者连签算成 1、积分多加一次。
+  文档：储值会员签到生日 PRD 签到规则「同日重复签到只成功一次。」后补一句。
+- 本段（N1-d-one-a）增量：迁移 0（预留的 V696～V699 本组未用），OpenAPI 新增操作 0、改动操作 0。
+- 18BN 落地位置补记·N2-d-one-b（第 261 条 261-B08-R1、261-B23-R1、261-B23-R2；本段新增 OpenAPI 操作 0、迁移 0、权限码 0）
+  一、261-B08-R1：第三方券核销回流同一单号只认先到的一笔，重复导入返回首次并提示已完成，单号撞同一合作方另一张券时按冲突拒绝。
+  - 改法：PartnerVoucherService.importRedemption 在带外部核销单号时，排在项目范围闸和合作方券配置校验之后、按单号查找之前，取事务级咨询锁（键为「partner-voucher-redemption:合作方|单号」）。同时到达的后到者等先到者提交后按单号命中首笔。
+  - 命中后比券：首条回流记录的券（PartnerVoucherRedemptionRecord.issuedEntitlementId）与本次券不同 → 409 PARTNER_VOUCHER_REDEMPTION_CONFLICT「该外部核销单号已登记在另一张券上，请核对对账文件」，不扣次、不挂应付，失败留痕由 PartnerVoucherController.importRedemption 现有的 recordingFailure 记 ticket.partner_voucher_redemption.import_failed。同一张券 → 照记 ticket.partner_voucher_redemption.imported（duplicate=true）后调 IdempotentReplayContext.markCurrentReplayed，统一包络带 replayed=true 与「该操作已完成（重复提交，返回首次结果）」。
+  - 构造函数加注入 JdbcTemplate。不动 TicketingRepository 与 JdbcTicketingRepository。
+  - 契约：importPartnerVoucherRedemption 的说明补同口径一句，x-failure-codes 加 PARTNER_VOUCHER_REDEMPTION_CONFLICT。
+  - 依据：PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」，以及同行「凡只能用一次的动作（单次授权、门票核销、券核销等），只有这次操作成功完成、返回结果确认后才算完成、才算用掉；没有返回确认的不算完成，不扣减、不核销。同一次操作重复提交时，返回第一次的结果并提示已完成。」；第十八批裁决 50。
+  - 测试：PartnerVoucherRedemptionImportJdbcIntegrationTests.importAndDuplicateAreAuditedWithTheOperator（扩）、referenceAlreadyImportedOnAnotherVoucherIsRejectedWithoutCharging；PartnerVoucherRedemptionConcurrencyJdbcIntegrationTests.sameReferenceArrivingTogetherOnASingleUseVoucherIsImportedOnce、sameReferenceArrivingTogetherOnAMultiUseVoucherIsImportedOnce。
+  二、261-B23-R1：回调信封落库按幂等键只写一次。
+  - 改法：IntegrationRepository.saveOpenEvent 改返回是否写入；JdbcIntegrationRepository.saveOpenEvent 由「按事件编号冲突即改写」改为「按（端点、合作方、幂等键）冲突即不写」。接口新增默认方法 IntegrationRepository.acceptOpenEvent：写入则返回本事件编号、deduplicated=false；未写则读回首条，返回首次事件编号、deduplicated=true。
+  - 统一 webhook（ThirdPartyScaffoldingService.receiveTypedWebhook，经 IntegrationService.receiveTypedWebhook）与开放平台 webhook（IntegrationService.receiveWebhook）都改走 acceptOpenEvent。统一 webhook 的 integration.webhook_received 留痕记首次事件编号并带 deduplicated。
+  - 事件编号已被别的幂等键占用时，主键冲突由 GlobalExceptionHandler.handleDuplicateKey 落 409 DUPLICATE_KEY，不覆盖原事件。
+  - 契约：receiveIntegrationTypedWebhook 与 receiveOpenWebhook 的说明补同口径一句。
+  - 依据：PGM:528⑤（同上原句）；PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」「同一次操作重复提交时，返回第一次的结果并提示已完成。」；BSM:1618「第三方回流失败、重复、延迟、差异。」；第十八批裁决 50。
+  - 测试：CallbackOneShotJdbcIntegrationTests.typedWebhookRedeliveredWithTheSameKeyKeepsTheFirstEvent、anotherKeyCarryingATakenEventIdIsRejectedWithoutOverwriting、openWebhookDeliveredTwiceAtOnceKeepsTheFirstEvent、typedWebhookDeliveredTwiceAtOnceKeepsTheFirstEvent。IntegrationServiceTests 的内存替身同步。
+  三、261-B23-R2：机器人上报按幂等键只落一条，重投或同时投递返回首次记录并提示已完成。
+  - 改法：ThirdPartyScaffoldingService.reportRobotTaskEvent 在任务引用校验之后、验签之前要求 idempotency_key 必填，缺失 400 VALIDATION_FAILED，照记 integration.robot_report_failed。
+  - 事件号改为「robotcb_」＋Hashing.idempotencyCode（合作方与幂等键派生）。IntegrationRepository.saveRobotTaskEvent 改为按事件号冲突即不写并返回是否写入；新增 IntegrationRepository.findRobotTaskEventById。
+  - 未写入时返回首条记录；integration.robot_reported 照记并带 deduplicated；调 IdempotentReplayContext.markCurrentReplayed，响应带 replayed=true。
+  - 不同幂等键对同一任务的再次上报照旧各落一行。
+  - 契约：RobotTaskEventRequest 的 required 加 idempotency_key，reportIntegrationRobotTaskEvent 的说明补同口径一句。
+  - 依据：PGM:528⑤；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；BSM:1579「机器人到达是被动留痕：由机器人上报的任务状态自动记录时间和点位。」；BSM:1618；契约 RobotTaskEventRequest.idempotency_key「操作幂等键；重复提交时必须返回同一处理结果，避免重复留痕。」；第十八批裁决 50。
+  - 测试：CallbackOneShotJdbcIntegrationTests.robotReportRedeliveredWithTheSameKeyIsStoredOnce、robotReportDeliveredTwiceAtOnceIsStoredOnce、robotReportWithoutKeyIsRejected；IntegrationServiceTests.t14RobotReportWritesPassiveTraceWithEventTypeCheck 保持绿。
+- 18BN 契约落地（本段新增操作 0、迁移 0，只改既有操作的说明与结构）：
+  - 261-B05-R1（客人储值支付同一请求编号只扣一次）：契约不改。payCustomerTicketOrderWithStoredValue 的 x-failure-codes 原已含 ORDER_NOT_PAYABLE，x-idempotency-required 为 true，说明原已写「同一请求编号重复提交不重复扣款。」，与 StoredValueService.payOwnTicketOrder 现码一致。依据：PGM:303、PGM:528⑤、第十八批裁决 50。
+  - 261-B13-R1（客人签到同编号只认一次）：契约不改。customerCheckIn 的请求体 CustomerCheckInRequest.idempotency_key 原已写「同键重复提交返回首次结果。」，409 原已声明，与 CustomerService.checkIn 走 executeWrite 一致。依据：PGM:303、PGM:528⑤、第十八批裁决 50。
+  - 261-B08-R1（合作方券回流同一外部单号只认先到）：importPartnerVoucherRedemption 的 description 补一句：同一张券同一外部核销单号重复导入或同时提交，只认先到的一笔，后到者返回首次记录并带 replayed=true；单号已登记在同一合作方另一张券上时，返回 409 PARTNER_VOUCHER_REDEMPTION_CONFLICT，不扣次、不挂应付。x-failure-codes 加 PARTNER_VOUCHER_REDEMPTION_CONFLICT；请求结构不补 idempotency_key（照 18AE 补记 201-R2 口径）。对应代码：PartnerVoucherService 导入方法。依据：PGM:303、PGM:528⑤。测试：PartnerVoucherRedemptionImportJdbcIntegrationTests、PartnerVoucherRedemptionConcurrencyJdbcIntegrationTests。
+  - 261-B23-R1（回调信封同一幂等键只落一条）：receiveIntegrationTypedWebhook 的 description 补一句：同一类型同一幂等键重投或同时投递只落一条，返回首次事件编号与 deduplicated=true；event_id 已被别的回调占用时返回 409 DUPLICATE_KEY，不覆盖原事件；成功留痕 integration.webhook_received 的 metadata 带 deduplicated。receiveOpenWebhook 新增 description，写同口径的一句。对应代码：IntegrationService.receiveWebhook、ThirdPartyScaffoldingService.receiveTypedWebhook、IntegrationRepository.acceptOpenEvent、JdbcIntegrationRepository.saveOpenEvent。依据：PGM:528⑤、PGM:303、BSM:1618。测试：CallbackOneShotJdbcIntegrationTests。
+  - 261-B23-R2（机器人上报同一幂等键只落一条）：reportIntegrationRobotTaskEvent 的 description 补一句：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一合作方（X-Provider）同一幂等键重投或同时投递只落一条被动留痕，返回首条并带 replayed=true；成功留痕 integration.robot_reported 的 metadata 带 deduplicated。schema RobotTaskEventRequest 的 required 加 idempotency_key。对应代码：ThirdPartyScaffoldingService.reportRobotTaskEvent、JdbcIntegrationRepository.saveRobotTaskEvent、findRobotTaskEventById。依据：PGM:528⑤、PGM:303、BSM:1618。测试：CallbackOneShotJdbcIntegrationTests、IntegrationServiceTests。
+- 18BN 汇合段（第 261 条 261-B05-R1、261-B13-R1、261-B08-R1、261-B23-R1、261-B23-R2）：
+  - e2e：tests/e2e 不改。本段只改后端 StoredValueService、CustomerService.checkIn、PartnerVoucherService、IntegrationService、ThirdPartyScaffoldingService、JdbcIntegrationRepository。客人签到不带请求编号时照旧，带编号时返回的 CustomerCheckInRecord 结构不变，customer-journey 的 CUST-04 用例和 customer-mock-api 里签到的假响应仍然成立。e2e 里没有 importPartnerVoucherRedemption、reportIntegrationRobotTaskEvent、按类型的统一 webhook、客人储值付款的用例或专门的假响应，receiveOpenWebhook 走 open 通配假响应，不受影响。没有改视觉基线页面，截图基线没有重拍。
+  - 门禁结论：后端全量（重建空库）0 红；后台前端 typecheck 与 vitest 全绿；客人三个工作区单测、安卓员工端单测、android-app 编译全绿；chromium 后台五份 spec 全过。四份生成物重生成后和工作树一致，不用改；verify:p0-contract 全绿；OpenAPI 的 yaml 与 json 一致。本段新增操作 0 个，没有迁移，只改既有操作的说明与结构：importPartnerVoucherRedemption 补失败码 PARTNER_VOUCHER_REDEMPTION_CONFLICT，schema RobotTaskEventRequest 的 idempotency_key 改成必填，receiveOpenWebhook、按类型的统一 webhook、reportIntegrationRobotTaskEvent 补了说明。
+- 18BN 落地位置补记·文档组（第 261 条 261-B05-R1、261-B13-R1、261-B08-R1、261-B23-R1、261-B23-R2 的 PRD 现状同步）：
+  - 票务 PRD（docs/ticketing-entitlement-checkin-product-prd-v0.1.md）升一版，修订表加一行：
+    - §8.2「支付与出票原子结果」下新增实现现状子条（261-B05-R1）：客人储值付票 payCustomerTicketOrderWithStoredValue（StoredValueService.payOwnTicketOrder）同一请求编号重复提交（付足或部分付）返回订单现状并提示已完成（replayed=true），不重复扣款；订单已付清后再以新请求编号储值付款，回 409 ORDER_NOT_PAYABLE、不扣款。
+    - §6.1 券核销型权益（voucher）行续写一句（261-B08-R1）：importPartnerVoucherRedemption（PartnerVoucherService.importRedemption）对同一张券同一外部核销单号的重复导入或同时提交只认先到的一笔，后到者返回首次记录并提示已完成，不重复扣次、不重复挂应付；单号已登记在同一合作方另一张券上时回 409 PARTNER_VOUCHER_REDEMPTION_CONFLICT。
+  - 储值签到 PRD（docs/stored-value-membership-checkin-birthday-prd-v0.1.md）升一版，修订表加一行：
+    - §7 验收第 1 条后续写实现现状（261-B13-R1）：customerCheckIn（CustomerService.checkIn 经 executeWrite）带请求编号时，同一编号重复提交（含同时到达）返回第一次的签到结果并提示已完成、只加一次积分；换新编号或不带编号同日再签，照旧 409 ALREADY_CHECKED_IN。
+  - 第三方业务接入 PRD（docs/third-party-business-access-product-prd-v0.1.md）升一版，修订表加一行：
+    - §11 已确认第 6 条后新增实现现状子条（261-B23-R1、R2）：receiveOpenWebhook（IntegrationService.receiveWebhook）与 receiveIntegrationTypedWebhook（ThirdPartyScaffoldingService.receiveTypedWebhook，按类型分开去重）经 IntegrationRepository.acceptOpenEvent，按（端点、合作方、幂等键）只落一条；重投或同时投递返回首次事件编号并标 deduplicated=true，不覆盖已有事件；event_id 被别的回调占用时回 409 DUPLICATE_KEY。
+    - 同一子条：reportIntegrationRobotTaskEvent（ThirdPartyScaffoldingService.reportRobotTaskEvent）的 idempotency_key 必填，缺失回 400 VALIDATION_FAILED；同一合作方（X-Provider）同一幂等键只落一条被动留痕，重投返回首条并提示已完成。
+    - 同一子条：留痕 api_call.logged、integration.webhook_received、integration.robot_reported 元数据带 deduplicated。
+  - 依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；BSM:1618「第三方回流失败、重复、延迟、差异。」；BSM:1579「机器人到达是被动留痕：由机器人上报的任务状态自动记录时间和点位。」；第十八批裁决 50。
+  - 本组增量：无新增操作，无迁移，无测试改动（测试名见 N1、N2 两段补记）；其余 PRD、开发设计、契约包与矩阵经 grep 核对没有需改的现状句。
+- 18BN 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 5d97e30b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7187 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 01:57 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
