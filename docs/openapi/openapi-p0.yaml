@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.10
+  version: V1.11
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3189,7 +3189,7 @@ paths:
         - bar
       operationId: listBarProducts
       summary: 查询酒吧商品
-      description: 用于查询酒吧商品。持授权 U 盘密钥的最高权限本人看全部酒吧的商品，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。已审批删除的商品任何情况下都不返回；includeArchived=true 只带出已存档未删除的（第十八批 AU 段第 320 条 320-R1；BSM:571「前台各处不再显示」）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧商品。持授权 U 盘密钥的最高权限本人看全部酒吧的商品，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。已审批删除的商品任何情况下都不返回；includeArchived=true 只带出已存档未删除的（第十八批 AU 段第 320 条 320-R1；BSM:571「前台各处不再显示」）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: bar.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3291,7 +3291,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询酒吧预约。持授权 U 盘密钥的最高权限本人看全部酒吧的订台，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧预约。持授权 U 盘密钥的最高权限本人看全部酒吧的订台，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
   /api/v1/bar/reservations/{id}/invitation:
     post:
       tags:
@@ -10733,7 +10733,7 @@ paths:
       operationId: listMerchantServiceWorkOrders
       summary: List merchant service work orders
       description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只见本商户；其余平台员工只见入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单；外包账号 403。
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只见本商户；其余平台员工只见入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单；外包账号 403。第十八批 BY 段第 383 条 383-R1（BSM:569「进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」）：按创建时间倒序分页，page、size 见查询参数，都不带时为第 1 页 100 条；响应的 page、page_size 为收口后的值，total 为本页条数。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: merchant.service_work_order.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -10744,6 +10744,28 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: merchant_service.listMerchantServiceWorkOrders.succeeded
       x-audit-event-failure: not_applicable
+      parameters:
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: 传 true 时连同已存档的工单一并返回（已审批删除的不返回），默认只返回未存档的工单。
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: 页码，从 1 起；小于 1 按 1。
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: 每页条数，默认 100；小于 1 或大于 100 都按 100。
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -11657,7 +11679,7 @@ paths:
         - merchant-service
       operationId: requestDeleteMerchantServiceWorkOrder
       summary: 申请删除商户服务工单
-      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：对已存档的商户服务工单发起删除申请，记申请人、时间与理由，进入待审批（delete_status=pending）。须先存档，否则 400 WORK_ORDER_NOT_ARCHIVED；已有待审批申请 409 WORK_ORDER_DELETE_ALREADY_PENDING；理由必填，缺或空白 400 VALIDATION_FAILED；工单不存在 404 WORK_ORDER_NOT_FOUND；第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单，其他商户 403 CROSS_MERCHANT_FORBIDDEN；其余平台员工只能处理入口权限码（merchant.service_work_order.close）可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403 PLATFORM_SCOPE_REQUIRED。成功落 merchant_service.work_order.delete_requested；失败不落事件。
+      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：对已存档的商户服务工单发起删除申请，记申请人、时间与理由，进入待审批（delete_status=pending）。须先存档，否则 400 WORK_ORDER_NOT_ARCHIVED；已有待审批申请 409 WORK_ORDER_DELETE_ALREADY_PENDING；理由必填，缺或空白 400 VALIDATION_FAILED；工单不存在 404 WORK_ORDER_NOT_FOUND；第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单，其他商户 403 CROSS_MERCHANT_FORBIDDEN；其余平台员工只能处理入口权限码（merchant.service_work_order.close）可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403 PLATFORM_SCOPE_REQUIRED。第十八批 BY 段第 383 条 383-R1（BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人发起的不经审批当场删除，照样先查占用，工单未终结（须先关闭或取消）409 WORK_ORDER_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另落 merchant_service.work_order.delete_approved，返回的工单 delete_status 为 approved。成功落 merchant_service.work_order.delete_requested；失败不落事件。
       x-failure-codes:
         - WORK_ORDER_NOT_ARCHIVED
         - WORK_ORDER_DELETE_ALREADY_PENDING
@@ -11666,6 +11688,7 @@ paths:
         - CROSS_MERCHANT_FORBIDDEN
         - CROSS_PROJECT_FORBIDDEN
         - PLATFORM_SCOPE_REQUIRED
+        - WORK_ORDER_IN_USE
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -11716,7 +11739,7 @@ paths:
         - merchant-service
       operationId: approveDeleteMerchantServiceWorkOrder
       summary: 审批商户服务工单删除申请
-      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：审批商户服务工单删除申请：approved 且工单已终结（已关闭或已取消）即删除，rejected 回到未申请态。删除为软删除：转入后台留存、各处不再显示。删除申请发起人不能审批自己的申请（批准、驳回都不行）403 WORK_ORDER_SELF_APPROVE_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND；没有待审批申请 400 WORK_ORDER_DELETE_NOT_PENDING；decision 不是 approved／rejected 400 VALIDATION_FAILED；工单未终结 409 WORK_ORDER_IN_USE；第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单，其他商户 403 CROSS_MERCHANT_FORBIDDEN；其余平台员工只能处理入口权限码（merchant.service_work_order.approve）可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403 PLATFORM_SCOPE_REQUIRED。返回 id、decision 与 deleted（是否已删除）。批准落 merchant_service.work_order.delete_approved，驳回落 merchant_service.work_order.delete_rejected；失败不落事件。
+      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：审批商户服务工单删除申请：approved 且工单已终结（已关闭或已取消）即删除，rejected 回到未申请态。删除为软删除：转入后台留存、各处不再显示。删除申请发起人不能审批自己的申请（批准、驳回都不行）403 WORK_ORDER_SELF_APPROVE_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND；没有待审批申请 400 WORK_ORDER_DELETE_NOT_PENDING；decision 不是 approved／rejected 400 VALIDATION_FAILED；工单未终结 409 WORK_ORDER_IN_USE；第十八批 BY 段第 383 条 383-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：只认持授权 U 盘密钥的最高权限本人，批准与驳回都要，先于取单判，其他人（含平台管理员）403 MASTER_APPROVAL_REQUIRED「商户服务工单删除须由最高权限本人批准」；最高权限本人再过第 93 条 93-R3 的范围闸，按全部项目判。返回 id、decision 与 deleted（是否已删除）。批准落 merchant_service.work_order.delete_approved，驳回落 merchant_service.work_order.delete_rejected；失败不落事件。
       x-failure-codes:
         - WORK_ORDER_SELF_APPROVE_FORBIDDEN
         - WORK_ORDER_DELETE_NOT_PENDING
@@ -11726,6 +11749,7 @@ paths:
         - CROSS_MERCHANT_FORBIDDEN
         - CROSS_PROJECT_FORBIDDEN
         - PLATFORM_SCOPE_REQUIRED
+        - MASTER_APPROVAL_REQUIRED
       x-permission: merchant.service_work_order.approve
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -12240,7 +12264,7 @@ paths:
         - platform
       operationId: listMerchants
       summary: 查询商户
-      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。联系人手机号明文逐行判（第十八批 E 段第 19 条）：持 pii.contact_phone.view 且本入口权限码与该码可触及范围的交集覆盖该商户任一经营项目（主项目加经审批追加的项目，第十八批 E 段第 20 条）的行返回明文（本请求刚用掉的单次授权仍计入），其余行掩码；不持该码一律掩码（含平台管理员）；最高权限本人持该码整份明文、不按项目判。第十八批 E 段（第 20 条，PGM:659）：列表含经营项目（主项目加经审批追加的项目）在可触及范围内的商户，各经营项目的员工和主项目的员工一样看到这份主档案。
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。联系人手机号明文逐行判（第十八批 E 段第 19 条）：持 pii.contact_phone.view 且本入口权限码与该码可触及范围的交集覆盖该商户任一经营项目（主项目加经审批追加的项目，第十八批 E 段第 20 条）的行返回明文（本请求刚用掉的单次授权仍计入），其余行掩码；不持该码一律掩码（含平台管理员）；最高权限本人持该码整份明文、不按项目判。第十八批 E 段（第 20 条，PGM:659）：列表含经营项目（主项目加经审批追加的项目）在可触及范围内的商户，各经营项目的员工和主项目的员工一样看到这份主档案。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: merchant.profile.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -14023,7 +14047,7 @@ paths:
         - ticketing
       operationId: listEntitlementTemplates
       summary: 查询权益模板
-      description: 用于查询权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: ticket.entitlement.view
       x-data-scope: project
       x-terminal-allowed:
@@ -14136,7 +14160,7 @@ paths:
         - ticketing
       operationId: requestDeleteEntitlementTemplate
       summary: 发起权益模板删除申请
-      description: 对已存档的权益模板发起删除申请，进入待上级审批状态。须先存档。
+      description: 对已存档的权益模板发起删除申请，记申请人、申请时间与删除理由，状态置待审批（pending），由最高权限本人审批。模板不存在 404 ENTITLEMENT_TEMPLATE_NOT_FOUND；未存档 400 ENTITLEMENT_TEMPLATE_NOT_ARCHIVED；已有待审批的删除申请 409 ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING；reason 或 idempotency_key 缺失 400 VALIDATION_FAILED。持授权 U 盘密钥的最高权限本人发起的不经审批当场删除（第十八批 BY 段第 383 条 383-R2；BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被票种绑定或已发放权益引用 409 ENTITLEMENT_TEMPLATE_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 ticket_entitlement_template.delete_approved，返回 delete_status=approved 的记录。
       x-permission: ticket.entitlement.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -14144,6 +14168,12 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: ticket_entitlement_template.delete_requested
       x-audit-event-failure: ticket_entitlement_template.delete_request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - ENTITLEMENT_TEMPLATE_NOT_FOUND
+        - ENTITLEMENT_TEMPLATE_NOT_ARCHIVED
+        - ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING
+        - ENTITLEMENT_TEMPLATE_IN_USE
       parameters:
         - name: id
           in: path
@@ -14170,7 +14200,7 @@ paths:
         - ticketing
       operationId: approveDeleteEntitlementTemplate
       summary: 审批权益模板删除申请
-      description: 上级审批删除申请。approved 且无活引用即物理删除；rejected 回到未申请态。禁止申请人自审。
+      description: 审批权益模板删除申请。只认持授权 U 盘密钥的最高权限本人（第十八批 BY 段第 383 条 383-R2；BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「权益模板删除须由最高权限本人批准」。decision 为 approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示），rejected 回到未申请；返回 template_id、decision 与 deleted（是否已删除）。模板不存在 404 ENTITLEMENT_TEMPLATE_NOT_FOUND；没有待审批的删除申请 400 ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING；decision 不是 approved 或 rejected、或 idempotency_key 缺失 400 VALIDATION_FAILED；审批人是删除申请人本人 403 ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN；仍被票种绑定或已发放权益引用 409 ENTITLEMENT_TEMPLATE_IN_USE（不删除）。
       x-permission: ticket.entitlement.approve
       x-data-scope: project
       x-terminal-allowed:
@@ -14178,6 +14208,13 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: ticket_entitlement_template.delete_approved
       x-audit-event-failure: ticket_entitlement_template.delete_approve_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - ENTITLEMENT_TEMPLATE_NOT_FOUND
+        - ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING
+        - ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN
+        - ENTITLEMENT_TEMPLATE_IN_USE
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - name: id
           in: path
@@ -14506,7 +14543,7 @@ paths:
         - ticketing
       operationId: listTicketPriceRules
       summary: 查询平日、周末、节假日及派生价规则
-      description: 第十八批 AW 段第 338 条 338-R1（BSM:782）：price_mode 另有 amount_delta（按基础价加减金额）；每条规则另带 adjustment_amount_cent（分，带符号：负数为减免、正数为加价），只在 price_mode=amount_delta 时有值，其余为空。
+      description: 第十八批 AW 段第 338 条 338-R1（BSM:782）：price_mode 另有 amount_delta（按基础价加减金额）；每条规则另带 adjustment_amount_cent（分，带符号：负数为减免、正数为加价），只在 price_mode=amount_delta 时有值，其余为空。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: ticket.price_variant.view
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -15166,7 +15203,7 @@ paths:
         - ticketing
       operationId: listTicketTypes
       summary: 票种查询
-      description: 第十八批 AW 段第 299 条 299-R1（ENUM:30 票务策略状态；R14 裁决 20：待启用、已结束按生效时间派生、不存储）：每个票种另带 sale_starts_at（开售时间）、sale_ends_at（停售时间）、sale_paused_at（暂停售卖时刻），均为 date-time、可空（时间空即不限，暂停时刻空即未暂停），只由 updateTicketTypeSaleSettings 写；另带只读派生的 sale_status：archived 归档（已存档或待删除）、draft 草稿（未发布）、paused 暂停售卖、pending_activation 待启用（未到开售）、ended 已结束（已到停售）、on_sale 售卖中，按此次序判，不存储。返回票种的各写操作 data 同此结构。
+      description: 第十八批 AW 段第 299 条 299-R1（ENUM:30 票务策略状态；R14 裁决 20：待启用、已结束按生效时间派生、不存储）：每个票种另带 sale_starts_at（开售时间）、sale_ends_at（停售时间）、sale_paused_at（暂停售卖时刻），均为 date-time、可空（时间空即不限，暂停时刻空即未暂停），只由 updateTicketTypeSaleSettings 写；另带只读派生的 sale_status：archived 归档（已存档或待删除）、draft 草稿（未发布）、paused 暂停售卖、pending_activation 待启用（未到开售）、ended 已结束（已到停售）、on_sale 售卖中，按此次序判，不存储。返回票种的各写操作 data 同此结构。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: ticket.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -17902,7 +17939,7 @@ paths:
       operationId: listStaffProfiles
       summary: 查询员工档案
       description: 隔离列表：平台角色见全量，商户角色仅见本 merchant_id 行（跨商户不可见）。返回注册/审批状态与职级关联。
-        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.profile.view 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.profile.view 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: staff.profile.view
       x-data-scope: project
       x-terminal-allowed:
@@ -31365,7 +31402,7 @@ paths:
         - facility
       operationId: listFacilityEquipment
       summary: 设备台账列表
-      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -33829,6 +33866,7 @@ paths:
         - access
       operationId: listPositionRoleTemplates
       summary: 岗位角色模板列表
+      description: 岗位角色模板列表。第十八批 BY 段第 387 条 387-R2（第十八批裁决 81「岗位角色模板补存理由」）：每行另带 archived_by（存档人账号编号，可为空）与 archive_reason（存档理由，可为空），由 changePositionRoleTemplateLifecycle 的 archive 写入、restore 清空。
       x-permission: access.role.assign
       x-data-scope: project
       x-terminal-allowed:
@@ -33981,7 +34019,7 @@ paths:
         PLATFORM_ADMIN_REQUIRED。action、reason 必填，缺失 400 VALIDATION_FAILED，未知 action 400 INVALID_ACTION；模板不存在 404
         POSITION_ROLE_TEMPLATE_NOT_FOUND。成功事件按动作取
         access.position_role_template.archive、.restore、.request_delete、.approve_delete、.reject_delete 之一（附理由）；服务层任一步失败记
-        access.position_role_template.lifecycle_failed。
+        access.position_role_template.lifecycle_failed。第十八批 BY 段第 387 条 387-R2（第十八批裁决 81「岗位角色模板补存理由」）：archive 时把 reason 另存为该模板的存档理由，与存档人一起由 listPositionRoleTemplates 带出（archived_by、archive_reason），restore 清空这两项，其余动作原样保留；返回的模板也带这两个键（archive 的返回里 archived_by 为空，以列表读出为准）。
       x-failure-codes:
         - VALIDATION_FAILED
         - INVALID_ACTION
@@ -35127,7 +35165,7 @@ paths:
         - platform
       operationId: listSpaceTypes
       summary: 空间类型字典列表
-      description: 列出空间类型字典（含停用），供前端空间类型下拉与后台字典管理。
+      description: 列出空间类型字典（含停用），供前端空间类型下拉与后台字典管理。第十八批 BY 段第 387 条 387-R2（第十八批裁决 81「空间类型补存存档时间、存档人、理由」）：每行另带 archived_at（date-time，可为空）、archived_by（存档人账号编号，可为空）、archive_reason（存档理由，可为空），存档时写，取消存档清空，申请删除、审批删除时原样保留。
       x-permission: governance.space.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -41010,7 +41048,7 @@ paths:
         - bar
       operationId: listBarProductCategories
       summary: 查询酒吧商品分类
-      description: 图形化点单 POS 可配置分类目录，供按分类分屏列菜。持授权 U 盘密钥的最高权限本人看全部酒吧的商品分类，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 可配置分类目录，供按分类分屏列菜。持授权 U 盘密钥的最高权限本人看全部酒吧的商品分类，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: bar.category.view
       x-data-scope: project
       x-terminal-allowed:
@@ -41487,7 +41525,7 @@ paths:
         - bar
       operationId: listBarCombos
       summary: 查询酒吧套餐
-      description: 图形化点单 POS 套餐目录（含组合明细与内部结算价）。持授权 U 盘密钥的最高权限本人看全部酒吧的套餐，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 套餐目录（含组合明细与内部结算价）。持授权 U 盘密钥的最高权限本人看全部酒吧的套餐，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：每行另带 archive_reason（string，可为空），为存档时所填理由，取消存档后为空；单条返回的同类记录也带该键（值以列表读出为准）。
       x-permission: bar.combo.view
       x-data-scope: project
       x-terminal-allowed:

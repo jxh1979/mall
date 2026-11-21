@@ -14,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 /** V264 商户服务工单存档与审批后删除集成测试。 */
@@ -29,6 +30,8 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     private MerchantServiceService service;
     @Autowired
     private MerchantServiceRepository repository;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @AfterEach
     void tearDown() {
@@ -36,6 +39,11 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     }
 
     private MerchantWorkOrderRecord seed(String id, String status) {
+        // 第十八批 BY 段 383-R1：删除改由最高权限审批，最高权限按工单所属商户的所属项目判范围，夹具补项目与带所属项目的商户（随测试事务回滚）。
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at)"
+                + " VALUES('prj_wo_test','complex','工单存档删除回归项目','active',now(),now()) ON CONFLICT (id) DO NOTHING");
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at)"
+                + " VALUES ('merchant_wo_test', '工单存档删除回归商户', 'retail', 'prj_wo_test', 'active', now(), now()) ON CONFLICT (id) DO NOTHING");
         Instant now = Instant.now();
         return repository.saveWorkOrder(new MerchantWorkOrderRecord(
                 id, "merchant_wo_test", null, null, "repair", "medium", status,
@@ -50,7 +58,7 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
         seed("mswo_del", "closed");
         service.archiveWorkOrder("mswo_del", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_del", new MerchantWorkOrderDeleteRequest("过期"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        TestSecurityActors.asMasterAuthority();
         MerchantWorkOrderDeleteDecision decision =
                 service.approveDeleteWorkOrder("mswo_del", new MerchantWorkOrderDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
@@ -72,7 +80,7 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
         seed("mswo_use", "processing");
         service.archiveWorkOrder("mswo_use", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_use", new MerchantWorkOrderDeleteRequest("试删"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        TestSecurityActors.asMasterAuthority();
         assertThatThrownBy(() -> service.approveDeleteWorkOrder("mswo_use",
                 new MerchantWorkOrderDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
@@ -80,15 +88,17 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     }
 
     @Test
-    void selfApproveForbidden() {
+    void ordinaryApplicantCannotApproveMasterOnlyDeletion() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("mswo_self", "closed");
         service.archiveWorkOrder("mswo_self", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_self", new MerchantWorkOrderDeleteRequest("x"));
-        // 同一 actor 审批自己的申请 → 禁止。
+        // 383-R1（BSM:577）：删除只认最高权限本人审批，普通申请人审批自己的申请 → MASTER_APPROVAL_REQUIRED，仍待审批。
         assertThatThrownBy(() -> service.approveDeleteWorkOrder("mswo_self",
                 new MerchantWorkOrderDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("发起人");
+                .hasMessageContaining("最高权限");
+        assertThat(repository.findWorkOrderById("mswo_self")).get()
+                .extracting(MerchantWorkOrderRecord::deleteStatus).isEqualTo("pending");
     }
 }

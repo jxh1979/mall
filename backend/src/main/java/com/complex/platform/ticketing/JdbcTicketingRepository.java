@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -179,7 +179,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at
+                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at, archive_reason
                   FROM ticket_types
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -233,7 +233,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at
+                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at, archive_reason
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -317,7 +317,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       catalog_item_code, created_at, updated_at
+                       catalog_item_code, created_at, updated_at, archive_reason
                   FROM entitlement_templates
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -332,7 +332,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       catalog_item_code, created_at, updated_at
+                       catalog_item_code, created_at, updated_at, archive_reason
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
@@ -973,7 +973,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, discount_rate, channel_id, currency, status,
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       adjustment_amount_cent
+                       adjustment_amount_cent, archive_reason
                   FROM ticket_price_rules
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -993,7 +993,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, discount_rate, channel_id, currency, status,
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       adjustment_amount_cent
+                       adjustment_amount_cent, archive_reason
                   FROM ticket_price_rules
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapPriceRule).stream().findFirst();

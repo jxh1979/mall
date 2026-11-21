@@ -1,4 +1,4 @@
-# P1 商户服务工单 API 契约 V0.14
+# P1 商户服务工单 API 契约 V0.15
 
 文档类型：Implementation / API Contract
 
@@ -38,7 +38,7 @@
 
 | Method | Path | Permission | 幂等 | 说明 |
 |---|---|---|---|---|
-| `GET` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.view` | 否 | 查询工单列表 |
+| `GET` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.view` | 否 | 查询工单列表，按建单时间倒序分页，不含已审批删除的；查询参数 `include_archived`（默认 `false`，`true` 时含已存档）、`page`（默认 1，小于 1 按 1）、`size`（默认 100，小于 1 或大于 100 按 100）（第十八批 BY 段第 383 条 383-R1；BSM:569「进去可以看到全部被存档的对象」） |
 | `POST` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.create` | 是 | 创建商户服务工单 |
 | `GET` | `/api/v1/merchant-service/work-orders/assigned-to-me` | `merchant.service_work_order.process` | 否 | 员工手机「我的工单」只读列出派给本人（负责人）的工单，最近 200 条，不含已存档与已审批删除的；审计 `merchant_service.work_order.viewed`（metadata `scope=assigned_to_me`）（第十八批 M 段第 111 条 111-R1；BSM:1466「我的工单：只看派给自己的工单和处理进度。」） |
 | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | `merchant.service_work_order.assign` | 否 | 派单负责人候选：在岗、持处理码且处理码可触及该商户经营项目的平台员工（102-R1） |

@@ -14,6 +14,7 @@ import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { ComplaintFollowupDialog } from "./ComplaintFollowupDialog";
 import { WorkOrderMaterialsPanel } from "./WorkOrderMaterialsPanel";
+import { ArchiveLifecycleActions, archiveStateLabel } from "./ArchiveLifecycleActions";
 import { MERCHANT_WORK_ORDER_STATUS_LABELS, MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
 import { shortId } from "../format/ids";
 
@@ -129,8 +130,11 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, result };
 }
 
-export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function MerchantWorkOrdersPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantWorkOrderRow[]>([]);
+  // 第十八批 BY 段第 383 条 383-R4（BSM:569「想恢复点「取消存档」即可」）：默认不列已存档工单，勾选后带 include_archived=true 重新拉取（同员工档案页）。
+  const [includeArchived, setIncludeArchived] = React.useState(false);
+  const includeArchivedRef = React.useRef(false);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [ownerDepartment, setOwnerDepartment] = React.useState("property");
   const [ownerUserId, setOwnerUserId] = React.useState("");
@@ -181,7 +185,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const workOrders = await api.get<MerchantWorkOrderRow[]>("/api/v1/merchant-service/work-orders");
+      const workOrders = await api.get<MerchantWorkOrderRow[]>(includeArchivedRef.current
+        ? "/api/v1/merchant-service/work-orders?include_archived=true" : "/api/v1/merchant-service/work-orders");
       setRows(workOrders);
       // 时限读写都要派单权限（与后端同码）；没有的不读，免得整页读取失败。
       if (canSetPolicy) {
@@ -345,6 +350,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   return (
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      {/* 18BY 收尾复核意见 4：勾选框在列表块之外（同员工档案页），没有未存档工单（空态）时也能勾选看已存档工单。 */}
+      <label><input type="checkbox" data-testid="merchant-work-orders-include-archived" checked={includeArchived} onChange={(event) => { includeArchivedRef.current = event.target.checked; setIncludeArchived(event.target.checked); void reload(); }} />显示已存档工单</label>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">
@@ -434,7 +441,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td>{row.title ?? row.id}<br /><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></span></td>
                   <td>{typeName(row.workOrderType)}</td>
                   <td>{formatBusinessStatus(row.priority)}</td>
-                  <td>{statusName(row.status)}</td>
+                  <td>{archiveStateLabel(row) ?? statusName(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
                   <td>{cnDate(row.dueAt)}</td>
@@ -442,7 +449,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                 <td className="admin-row-detail-cell">{row.workOrderType === "complaint" ? (
                   <span onClick={(event) => event.stopPropagation()}><PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE}
                     data-testid={`merchant-work-order-complaint-followup-${row.id}`} onClick={() => setComplaintFollowup(row)}>{TEXT.complaintFollowup}</PermissionButton></span>
-                ) : null}<button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
+                ) : null}<span onClick={(event) => event.stopPropagation()}><ArchiveLifecycleActions api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError}
+                    row={row} basePath={`/api/v1/merchant-service/work-orders/${row.id}`} manage={WO_CLOSE} approve={["merchant.service_work_order.approve"]} resultPrefix="merchant_work_order" testIdPrefix="merchant-work-order" onChanged={reload} /></span><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

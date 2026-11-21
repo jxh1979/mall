@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -383,7 +383,7 @@ public class TicketCatalogService {
                 repository::countTemplateReferences, repository::deleteEntitlementTemplate,
                 () -> ApiException.badRequest("ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING", "该模板没有待审批的删除申请"),
                 () -> ApiException.forbidden("ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN", "删除申请的发起人不能审批自己的申请"),
-                refs -> ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE", "该模板仍被 " + refs + " 个票种绑定或已发放权益引用"));
+                TicketCatalogService::templateInUse);
         return new EntitlementTemplateDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
     }
 
@@ -441,6 +441,16 @@ public class TicketCatalogService {
     void executeDeletePriceRule(String id) {
         executeDeleteCatalogRecord(id, repository::countPriceRuleReferences, repository::deletePriceRule,
                 TicketCatalogService::priceRuleInUse);
+    }
+
+    /** 第十八批 BY 段第 383 条 383-R2：同上，权益模板（BSM:577）。 */
+    void executeDeleteEntitlementTemplate(String id) {
+        executeDeleteCatalogRecord(id, repository::countTemplateReferences, repository::deleteEntitlementTemplate,
+                TicketCatalogService::templateInUse);
+    }
+
+    private static ApiException templateInUse(long refs) {
+        return ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE", "该模板仍被 " + refs + " 个票种绑定或已发放权益引用");
     }
 
     private static ApiException ticketTypeInUse(long refs) {

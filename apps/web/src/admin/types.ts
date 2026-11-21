@@ -1,4 +1,4 @@
-// 文件版本：V0.36
+// 文件版本：V0.37
 export type AdminUser = {
   id: string;
   username: string;
@@ -821,6 +821,9 @@ export type MerchantWorkOrderRow = {
   evidenceAttachmentIds?: string[];
   createdAt?: string;
   updatedAt?: string;
+  // 第十八批 BY 段 383-R4：存档与删除审批状态（含已存档列表）。
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 export type ProviderAdapterRow = {

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -75,10 +75,10 @@ describe("已存档内容页（第 343 条）", () => {
     expect(route?.requiredPermissions).toEqual(ARCHIVED_CONTENT_VIEW_PERMISSIONS);
   });
 
-  it("只列有查看权限的分类；默认分类只显示已存档的对象，带名称、北京时间的存档时间与存档人；票种接口不带存档理由，不设该列", async () => {
+  it("只列有查看权限的分类；默认分类只显示已存档的对象，带名称、北京时间的存档时间、存档人与存档理由", async () => {
     const { gets } = renderPage(perms(["ticket.product.view", "bar.product.view"]), {
       "/ticketing/ticket-types": () => ({ items: [
-        { id: "tt-1", ticket_name: "夜场通票", archived_at: "2026-11-01T18:30:00Z", archived_by: "usr-ops-1" },
+        { id: "tt-1", ticket_name: "夜场通票", archived_at: "2026-11-01T18:30:00Z", archived_by: "usr-ops-1", archive_reason: "季节票下线" },
         { id: "tt-2", ticket_name: "日场票", archived_at: null },
       ] }),
     });
@@ -86,18 +86,19 @@ describe("已存档内容页（第 343 条）", () => {
     expect(optionLabels()).toEqual(["票种", "酒吧商品"]);
     expect(gets.some((url) => url.includes("/api/v1/ticketing/ticket-types?includeArchived=true"))).toBe(true);
     expect(screen.queryByTestId("archived-content-row-tt-2")).toBeNull();
-    expect(headers()).toEqual(["名称", "编号", "存档时间", "存档人", "操作"]);
-    expect(cells("archived-content-row-tt-1").slice(0, -1)).toEqual(["夜场通票", "tt-1", "2026年11月2日 02:30", "usr-ops-1"]);
+    expect(headers()).toEqual(["名称", "编号", "存档时间", "存档人", "存档理由", "操作"]);
+    expect(cells("archived-content-row-tt-1").slice(0, -1)).toEqual(["夜场通票", "tt-1", "2026年11月2日 02:30", "usr-ops-1", "季节票下线"]);
   });
 
-  // 修复项 F13：按分类只显示接口真带出的列（服务项目带存档理由；空间类型只有状态，不带存档时间与存档人）。
-  it("存档理由列只在接口带出理由的分类显示（服务项目）；空间类型接口不带存档时间与存档人，这两列也不设", async () => {
+  // 第十八批 BY 段 387-R3（第十八批裁决 81「每个分类都显示存档理由；空间类型补存存档时间、存档人、理由」）：全类同列。
+  it("每类都显示存档时间、存档人、存档理由（服务项目；空间类型补存的三项也显示）", async () => {
     renderPage(perms(["service.catalog.manage", "governance.space.view"]), {
       "/services/catalog/all": () => [
         { id: "svc-1", name: "代客泊车", status: "inactive", archived_at: "2026-11-02T01:00:00Z", archived_by: "usr-svc-1", archive_reason: "合作到期" },
         { id: "svc-2", name: "行李寄存", status: "active", archived_at: null, archived_by: null, archive_reason: null },
       ],
-      "/platform/space-types": () => [{ id: "st-1", type_code: "kiosk", type_name: "花车", sort_order: 3, status: "archived", created_at: "2026-10-01T03:00:00Z", updated_at: "2026-11-02T03:00:00Z" }],
+      "/platform/space-types": () => [{ id: "st-1", type_code: "kiosk", type_name: "花车", sort_order: 3, status: "archived", created_at: "2026-10-01T03:00:00Z", updated_at: "2026-11-02T03:00:00Z",
+        archived_at: "2026-11-02T03:00:00Z", archived_by: "usr-ops-2", archive_reason: "不再使用的种类" }],
     });
     await waitFor(() => expect(screen.queryByTestId("archived-content-row-svc-1")).not.toBeNull(), { timeout: 3000 });
     expect(headers()).toEqual(["名称", "编号", "存档时间", "存档人", "存档理由", "操作"]);
@@ -106,8 +107,8 @@ describe("已存档内容页（第 343 条）", () => {
 
     fireEvent.change(screen.getByTestId("archived-content-category"), { target: { value: "space-types" } });
     await waitFor(() => expect(screen.queryByTestId("archived-content-row-st-1")).not.toBeNull(), { timeout: 3000 });
-    expect(headers()).toEqual(["名称", "编号", "操作"]);
-    expect(cells("archived-content-row-st-1").slice(0, -1)).toEqual(["花车", "st-1"]);
+    expect(headers()).toEqual(["名称", "编号", "存档时间", "存档人", "存档理由", "操作"]);
+    expect(cells("archived-content-row-st-1").slice(0, -1)).toEqual(["花车", "st-1", "2026年11月2日 11:00", "usr-ops-2", "不再使用的种类"]);
   });
 
   // 修复项 F12：票价规则、卡座预订的记录里没有名称字段，名称按原页面认得出的内容拼。
@@ -125,7 +126,7 @@ describe("已存档内容页（第 343 条）", () => {
     });
     await waitFor(() => expect(screen.queryByTestId("archived-content-row-price_rule_a1")).not.toBeNull(), { timeout: 3000 });
     expect(gets.some((url) => url.includes("/api/v1/ticketing/ticket-types?includeArchived=true"))).toBe(true);
-    expect(cells("archived-content-row-price_rule_a1").slice(0, -1)).toEqual(["夜场通票 · 学生票 · 固定价 ¥80.00", "price_rule_a1", "2026年11月2日 02:30", "usr-ops-1"]);
+    expect(cells("archived-content-row-price_rule_a1").slice(0, -1)).toEqual(["夜场通票 · 学生票 · 固定价 ¥80.00", "price_rule_a1", "2026年11月2日 02:30", "usr-ops-1", "—"]);
     expect(cells("archived-content-row-price_rule_b2")[0]).toBe("tt-gone · 会员价 · 按基础价加减金额 减 ¥5.00");
   });
 
@@ -140,7 +141,7 @@ describe("已存档内容页（第 343 条）", () => {
       "/bar/tables": () => ({ items: [{ id: "tbl-1", bar_id: "bar-1", table_code: "A-08", table_name: "卡座 A08", capacity: 8, status: "available" }] }),
     });
     await waitFor(() => expect(screen.queryByTestId("archived-content-row-resv-1")).not.toBeNull(), { timeout: 3000 });
-    expect(cells("archived-content-row-resv-1").slice(0, -1)).toEqual(["A-08 · 2026年11月5日 20:30 · 6 人", "resv-1", "2026年11月6日 10:00", "usr-bar-1"]);
+    expect(cells("archived-content-row-resv-1").slice(0, -1)).toEqual(["A-08 · 2026年11月5日 20:30 · 6 人", "resv-1", "2026年11月6日 10:00", "usr-bar-1", "—"]);
     expect(screen.queryByTestId("archived-content-row-resv-2")).toBeNull();
   });
 
@@ -195,7 +196,8 @@ describe("已存档内容页（第 343 条）", () => {
     const { gets, posts, setGlobalError } = renderPage(perms(["access.role.assign", "amusement.project_entitlement.manage"]), {
       "/access/position-role-templates": () => ({ items: [
         { id: "prt-1", position_code: "ops_manager", staff_level_id: "lvl_m3_upper", role_id: "role-1", template_id: null, organization_id: null, status: "inactive",
-          created_by: "usr-admin-1", created_at: "2026-10-01T03:00:00Z", updated_at: "2026-11-05T01:00:00Z", archived_at: "2026-11-05T01:00:00Z", deleted_at: null },
+          created_by: "usr-admin-1", created_at: "2026-10-01T03:00:00Z", updated_at: "2026-11-05T01:00:00Z", archived_at: "2026-11-05T01:00:00Z", deleted_at: null,
+          archived_by: "usr-admin-1", archive_reason: "岗位撤并" },
         { id: "prt-2", position_code: "night_duty_manager", staff_level_id: "lvl_m2_lower", role_id: "role-2", status: "inactive",
           archived_at: "2026-11-01T01:00:00Z", deleted_at: "2026-11-02T01:00:00Z", delete_reason: "岗位撤销" },
         { id: "prt-3", position_code: "auditor_internal", staff_level_id: "lvl_m4_middle", role_id: "role-3", status: "active", archived_at: null, deleted_at: null },
@@ -204,8 +206,8 @@ describe("已存档内容页（第 343 条）", () => {
     await waitFor(() => expect(screen.queryByTestId("archived-content-row-prt-1")).not.toBeNull(), { timeout: 3000 });
     expect(optionLabels()).toEqual(["岗位角色模板"]);
     expect(gets.some((url) => url.includes("/api/v1/access/position-role-templates?include_archived=true"))).toBe(true);
-    expect(headers()).toEqual(["名称", "编号", "存档时间", "操作"]);
-    expect(cells("archived-content-row-prt-1").slice(0, -1)).toEqual(["运营经理 / M3·上", "prt-1", "2026年11月5日 09:00"]);
+    expect(headers()).toEqual(["名称", "编号", "存档时间", "存档人", "存档理由", "操作"]);
+    expect(cells("archived-content-row-prt-1").slice(0, -1)).toEqual(["运营经理 / M3·上", "prt-1", "2026年11月5日 09:00", "usr-admin-1", "岗位撤并"]);
     expect(screen.queryByTestId("archived-content-row-prt-2")).toBeNull();
     expect(screen.queryByTestId("archived-content-row-prt-3")).toBeNull();
 

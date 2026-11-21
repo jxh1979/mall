@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -842,7 +842,7 @@ public class PlatformService {
         Instant now = Instant.now();
         repository.saveSpaceType(new SpaceTypeRecord(
                 existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
-                "archived", existing.createdAt(), now));
+                "archived", existing.createdAt(), now, now, actorId(), reason.trim()));
         auditEventService.recordSuccess(
                 "space_type.archived", "governance.space.manage", "space_type", id, null, null,
                 Map.of("type_code", existing.typeCode(), "reason", reason.trim()));
@@ -883,7 +883,8 @@ public class PlatformService {
             repository.completeSpaceTypeDeleteRequest(existing.id(), "approved");
             repository.saveSpaceType(new SpaceTypeRecord(
                     existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
-                    "disabled", existing.createdAt(), Instant.now()));
+                    "disabled", existing.createdAt(), Instant.now(),
+                    existing.archivedAt(), existing.archivedBy(), existing.archiveReason()));
             auditEventService.recordSuccess(
                     "space_type.deleted", "governance.space.manage", "space_type", id, null, null,
                     Map.of("type_code", existing.typeCode(), "reason", text));
@@ -891,7 +892,8 @@ public class PlatformService {
         }
         repository.saveSpaceType(new SpaceTypeRecord(
                 existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
-                "pending_delete", existing.createdAt(), Instant.now()));
+                "pending_delete", existing.createdAt(), Instant.now(),
+                existing.archivedAt(), existing.archivedBy(), existing.archiveReason()));
         repository.saveSpaceTypeDeleteRequest(existing.id(), text, actor);
         auditEventService.recordSuccess(
                 "space_type.delete_requested", "governance.space.manage", "space_type", id, null, null,
@@ -942,7 +944,7 @@ public class PlatformService {
         repository.completeSpaceTypeDeleteRequest(existing.id(), verdict);
         repository.saveSpaceType(new SpaceTypeRecord(
                 existing.id(), existing.typeCode(), existing.typeName(), existing.sortOrder(),
-                next, existing.createdAt(), now));
+                next, existing.createdAt(), now, existing.archivedAt(), existing.archivedBy(), existing.archiveReason()));
         auditEventService.recordSuccess(
                 "approved".equals(verdict) ? "space_type.delete_approved" : "space_type.delete_rejected", "governance.space.manage", "space_type", id, null, null,
                 Map.of("decision", verdict, "type_code", existing.typeCode()));

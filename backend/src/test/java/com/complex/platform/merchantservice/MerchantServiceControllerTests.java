@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.merchantservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -150,7 +150,7 @@ class MerchantServiceControllerTests {
 
     @Test
     void listUsesViewPermissionAndPageResponseShape() throws Exception {
-        when(service.listWorkOrders(false)).thenReturn(new PageResponse<>(List.of(record("mswo_1", "created")), 1, 50, 1));
+        when(service.listWorkOrders(false, 1, 100)).thenReturn(new PageResponse<>(List.of(record("mswo_1", "created")), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/merchant-service/work-orders")
                         .with(user("ops").roles("P0_SMOKE")))

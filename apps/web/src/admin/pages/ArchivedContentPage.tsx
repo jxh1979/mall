@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -16,18 +16,12 @@ import { priceModeLabel, priceModeValue } from "./ticketPriceModes";
 // 查看范围与恢复权限都由各接口照原样把关（能在原页面看到、恢复的，在这里才看得到、恢复得了）。
 // 第十八批 BM 段修复项 F12～F15（依据同上 BSM:569）：
 // F12 票价规则、卡座预订的记录里没有名称字段，名称按原页面认得出的内容拼；
-// F13 存档时间、存档人、存档理由三列按分类只显示该类列表接口真带出的；
+// （F13 按分类配列已由第十八批 BY 段 387-R3 收回：第十八批裁决 81「每个分类都显示存档理由」，各类列表都带出存档时间、存档人、存档理由，全类同列；）
 // F14 补游乐项目权益绑定、岗位角色模板两类（「全部被存档的对象」）；
 // F15 读取记请求序号，过期响应丢弃；恢复完成后按当前分类重读。
+// 第十八批 BY 段 383-R6：商户服务工单含已存档列表按 page、size 分页，同商户档案逐页取完。
 
 type Row = Record<string, unknown> & { id: string };
-
-type Column = "archivedAt" | "archivedBy" | "archiveReason";
-
-const COLUMN_LABELS: Record<Column, string> = { archivedAt: "存档时间", archivedBy: "存档人", archiveReason: "存档理由" };
-/** 多数分类的列表接口只带出存档时间与存档人。 */
-const DEFAULT_COLUMNS: Column[] = ["archivedAt", "archivedBy"];
-const WITH_REASON: Column[] = ["archivedAt", "archivedBy", "archiveReason"];
 
 type Category = {
   key: string;
@@ -40,8 +34,6 @@ type Category = {
   restorePath: (id: string, row: Row) => string;
   /** 默认按 archivedAt 判；个别对象用状态判。 */
   isArchived?: (row: Row) => boolean;
-  /** 该类列表接口真带出的存档信息列；不写＝存档时间、存档人。 */
-  columns?: Column[];
   /** 恢复须填理由的分类：弹框填理由，连同这个动作名一起提交。 */
   reasonAction?: string;
 };
@@ -56,16 +48,16 @@ const listOf = (path: string) => async (api: AdminApiClient) => rowsOf(await api
 /** 拼名称要对照的另一张列表：没有它的查看权限或读取失败时当空表，名称里退回显示编号。 */
 const lookupOf = (path: string) => (api: AdminApiClient) => listOf(path)(api).catch(() => [] as Row[]);
 
-// 商户列表分页返回：逐页取完，免得已存档的落在后面几页看不到。
-async function loadMerchants(api: AdminApiClient): Promise<Row[]> {
+// 分页返回的列表（商户档案、商户服务工单）：逐页取完，免得已存档的落在后面几页看不到。
+const loadAllPages = (path: string) => async (api: AdminApiClient): Promise<Row[]> => {
   const size = 100;
   const all: Row[] = [];
   for (let page = 1; ; page += 1) {
-    const result = await api.getPaged<Row>(`/api/v1/platform/merchants?includeArchived=true&page=${page}&size=${size}`);
+    const result = await api.getPaged<Row>(`${path}&page=${page}&size=${size}`);
     all.push(...result.items);
     if (result.items.length < size) return all;
   }
-}
+};
 
 // 票价规则名称＝票种名（对不上显示票种编号）＋价格档＋价格，同票务策略页派生价规则表。
 async function loadPriceRules(api: AdminApiClient): Promise<Row[]> {
@@ -118,7 +110,7 @@ async function loadPositionTemplates(api: AdminApiClient): Promise<Row[]> {
 
 export const ARCHIVED_CATEGORIES: Category[] = [
   { key: "merchants", label: "商户档案", view: ["merchant.profile.view"], restore: ["merchant.profile.manage"],
-    load: loadMerchants, restorePath: (id) => `/api/v1/platform/merchants/${id}/unarchive` },
+    load: loadAllPages("/api/v1/platform/merchants?includeArchived=true"), restorePath: (id) => `/api/v1/platform/merchants/${id}/unarchive` },
   { key: "ticket-types", label: "票种", view: ["ticket.product.view"], restore: ["ticket.product.manage"],
     load: listOf("/api/v1/ticketing/ticket-types?includeArchived=true"), restorePath: (id) => `/api/v1/ticketing/ticket-types/${id}/unarchive` },
   { key: "price-rules", label: "票价规则", view: ["ticket.price_variant.view"], restore: ["ticket.price_variant.manage"],
@@ -138,21 +130,21 @@ export const ARCHIVED_CATEGORIES: Category[] = [
   { key: "facility-equipment", label: "设施设备", view: ["facility.equipment.manage"], restore: ["facility.equipment.manage"],
     load: listOf("/api/v1/facility/equipment?include_archived=true"), restorePath: (id) => `/api/v1/facility/equipment/${id}/unarchive` },
   { key: "merchant-work-orders", label: "商户服务工单", view: ["merchant.service_work_order.view"], restore: ["merchant.service_work_order.close"],
-    load: listOf("/api/v1/merchant-service/work-orders?include_archived=true"), restorePath: (id) => `/api/v1/merchant-service/work-orders/${id}/unarchive` },
+    load: loadAllPages("/api/v1/merchant-service/work-orders?include_archived=true"), restorePath: (id) => `/api/v1/merchant-service/work-orders/${id}/unarchive` },
   { key: "service-catalog", label: "服务项目", view: ["service.catalog.manage"], restore: ["service.catalog.manage"],
-    load: listOf("/api/v1/services/catalog/all"), restorePath: (id) => `/api/v1/services/catalog/${id}/unarchive`, columns: WITH_REASON },
+    load: listOf("/api/v1/services/catalog/all"), restorePath: (id) => `/api/v1/services/catalog/${id}/unarchive` },
   { key: "space-types", label: "空间类型", view: ["governance.space.view"], restore: ["governance.space.manage"],
     load: listOf("/api/v1/platform/space-types"), restorePath: (id) => `/api/v1/platform/space-types/${id}/unarchive`,
-    isArchived: (row) => row.status === "archived", columns: [] },
+    isArchived: (row) => row.status === "archived" },
   // 修复项 F14 两类：已审批删除的不算「被存档的对象」（BSM:569 讲存档、删除另见 BSM:570；票种、酒吧、员工等多数分类的含已存档列表也不带已删除的），
   // 已删除的仍在各自原页面处理。
   { key: "amusement-entitlements", label: "游乐项目权益绑定", view: ["amusement.project_entitlement.manage", "amusement.session.view"], restore: ["amusement.project_entitlement.manage"],
     load: loadAmusementEntitlements,
     restorePath: (_id, row) => `/api/v1/amusement/projects/${text(row.projectId)}/entitlements/${encodeURIComponent(text(row.entitlementType))}/unarchive`,
-    isArchived: (row) => Boolean(row.archivedAt) && row.deleteStatus !== "approved", columns: WITH_REASON },
+    isArchived: (row) => Boolean(row.archivedAt) && row.deleteStatus !== "approved" },
   { key: "position-role-templates", label: "岗位角色模板", view: ["access.role.assign"], restore: ["access.role.assign"],
     load: loadPositionTemplates, restorePath: (id) => `/api/v1/access/position-role-templates/${encodeURIComponent(id)}/lifecycle`,
-    isArchived: (row) => Boolean(row.archivedAt) && !row.deletedAt, columns: ["archivedAt"], reasonAction: "restore" },
+    isArchived: (row) => Boolean(row.archivedAt) && !row.deletedAt, reasonAction: "restore" },
 ];
 
 /** 本页入口权限：持任一分类的查看权限即可进入（AdminApp 按任一即可判）。 */
@@ -232,8 +224,6 @@ export function ArchivedContentPage({ api, setActionResult, setGlobalError, effe
     }
   }
 
-  const columns = category?.columns ?? DEFAULT_COLUMNS;
-
   return (
     <section data-testid="archived-content-page">
       <AdminPageHeader title="已存档内容" description="按分类查看全部被存档的对象，可逐条恢复。存档只是先下线：不再被新业务选用，历史照样能查。" />
@@ -251,13 +241,15 @@ export function ArchivedContentPage({ api, setActionResult, setGlobalError, effe
             <p data-testid="archived-content-empty">「{category?.label}」没有已存档的对象。</p>
           ) : (
             <table className="admin-table" data-testid="archived-content-table">
-              <thead><tr><th>名称</th><th>编号</th>{columns.map((column) => <th key={column}>{COLUMN_LABELS[column]}</th>)}<th>操作</th></tr></thead>
+              <thead><tr><th>名称</th><th>编号</th><th>存档时间</th><th>存档人</th><th>存档理由</th><th>操作</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} data-testid={`archived-content-row-${row.id}`}>
                     <td>{displayName(row)}</td>
                     <td>{row.id}</td>
-                    {columns.map((column) => <td key={column}>{column === "archivedAt" ? cnDate(text(row.archivedAt) || null) : text(row[column]) || "—"}</td>)}
+                    <td>{cnDate(text(row.archivedAt) || null)}</td>
+                    <td>{text(row.archivedBy) || "—"}</td>
+                    <td>{text(row.archiveReason) || "—"}</td>
                     <td>
                       <PermissionButton permissionsState={effectivePermissions} permissions={category?.restore ?? []} disabled={restoringId === row.id}
                         onClick={() => void restore(row)} data-testid={`archived-content-restore-${row.id}`}>恢复</PermissionButton>

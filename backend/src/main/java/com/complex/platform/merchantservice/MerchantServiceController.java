@@ -46,9 +46,11 @@ public class MerchantServiceController {
 
     @GetMapping("/work-orders")
     public ApiResponse<PageResponse<MerchantWorkOrderRecord>> listWorkOrders(
-            @RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
+            @RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "100") int size) {
         authorizationService.requirePermission("merchant.service_work_order.view");
-        return ApiResponse.ok(service.listWorkOrders(includeArchived));
+        return ApiResponse.ok(service.listWorkOrders(includeArchived, page, size));
     }
 
     // 第十八批 M 段第 111 条 111-R1：员工手机「我的工单」只读列出派给本人的商户服务工单（负责人本来就要持处理码，102-R1）。

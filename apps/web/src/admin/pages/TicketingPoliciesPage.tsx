@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -58,6 +58,8 @@ type EntitlementTemplateRow = {
   agreementPriceCent?: number | null;
   // 第十八批 BV 段 264-R4：提供商户（选商户让利型时按它筛让利申请）。
   merchantId?: string | null;
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 type PriceRuleRow = {
   id: string;
@@ -79,6 +81,13 @@ type AmusementProjectRow = { id: string; projectName: string };
 const TICKET_CATEGORY_LABELS: Record<string, string> = { standard: "标准票", new_person: "新人票", student: "学生票" };
 
 const MANAGE = ["ticket.product.manage"];
+// 第十八批 BY 段第 383 条 383-R5：票种、派生价规则、权益模板三类的存档与删除共用页内四个函数，按 kind 取结果键前缀、testId 前缀与管理、批准权限码。
+type CatalogKind = "ticket-types" | "price-rules" | "entitlement-templates";
+const CATALOG_KINDS: Record<CatalogKind, { result: string; testId: string; manage: string[]; approve: string[] }> = {
+  "ticket-types": { result: "ticket_type", testId: "ticket-type", manage: MANAGE, approve: ["ticket.type.approve"] },
+  "price-rules": { result: "price_rule", testId: "price-rule", manage: ["ticket.price_variant.manage"], approve: ["ticket.price_rule.approve"] },
+  "entitlement-templates": { result: "entitlement_template", testId: "entitlement-template", manage: ["ticket.entitlement.manage"], approve: ["ticket.entitlement.approve"] },
+};
 // #172(2026-07-19 拍板)：全场统一动态码刷新间隔——5 秒为单位、最长 60 秒。
 const QR_REFRESH_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
 const VARIANT_TYPES = ["new_customer", "student", "group", "channel", "member"];
@@ -365,7 +374,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     async () => {
       const [ticketRows, templateRows, ruleRows, merchantRows, projectRows, qrConfig] = await Promise.all([
         api.get<unknown>(`/api/v1/ticketing/ticket-types?includeArchived=${showArchived}`),
-        api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
+        api.get<unknown>(`/api/v1/ticketing/entitlement-templates?includeArchived=${showArchived}`),
         api.get<unknown>(`/api/v1/ticketing/price-rules?includeArchived=${showArchived}`),
         // 数据源（组合式配置多选）：商户（酒吧）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
         api.get<unknown>("/api/v1/platform/merchants").catch(() => ({ items: [] })),
@@ -394,7 +403,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived]);
 
-  async function archiveCatalog(kind: "ticket-types" | "price-rules", id: string, archive: boolean) {
+  async function archiveCatalog(kind: CatalogKind, id: string, archive: boolean) {
     setGlobalError(null);
     let reason: string | undefined;
     if (archive) {
@@ -403,15 +412,20 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       if (!r.trim()) { setGlobalError("存档理由必填"); return; }
       reason = r.trim();
     }
-    await api.post(`/api/v1/ticketing/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {
-      idempotencyKey: `${kind}-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
-      ...(reason ? { reason } : {}),
-    });
-    setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_${archive ? "archived" : "unarchived"}`, id });
-    await reload();
+    try {
+      await api.post(`/api/v1/ticketing/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {
+        idempotencyKey: `${kind}-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+        ...(reason ? { reason } : {}),
+      });
+      setActionResult({ action: `${CATALOG_KINDS[kind].result}_${archive ? "archived" : "unarchived"}`, id });
+      await reload();
+    } catch (e) {
+      // 18BY 收尾复核意见 5（PGM:303「没有返回确认的不算完成」）：存档、取消存档被拒或请求失败报中文原因，不静默（同 requestDeleteCatalog）。
+      setGlobalError(e instanceof Error ? e.message : "存档操作失败");
+    }
   }
 
-  async function requestDeleteCatalog(kind: "ticket-types" | "price-rules", id: string) {
+  async function requestDeleteCatalog(kind: CatalogKind, id: string) {
     const reason = window.prompt(isMaster ? "删除理由（最高权限本人发起即删除）：" : "删除理由（提交后需最高权限审批）：");
     if (reason === null) {
       return; // 用户点「取消」= 中止申请，不提交空理由。
@@ -423,9 +437,9 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         reason,
       });
       if (isMaster) {
-        setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_delete_approved`, id, deleted: true });
+        setActionResult({ action: `${CATALOG_KINDS[kind].result}_delete_approved`, id, deleted: true });
       } else {
-        setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_delete_requested`, id });
+        setActionResult({ action: `${CATALOG_KINDS[kind].result}_delete_requested`, id });
       }
       await reload();
     } catch (e) {
@@ -434,14 +448,14 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     }
   }
 
-  async function approveDeleteCatalog(kind: "ticket-types" | "price-rules", id: string, decision: "approved" | "rejected") {
+  async function approveDeleteCatalog(kind: CatalogKind, id: string, decision: "approved" | "rejected") {
     setGlobalError(null);
     try {
       const decided = await api.post<{ deleted?: boolean }>(`/api/v1/ticketing/${kind}/${id}/delete-approve`, {
         idempotencyKey: `${kind}-delete-approve-${id}-${decision}-${Date.now()}`,
         decision,
       });
-      setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_delete_${decision}`, id, deleted: decided?.deleted ?? false });
+      setActionResult({ action: `${CATALOG_KINDS[kind].result}_delete_${decision}`, id, deleted: decided?.deleted ?? false });
       await reload();
     } catch (e) {
       // 18AO 收尾复核意见 5：非最高权限批准、驳回被 403 等报中文原因，不静默。
@@ -455,10 +469,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     return "生效中";
   }
 
-  function catalogActions(kind: "ticket-types" | "price-rules", row: { id: string; archivedAt?: string | null; deleteStatus?: string; status?: string }) {
-    const manage = kind === "ticket-types" ? MANAGE : ["ticket.price_variant.manage"];
-    const approve = kind === "ticket-types" ? ["ticket.type.approve"] : ["ticket.price_rule.approve"];
-    const prefix = kind === "ticket-types" ? "ticket-type" : "price-rule";
+  function catalogActions(kind: CatalogKind, row: { id: string; archivedAt?: string | null; deleteStatus?: string; status?: string }) {
+    const { manage, approve, testId: prefix } = CATALOG_KINDS[kind];
     const actions: RowAction[] = row.deleteStatus === "pending"
       ? [
           { key: "approve", label: "批准删除", permissions: approve, onClick: () => void approveDeleteCatalog(kind, row.id, "approved"), testId: `${prefix}-delete-approve-${row.id}` },
@@ -1332,7 +1344,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                     <label>权益模板（必选）
                       <select data-testid="ticket-create-template" aria-label="权益模板" value={createTemplateId} onChange={(event) => setCreateTemplateId(event.target.value)}>
                         <option value="">选择权益模板</option>
-                        {templates.map((t) => (
+                        {templates.filter((t) => !t.archivedAt).map((t) => (
                           <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                       </select>
@@ -1664,6 +1676,10 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           </>) },
           { key: "templates", label: "③ 权益模板", forceRender: true, children: (<>
       <h3>权益模板</h3>
+      <label className="admin-inline-check" data-testid="entitlement-template-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+        显示已存档权益模板
+      </label>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="entitlement-templates-table">
           <thead>
@@ -1672,6 +1688,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
               <th>权益类型</th>
               <th>签约价</th>
               <th>状态</th>
+              <th>操作</th>
               <th>详情</th>
             </tr>
           </thead>
@@ -1683,7 +1700,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{row.agreementPriceCent != null ? `¥${yuan(row.agreementPriceCent)}` : "未设（按面值结算）"}</td>
-                <td>{formatBusinessStatus(row.status)}</td>
+                <td>{row.archivedAt ? archiveLabel(row) : formatBusinessStatus(row.status)}</td>
+                <td onClick={(event) => event.stopPropagation()}>{catalogActions("entitlement-templates", row)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看权益模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td>
               </tr>
             ))}
@@ -1718,7 +1736,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       <div className="admin-inline-form" data-testid="partner-voucher-config-form">
         <select aria-label="第三方券-权益模板" value={pvConfig.templateId} onChange={(e) => setPvConfig({ ...pvConfig, templateId: e.target.value })}>
           <option value="">选择权益模板</option>
-          {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+          {templates.filter((t) => !t.archivedAt).map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
         </select>
         <select aria-label="结算模式" value={pvConfig.settlementMode} onChange={(e) => setPvConfig({ ...pvConfig, settlementMode: e.target.value })}>
           <option value="free_marketing">免费营销券（核销不结算）</option>
@@ -1765,7 +1783,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         </select>
         <select aria-label="权益模板" value={bindForm.templateId} onChange={(event) => setBindForm({ ...bindForm, templateId: event.target.value })}>
           <option value="">选择权益模板</option>
-          {templates.map((t) => (
+          {templates.filter((t) => !t.archivedAt).map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>

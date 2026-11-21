@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.23
+// 文件版本：V0.24
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -797,14 +797,14 @@ class JdbcAccessRepository implements AccessRepository {
         if (organizationId == null) {
             return jdbcTemplate.query("""
                     SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                           status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
+                           status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason, archived_by, archive_reason
                       FROM position_role_templates
                      ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
                     """, this::mapPositionRoleTemplate);
         }
         return jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason, archived_by, archive_reason
                   FROM position_role_templates
                  WHERE organization_id IS NULL OR organization_id = :organization_id
                  ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
@@ -815,7 +815,7 @@ class JdbcAccessRepository implements AccessRepository {
     public Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
         List<PositionRoleTemplate> result = jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason, archived_by, archive_reason
                   FROM position_role_templates
                  WHERE id = :id FOR UPDATE
                 """, Map.of("id", id), this::mapPositionRoleTemplate);
@@ -834,7 +834,7 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("staff_level_id", staffLevelId);
         List<PositionRoleTemplate> result = jdbcTemplate.query("""
                 SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
-                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason
+                       status, created_by, created_at, updated_at, archived_at, deleted_at, delete_review_id, delete_reason, archived_by, archive_reason
                   FROM position_role_templates
                  WHERE status = 'active' AND archived_at IS NULL AND deleted_at IS NULL
                    AND position_code = :position_code
@@ -908,12 +908,14 @@ class JdbcAccessRepository implements AccessRepository {
                    SET status = 'inactive', archived_at = :archived_at, deleted_at = :deleted_at,
                        delete_review_id = :review_id, delete_reason = :reason, updated_at = :updated_at,
                        archived_by = CASE WHEN CAST(:archived_at AS timestamptz) IS NULL THEN NULL ELSE COALESCE(archived_by, :actor) END,
+                       archive_reason = CASE WHEN CAST(:archived_at AS timestamptz) IS NULL THEN NULL ELSE COALESCE(archive_reason, :archive_reason) END,
                        deleted_by = CASE WHEN CAST(:deleted_at AS timestamptz) IS NULL THEN NULL ELSE :actor END
                  WHERE id = :id
                 """, new MapSqlParameterSource().addValue("id", mapping.id())
                 .addValue("archived_at", timestampWithTimeZone(mapping.archivedAt()), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
                 .addValue("deleted_at", timestampWithTimeZone(mapping.deletedAt()), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
                 .addValue("review_id", mapping.deleteReviewId()).addValue("reason", mapping.deleteReason())
+                .addValue("archive_reason", mapping.archiveReason())
                 .addValue("actor", actorId).addValue("updated_at", timestampWithTimeZone(mapping.updatedAt())));
         if (changed != 1) throw new IllegalStateException("岗位模板不存在");
     }
@@ -1962,7 +1964,8 @@ class JdbcAccessRepository implements AccessRepository {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 nullableInstant(resultSet, "archived_at"), nullableInstant(resultSet, "deleted_at"),
-                resultSet.getString("delete_review_id"), resultSet.getString("delete_reason")
+                resultSet.getString("delete_review_id"), resultSet.getString("delete_reason"),
+                resultSet.getString("archived_by"), resultSet.getString("archive_reason")
         );
     }
 

@@ -352,7 +352,7 @@ class JdbcBarPosCatalogRepository {
                 combo.priceCent(), combo.internalSettlementPriceCent(), combo.imageUrl(), combo.status(),
                 combo.createdAt(), combo.updatedAt(), items,
                 combo.archivedAt(), combo.archivedBy(), combo.deleteStatus(),
-                combo.deleteRequestedBy(), combo.deleteRequestedAt(), combo.deleteReason());
+                combo.deleteRequestedBy(), combo.deleteRequestedAt(), combo.deleteReason(), combo.archiveReason());
     }
 
     private BarProductCategoryRecord mapCategory(ResultSet rs, int rowNum) throws SQLException {
@@ -361,7 +361,8 @@ class JdbcBarPosCatalogRepository {
                 rs.getString("category_name"), rs.getInt("sort_order"), rs.getString("status"),
                 instantOf(rs, "created_at"), instantOf(rs, "updated_at"),
                 instantOf(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
-                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"));
+                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"),
+                rs.getString("archive_reason"));
     }
 
     private BarComboRecord mapCombo(ResultSet rs, int rowNum) throws SQLException {
@@ -372,7 +373,8 @@ class JdbcBarPosCatalogRepository {
                 rs.getString("status"), instantOf(rs, "created_at"), instantOf(rs, "updated_at"),
                 List.of(),
                 instantOf(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
-                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"));
+                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"),
+                rs.getString("archive_reason"));
     }
 
     private static Instant instantOf(ResultSet rs, String col) throws SQLException {
