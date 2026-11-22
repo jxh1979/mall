@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.30
+文档版本：V1.31
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3980,6 +3980,8 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 73 | **PGM:287「界面全中文」四样例外之外的文件格式名要不要改中文**（背景：18BA 第 267 条同根旁见，后台 ReconciliationPage「支持 PDF、Excel、CSV 原件」、WatermarkTracePage「PNG、JPEG」等文件格式名；控制席原按 PGM:287「可以不用中文的只有四样，没有第五样……不得以『这是标识』为由保留英文」字面判为要改中文，向操作员说明后操作员直接答复） | 操作员 2026-11-19 原话「文件格式名不用中文」：PDF、Excel、CSV、PNG、JPEG 等文件格式名在界面上保持原样，不改中文；PGM:287 其余要求不变。 |
 | 76 | **第 373 条 游乐安全巡检逐个点位怎样才算走到**（题面：「【第 373 条】游乐安全巡检逐个点位怎样才算走到：要不要扫贴在点位上的码？ 前因：BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立……确需补录的一律须附证据并经主管复核」，没写怎样算走到。决策台账 DEC-R3-2026-08-04-33 标题是「新增两条扫码强制规则」，第二条就是这句（理由「扫码本来就是工作的必要过程，不扫等于活没干完」）；DEC-R6-09 扫码缺失可补录也扩到游乐巡检行；工作手机用途列有「巡检」。但 HTML 巡检那句没写扫码。 现状：系统里没有点位、也没有点位码；游乐安全巡检只在后台网页填，工作手机没有游乐巡检界面。 分歧：HTML 现句与两条裁决口径不一致；选扫码要多做一整块。」）—— 操作员选「逐点扫码（推荐）」：每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上。（未选：「不扫码按序记录」）（2026-11-20 弹窗；来由：18BS 只读设计第 373 条待裁题。控制席说明：按 18BS 只读设计 d-insp-a 做 373-R1、R2、R3、R5（仅选扫码时做）、R4。） | 待开发清单第 373 条（18BS） |
 | 77 | **第 372 条 外部审计、监管「只能查看划定的时间段」怎么落**（题面：「【第 372 条】外部审计、监管「只能查看划定的时间段」怎么落？ 前因：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改」。同一文件讲账号期限一律用「有效期」，这句用「时间段」且作查看对象，字面更像数据时段；但当初落地按授权时效做。 现状：「范围」已有（套外部审计模板或逐项临时授权，只限所给项目）。「时间段」只有账号层面期限：外部机构账号有效期（可不填＝长期）、临时授权到期时间；外部审计模板本身不带有效期。外审账号有效期间看到的是该项目有史以来全部记录。 分歧：「时间段」指能看哪段时间发生的数据（如年审只看 2026 年度），还是账号在哪段时间能进来看（如只在进场一个月内有效）。」）—— 操作员选「按数据发生时间（推荐）」：开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完。（未选：「按账号授权时效」「暂不做保留登记」）（2026-11-20 弹窗；来由：18BT 只读设计第 372 条待裁题。控制席说明：工作量大，另起只读设计按业务域拆成若干段分轮做；18BT 本段只做第 370 条。） | 待开发清单第 372 条（18BT） |
+| 78 | **第 264 条 免费权益记为「商户让利」时系统要不要收商户的申请确认**（题面：「【第 264 条】把一项免费权益记成「商户让利」（核销后不给商户结算）时，系统要不要收商户的申请确认材料？ 前因：业务地图与枚举速查原句「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；另写「商户签约参加平台活动的其折扣即属后者」。只写了前提，没写申请和书面确认放进系统还是线下存档。最接近的是合同运营细则「合同签署先线下签纸质、系统上传扫描件归档」，但那句管的是商户合同。 现状：后台「票务策略」页配票种权益时，免费权益的「成本承担方」下拉直接选「商户让利型」就能保存发布；系统不收任何材料，也不记商户有没有申请确认，留痕只有谁什么时候绑了这项权益。 分歧：系统要不要承载这份申请与确认；要的话是运营代传商户纸面确认，还是商户自己在系统里申请确认。组合通票搭餐饮零售免费券、酒吧加送赠饮、商户参加平台活动，都是日常会遇到的。」）—— 操作员选「商户在系统里申请确认」：商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。（未选：「运营上传确认材料（推荐）」「线下存档系统不管」）（2026-11-20 弹窗；来由：18BV 只读设计第 264 条待裁题。控制席说明：设计原按推荐项写，按所选选项重做只读设计后再实现。） | 待开发清单第 264 条（18BV） |
+| 80 | **自定事项第 49 条复议：有价的餐饮零售权益能不能标成「商户让利」**（题面：「【自定第 49 条·有价的餐饮零售权益能不能标成「商户让利」】前因：第 264 条（你选了「商户在系统里申请确认」）的设计顺带发现：票务策略页配通票时，餐饮、零售的「专属直付」权益就算有价格，出资方下拉也能选「商户让利型」，后端照存；核销时只看「商户让利」不看票面价，结算记 0，商户收不到这项有价权益的直付款。ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；BSM:751「商户让利的零元免费权益不结算」——原句把让利限在零元免费权益。我定的：不登记。理由是第 264 条做完后，要标商户让利必须先有该商户为这张票提交并确认的申请，我判断正常业务碰不到。重新看一遍后：商户仍可能对有价权益提交申请（误点或以为是活动折扣），而原句让利只管零元权益，拦一下成本很小。所以这次我改为推荐「登记并随第 264 条一并拦」。」）—— 操作员选「只零元权益能选让利（推荐）」：登记并随第 264 条（18BV）一并做：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益。（未选：「维持不登记」）（2026-11-21 弹窗；来由：操作员要求复议控制席自定事项。控制席说明：待开发清单第 420 条，随 18BV 第 264 条修复阶段一并做。） | 控制席自定事项（18BV） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -12081,3 +12083,97 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ⑥ 意见 9：本补记 372-R2 改法末句与 AccessService.resolvePositionGrant 处注释改为以现码为准（审批落地不判；有岗位时改职级、保存岗位映射后的在岗重算同判），代码不改；依据第十八批裁决 77「开外审权限必须划定数据起止日期」（重算授予也是开权限）。
 - 18BX 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main d310ff86；合并时 OpenAPI 共 1415 个操作（主干 1413）、info.version V1.02、决策台账 V1.30，Flyway 最新 V736（共 629 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BX 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 5c84c842 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7296 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2061；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-22 01:45 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BV 落地位置补记（2026-11-20）：第十八批 BV 段（batch94）按 18BV 只读设计实现待开发清单第 264 条（赠送权益组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与裁决表第 78、80 行外，其他历史字节保持。
+
+- 18BV 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BV 段，batch94）实现待开发清单第 264 条（18BV 只读设计 b94-audit/d-tkt-j.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 78 定）。控制席判定：按第十八批裁决 78（第 264 条选「商户在系统里申请确认」）与补设计 d-tkt-j 定稿做 264-R1～R5；原设计 d-tkt-i 的 264-R1～R3 是按未选的推荐项写的，作废。裁决表第 78 行已由控制席插入本段工作树决策台账，勿重插；补记引用写「第十八批裁决 78」。与 18BP（第 354 条票种写入口范围）同改票务包：本段逻辑放新类；运营侧列表接口 listTicketTypeConcessionApplications 若 18BP 已先合入则改调同一范围闸（变基时核）。设计旁见（有价的餐饮零售专属直付行也能标商户让利）已登记为待开发清单第 420 条（第十八批裁决 80），本段修复阶段已做。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 2bd98895 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BV 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BV 段，batch94）按第十八批裁决 78（第 264 条选「商户在系统里申请确认」）与只读设计 d-tkt-j 定稿实现第 264 条 264-R1～R4。原设计 d-tkt-i 的 264-R1～R3（运营上传确认材料）作废。264-R5 的 PRD 现状句由文档组统一落。本段增量：迁移 V737（1 个）；接口操作 4 个；权限码 1 个（merchant.portal.concession.apply）；后台页面 1 个（ADM-MER-011）。没有待裁题。
+- 18BV 落地位置补记·264-R1（商户在商户专区提交并在线确认让利申请）：
+  - 改法：新表 ticket_concession_applications（迁移 V737），记票种、商户、让利权益内容、确认账号与时间，以及运营选用时写入的票种权益绑定编号与时间。提交即在线确认，不设状态列。权限码 merchant.portal.concession.apply 授 role_platform_admin。
+  - 落地位置：同包新类 TicketConcessionApplicationService：
+    - ticketOptions：列本商户可申请的票（未存档、未待删；单店票只列本店的）。
+    - listMine：列本商户的申请，新确认的在前；运营是否已选用不向商户展示。
+    - submit：请求须 confirmed＝true，内容 1～200 字，幂等；成功记审计 merchant_portal.concession_application.submitted，失败记 merchant_portal.concession_application.submit_failed，对象类型 ticket_concession_application。
+    - 没有商户归属的账号一律 403 MERCHANT_SCOPE_REQUIRED，不给平台全量口径。
+  - 新控制器 TicketConcessionApplicationController 承载 listMerchantConcessionTicketTypes、listMerchantConcessionApplications、submitMerchantConcessionApplication；schema 为 MerchantConcessionApplicationRequest、TicketConcessionApplication、MerchantConcessionTicketOption。
+  - 中文名 entitlement_content「让利权益内容」，FieldLabels 与前端 fieldLabels 同名。
+  - 依据：BSM:1033、ENUM:53「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认」。
+  - 测试：MerchantConcessionApplicationJdbcIntegrationTests 的 merchantSubmitsAndConfirmsConcessionApplication、unconfirmedBlankOrForeignTicketIsRejected、nonMerchantAccountIsRefused。
+- 18BV 落地位置补记·264-R2（标商户让利型的绑定只能选该商户为本票提交、已确认且未被占用的申请；运营按票种列出申请）：
+  - 改法：TicketTypeEntitlementRequest 末位加 concession_application_id（另加兼容构造）。TicketCatalogService.bindTicketTypeEntitlement 在绑定组好之后、各上架闸之前，加一句委托 TicketConcessionApplicationService.claim。成本承担方为 merchant_concession 即查；有价格的行在此之前已按第十八批裁决 80 拒绝（见下「修复阶段」条）。此时已持票种锁，后续闸拒绝时选用随事务回滚。
+  - claim 的判定：
+    - 不带：400 TICKET_CONCESSION_APPLICATION_REQUIRED
+    - 查无：400 TICKET_CONCESSION_APPLICATION_NOT_FOUND
+    - 不是该权益提供商户（模板商户，空则专属商户）为本票提交的：400 TICKET_CONCESSION_APPLICATION_MISMATCH
+    - 已用于本票另一项在用权益：409 TICKET_CONCESSION_APPLICATION_USED
+    - 通过即记下绑定编号与时间。
+  - TicketConcessionApplicationService.liveBindings 取现表，并上草稿、待审版里的绑定：草稿版撤回后其中的选用自动释放；被驳回、回到草稿的照旧占用。
+  - TicketConcessionApplicationService.listForTicketType 经 listTicketTypeConcessionApplications（权限 ticket.product.view）列出该票各商户的申请，在用的带权益模板名。
+  - 依据：BSM:1033；第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」。
+  - 测试：MerchantConcessionApplicationJdbcIntegrationTests 的 concessionBindingNeedsThatMerchantsConfirmedApplication、concessionOnPublishedCrossDomainPassFollowsDraftVersion。既有 TicketEntitlementPriceGateJdbcIntegrationTests、MerchantConcessionDiningSettlementJdbcIntegrationTests、ExclusiveDirectPayDomainShareJdbcIntegrationTests、PassBarGiftFloorJdbcIntegrationTests 的最底层绑定辅助方法随改，经新测试辅助 ConcessionApplicationFixture 先插该商户为本票确认的申请。
+- 18BV 落地位置补记·264-R3（商户专区新页「让利申请」ADM-MER-011）：
+  - 改法：新页 MerchantZoneConcessionApplicationsPage，路由 /admin/merchant-zone/concession-applications，权限 merchant.portal.concession.apply，只给商户形态账号。选票、写明让利的是哪项权益、勾选确认语后提交，不勾选不能提交。列表显示票种、让利权益内容、确认时间。
+  - 动作码 merchant_concession_application_submitted「让利申请已提交并确认」。页面权限字段矩阵与界面验收矩阵各加 ADM-MER-011 行。
+  - 依据：第十八批裁决 78；BSM:1033；PGM:287「展示给用户的一切文字……必须全部为中文」。
+  - 测试：MerchantZoneConcessionApplicationsPage.test.tsx 四条：列出可申请的票与本商户已确认的申请；没勾选确认时不能提交；勾选确认后提交，请求体是蛇形的四个键，随后重读列表；后端拒绝时显示中文报错。
+- 18BV 落地位置补记·264-R4（票务策略页选商户让利型时只能从该商户为本票已确认的申请里选）：
+  - 改法：新组件 ConcessionApplicationSelect（文件 TicketConcessionApplicationSelect），取 listTicketTypeConcessionApplications，只列该行商户、未被选用的申请；所选失效即清空；没有可选时提示须由商户在商户专区「让利申请」提交。
+  - TicketingPoliciesPage 的组合配置酒吧赠饮行、餐饮零售行和通票组装表单，选商户让利型时出现该下拉。组合保存前拦「未选让利申请」与「同一份让利申请只能用于一项权益」，拦下时不发请求。绑定请求带 concession_application_id，非商户让利为空。ADM-TKT-001 页面矩阵行加该接口。
+  - 依据：第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」；BSM:1033。
+  - 测试：TicketConcessionApplicationSelect.test.tsx 三条。TicketingPoliciesPage.combo.test.tsx 改两条（酒吧＋游乐那条加断言不带申请；餐饮商户让利那条改为选申请后保存），新增三条：餐饮行选商户让利型但没选让利申请；两条酒吧赠饮选了同一份让利申请；通票组装表单选商户让利型。
+- 18BV 落地位置补记·第 264 条（第十八批裁决 78）·契约部分（契约代理）：
+  - 264-R1 契约
+    - 改法：商户专区新增三个操作，tags merchant-portal，x-permission merchant.portal.concession.apply，x-data-scope merchant，x-terminal-allowed web、merchant_portal、merchant_app，x-auth-context staff-token。
+      - listMerchantConcessionTicketTypes（GET /api/v1/merchant-portal/concession-ticket-types）：data 为 MerchantConcessionTicketOption 数组。
+      - listMerchantConcessionApplications（GET /api/v1/merchant-portal/concession-applications）：data 为 TicketConcessionApplication 数组，选用三项恒为空。
+      - submitMerchantConcessionApplication（POST 同路径）：x-idempotency-required true；成功留痕 merchant_portal.concession_application.submitted，失败留痕 merchant_portal.concession_application.submit_failed；请求体 MerchantConcessionApplicationRequest，四个字段都必填，additionalProperties false，entitlement_content 最多 200 字，confirmed 须为 true；错误码 400 VALIDATION_FAILED、403 PERMISSION_DENIED、403 MERCHANT_SCOPE_REQUIRED、404 TICKET_TYPE_NOT_FOUND、409 IDEMPOTENCY_CONFLICT。
+      - 两个 GET 都只读、不记审计（not_applicable）。
+      - 新增 schema MerchantConcessionApplicationRequest、TicketConcessionApplication（binding_id、template_name、bound_at 可空，只在票务侧按票种列表里填）、MerchantConcessionTicketOption。
+    - 落地位置：三个操作的实现是 TicketConcessionApplicationController 的 listMerchantConcessionTicketTypes、listMerchantConcessionApplications、submitMerchantConcessionApplication，分别委托 TicketConcessionApplicationService 的 ticketOptions、listMine、submit。
+    - 依据：BSM:1033、ENUM:53「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。」
+    - 测试名：MerchantConcessionApplicationJdbcIntegrationTests 的 merchantSubmitsAndConfirmsConcessionApplication、unconfirmedBlankOrForeignTicketIsRejected、nonMerchantAccountIsRefused；契约门禁 verify:openapi、verify:client-openapi、verify:client-payload --strict。
+  - 264-R2 契约
+    - 改法：
+      - 新增操作 listTicketTypeConcessionApplications（GET /api/v1/ticketing/ticket-types/{id}/concession-applications）：tags ticketing，x-permission ticket.product.view，x-data-scope project，x-terminal-allowed web，x-failure-codes TICKET_TYPE_NOT_FOUND，只读、不记审计；data 为 TicketConcessionApplication 数组，在用的选用（现表，或该票草稿版、待审版里的绑定）填 binding_id、template_name、bound_at。
+      - schema TicketTypeEntitlementRequest 加 concession_application_id（string，可空，maxLength 64）：cost_bearer 为 merchant_concession 时必填。
+      - bindTicketTypeEntitlement 说明补错误码：400 TICKET_CONCESSION_APPLICATION_REQUIRED、400 TICKET_CONCESSION_APPLICATION_NOT_FOUND、400 TICKET_CONCESSION_APPLICATION_MISMATCH、409 TICKET_CONCESSION_APPLICATION_USED；并写明这道闸位于出资方必填之后、236-R7 跨域判定之前，之后的判定拒绝时选用随事务回滚。
+    - 落地位置：TicketConcessionApplicationController.listTicketTypeConcessionApplications 委托 TicketConcessionApplicationService.listForTicketType；绑定闸为 TicketCatalogService.bindTicketTypeEntitlement 委托 TicketConcessionApplicationService.claim。
+    - 依据：BSM:1033 同上；第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」。
+    - 测试名：MerchantConcessionApplicationJdbcIntegrationTests 的 concessionBindingNeedsThatMerchantsConfirmedApplication、concessionOnPublishedCrossDomainPassFollowsDraftVersion；契约门禁同上。
+  - 本段增量：OpenAPI 新增 4 个操作、3 个 schema，改 1 个 schema（加 1 个属性）、1 个既有操作的说明。
+- 18BV 汇合（第 264 条，第十八批裁决 78）
+  e2e 改动：tests/e2e/full-admin-remaining.spec.ts 改了两处。一是页面清单 remainingRoutes 在 ADM-MER-010 后加 ADM-MER-011「让利申请」（/admin/merchant-zone/concession-applications）。二是 merchantOnlyPages 加 ADM-MER-011，ADM-REM-01 由此断言平台账号会话不渲染该菜单，同 ADM-MER-009、010 先例。没有在 ADM-REM-04 商户会话里打开本页，也没有改 tests/e2e/support/mock-api.ts，页面内容由前端单测覆盖：MerchantZoneConcessionApplicationsPage.test.tsx、TicketConcessionApplicationSelect.test.tsx、TicketingPoliciesPage.combo.test.tsx。票务策略页的新选择组件 ConcessionApplicationSelect 只在选了商户让利型时渲染，现有 e2e 没有经过这条路径，不用改。视觉基线没有重拍，原样通过，因为新菜单只给商户账号形态渲染。
+  门禁结论（汇合时全绿，没有跨段波及修改）：
+  - 后端 --fresh 全量 0 红，本段迁移 V737（ticket_concession_applications）真迁
+  - 前端 typecheck 与 vitest 全量 0 红
+  - 客人三个工作区单测全过
+  - 安卓员工端 gradle test 与 android-app 编译通过
+  - chromium 五份后台 e2e spec 全过
+  - 四份生成物重生成后 verify:p0-contract 通过；数据隔离、领域归属、UI 体验验收、结果中文名、后台页面矩阵各门禁通过
+  - 契约 yaml 与 json 一致，本段新增 4 个操作：listMerchantConcessionTicketTypes、listMerchantConcessionApplications、submitMerchantConcessionApplication、listTicketTypeConcessionApplications；改动既有操作 bindTicketTypeEntitlement；新增 schema MerchantConcessionApplicationRequest、TicketConcessionApplication、MerchantConcessionTicketOption，改动 schema TicketTypeEntitlementRequest（加 concession_application_id）
+  - git diff --check 通过
+- 264-R5（文档组，第十八批裁决 78）
+  - 改法与落地位置：
+    - docs/ticketing-entitlement-checkin-product-prd-v0.1.md：§6「零元免费权益的出资方标注」条下加「实现现状」子项，内容如下。标题版本升一版，§14 变更日志加一行。
+      - 商户在商户专区「让利申请」页 ADM-MER-011 选票、写明哪项权益，勾选确认后提交即在线确认（submitMerchantConcessionApplication，权限 merchant.portal.concession.apply）。
+      - 可申请的票为未存档、没有申请删除的票种，单店票只列本店的（listMerchantConcessionTicketTypes）；本商户的申请经 listMerchantConcessionApplications 查看，运营是否已选用不向商户展示。
+      - bindTicketTypeEntitlement 标商户让利型（只限零元权益，第十八批裁决 80）时，须带 TicketTypeEntitlementRequest.concession_application_id；由 TicketConcessionApplicationService.claim 判 TICKET_CONCESSION_APPLICATION_REQUIRED、NOT_FOUND、MISMATCH 与 409 TICKET_CONCESSION_APPLICATION_USED。
+      - 已上架跨域组合通票的选用随草稿版走，撤回即释放（liveBindings）。
+      - 运营侧用 listTicketTypeConcessionApplications（ticket.product.view）；票务策略页用 ConcessionApplicationSelect，只能从该商户为本票已确认、未被选用的申请里选。
+    - docs/merchant-portal-zone-prd-v0.1.md：§3.2 自助能力表加「让利申请」行；§8 当前一期实现表加 ADM-MER-011 行（路由 /admin/merchant-zone/concession-applications、权限 merchant.portal.concession.apply、三个商户专区操作）；UI 矩阵行数句改为「UI-ADM-MER-003..011 九行」；标题与版本行升一版。该文没有修订表。
+  - 依据：BSM:1033、ENUM:53「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；ENUM:37「商户签约参加平台活动的其折扣即属后者」；第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。」
+  - 验证：纯文档改动，没有新增用例；node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。
+- 18BV 落地位置补记·修复阶段（2026-11-21；收尾复核 4 条意见经独立反驳核实成立，另做控制席补充第十八批裁决 80）：
+  - 第十八批裁决 80（待开发清单第 420 条；操作员选「只零元权益能选让利」：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益）：
+    - 改法与落地位置：TicketCatalogService.bindTicketTypeEntitlement 对 cost_bearer＝merchant_concession 且 component_price_cent 大于 0 的绑定 400 VALIDATION_FAILED「「模板名」有价格，只有零元权益才能选商户让利」，排在 TicketConcessionApplicationService.claim 之前，绑定不落库、所选申请不被选用。绑定是票种权益业态价格唯一的写入口（规则版本获批落表沿用草稿版里已过此闸的同一绑定），改价同走这里。让利申请本身只记票与权益内容、不带价格，「申请只能针对零元权益」落在选用处。
+    - TicketingPoliciesPage 组合配置的酒吧赠饮行、餐饮零售行与「通票组装」绑定表单：填了价格的行出资方下拉不列「商户让利型」；先选了商户让利型再填价格，即清空出资方与所选申请，并提示「只有零元权益才能选商户让利：这一项填了价格，已清空所选的商户让利型。」。
+    - 契约：bindTicketTypeEntitlement 说明、TicketTypeEntitlementRequest.cost_bearer 说明、submitMerchantConcessionApplication 说明同步；不新增操作、字段与错误码。票务 PRD §6「零元免费权益的出资方标注」实现现状与变更日志同步。
+    - 依据：BSM:751「商户让利的零元免费权益不结算」；ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；第十八批裁决 80。
+    - 测试：MerchantConcessionApplicationJdbcIntegrationTests.pricedEntitlementCannotBeMerchantConcession；TicketingPoliciesPage.combo.test.tsx 新增两条「第十八批裁决 80」用例（组合配置酒吧赠饮行与餐饮行；通票组装表单）。
+  - 复核意见补测试（不改业务行为）：
+    - 酒吧赠饮行商户让利正向保存：TicketingPoliciesPage.combo.test.tsx 新增「酒吧赠饮行选商户让利型并选了让利申请：保存后绑定带上所选申请编号」。依据：第十八批裁决 78。
+    - 运营侧 listTicketTypeConcessionApplications 的权限闸：MerchantConcessionApplicationJdbcIntegrationTests.nonMerchantAccountIsRefused 加商户账号（只有 merchant.portal.concession.apply）调该接口 403 PERMISSION_DENIED。依据：PGM:744「前端隐藏只是辅助，后端接口必须独立校验」。
+    - 商户专区新页：MerchantZoneConcessionApplicationsPage.test.tsx 四条改经真实 AdminApi（后端 data 为数组、蛇形键，假响应用文本体），走生产上的取数分支。
+  - 本段补记同步：「控制席判定」条原「设计旁见……不登记」改为已登记为待开发清单第 420 条、本段修复阶段已做；264-R2 与 264-R5 条「不分零元有价」改正。不加迁移、不新增接口与字段键。
+- 18BV 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main 30c38664；迁移按原序顺延改号 V728→V737；合并时 OpenAPI 共 1419 个操作（主干 1415）、info.version V1.03、决策台账 V1.31，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BV 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 900a9cbb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7302 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2074；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-22 02:12 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

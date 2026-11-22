@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.02
+  version: V1.03
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -15340,7 +15340,7 @@ paths:
         - ticketing
       operationId: bindTicketTypeEntitlement
       summary: 绑定票类型权益
-      description: "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。 第十八批 AJ 段 236-R7（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：票种已上架且现不是跨域组合通票时，本次绑定为有价权益（component_price_cent 大于 0）且加上后成为跨域组合通票（有价权益分属两个及以上域主管公司，判定同 publishTicketType）的，409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED「已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）」，绑定不落库、票种不退回草稿；要做跨域组合通票须另建票种（建票后先不发布，配齐组合后经 publishTicketType 提交审批）；零元权益与草稿票种不受此限；这道判定在 236-R2 内部结算价闸与 V369、215-R1 退回草稿判定之前。第十八批裁决 61：已上架的跨域组合通票加权益存入该票种唯一一份草稿版（不写现表、不退回草稿），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回本条绑定（尚未进现表，获批时按原绑定 id 与创建时间插入）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕 ticket_product_entitlement.bound 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。 第十八批 AW 段第 341 条 341-R1：已上架的票改组成后，填的平日价超出允许误差、或在误差内但不等于算出价且不是整元或尾数不在允许尾数集合内（TICKET_PRICE_ENDING_NOT_ALLOWED 的情形），票退回草稿，改价后重新发布。"
+      description: "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。 第十八批 AJ 段 236-R7（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：票种已上架且现不是跨域组合通票时，本次绑定为有价权益（component_price_cent 大于 0）且加上后成为跨域组合通票（有价权益分属两个及以上域主管公司，判定同 publishTicketType）的，409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED「已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）」，绑定不落库、票种不退回草稿；要做跨域组合通票须另建票种（建票后先不发布，配齐组合后经 publishTicketType 提交审批）；零元权益与草稿票种不受此限；这道判定在 236-R2 内部结算价闸与 V369、215-R1 退回草稿判定之前。第十八批裁决 61：已上架的跨域组合通票加权益存入该票种唯一一份草稿版（不写现表、不退回草稿），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回本条绑定（尚未进现表，获批时按原绑定 id 与创建时间插入）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕 ticket_product_entitlement.bound 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。 第十八批 AW 段第 341 条 341-R1：已上架的票改组成后，填的平日价超出允许误差、或在误差内但不等于算出价且不是整元或尾数不在允许尾数集合内（TICKET_PRICE_ENDING_NOT_ALLOWED 的情形），票退回草稿，改价后重新发布。 第十八批 BV 段第 264 条 264-R2（BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」）：cost_bearer 为 merchant_concession 的绑定（不分操作人）须带 concession_application_id，选该权益提供商户（模板商户，空则专属商户）在商户专区为本票提交并确认的让利申请（submitMerchantConcessionApplication；该票各商户的申请见 listTicketTypeConcessionApplications）：未带 400 TICKET_CONCESSION_APPLICATION_REQUIRED「赠送权益「模板名」记为商户让利型，须选该商户在商户专区提交并确认的让利申请」；编号不存在 400 TICKET_CONCESSION_APPLICATION_NOT_FOUND「所选让利申请不存在」；申请的票种不是本票或提交商户不是提供商户 400 TICKET_CONCESSION_APPLICATION_MISMATCH「所选让利申请不是「商户名」为本票提交的」；该申请已用于本票另一项在用的权益（现表，或该票草稿版、待审版里的绑定）409 TICKET_CONCESSION_APPLICATION_USED「该让利申请已用于本票的权益「模板名」，一份申请只能用于一项权益」，原选用随草稿版撤回后可再选。通过即把本绑定 id 与选用时间记到该申请；这道判定在出资方必填（TICKET_COST_BEARER_REQUIRED）之后、236-R7 跨域判定（TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED）之前，之后的判定拒绝时选用一并回滚。cost_bearer 不是 merchant_concession 时不读 concession_application_id。 第十八批裁决 80（BSM:751「商户让利的零元免费权益不结算」；ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」）：有价格（component_price_cent 大于 0）的权益行不能标商户让利型，400 VALIDATION_FAILED「「模板名」有价格，只有零元权益才能选商户让利」，绑定不落库、所选让利申请不被选用；这道判定在出资方必填之后、选用让利申请之前，让利申请因此只能用于零元权益。"
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -15518,6 +15518,50 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/ticket-types/{id}/concession-applications:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketTypeConcessionApplications
+      summary: "票种的商户让利申请（运营配票选用）"
+      description: "第十八批 BV 段第 264 条 264-R2（BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」）：列出各商户在商户专区为该票种提交并确认的让利申请（submitMerchantConcessionApplication），确认时间新的在前，一次返回全部、不分页；data 为 TicketConcessionApplication 数组。运营给该票绑定商户让利型权益时据此选申请，作为 bindTicketTypeEntitlement 的 concession_application_id 传入，只能选该权益提供商户提交、未被本票其他在用权益占用的申请。在用的选用（申请所记绑定仍在现表，或在该票的草稿版、待审版里）填 binding_id、template_name（所选权益模板名）、bound_at；未选用的，以及原选用已随草稿版撤回（withdrawTicketTypeRuleVersion）的，三项为空、可再选；被驳回退回草稿的版本仍是未结版本，其中的选用照旧占用。只读，不落审计事件。无 ticket.product.view 403 PERMISSION_DENIED；票种不存在 404 TICKET_TYPE_NOT_FOUND「票种不存在或已被删除」。"
+      x-permission: ticket.product.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - TICKET_TYPE_NOT_FOUND
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "票种 id。"
+      responses:
+        "200":
+          description: "该票各商户的让利申请，新确认的在前；data 为 TicketConcessionApplication 数组。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TicketConcessionApplication"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -37241,6 +37285,125 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/concession-ticket-types:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantConcessionTicketTypes
+      summary: "商户专区·可申请让利的票种（本商户）"
+      description: "第十八批 BV 段第 264 条 264-R1（BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。」）：列出本商户可以提交让利申请的票种，供商户专区「让利申请」页选票。可申请的票＝未存档、未待删除的票种（草稿与已上架都列）；单店票（bar_id 非空）只列本店的，别家的单店票不列（单店票只能绑本店的权益模板）。按票种名称排序，一次返回全部、不分页；data 为 MerchantConcessionTicketOption 数组。只读，不落审计事件。无 merchant.portal.concession.apply 403 PERMISSION_DENIED；无商户归属 403 MERCHANT_SCOPE_REQUIRED（本前缀不给平台账号全量口径；运营与最高权限经 listTicketTypeConcessionApplications 按票种看各商户的申请）。"
+      x-permission: merchant.portal.concession.apply
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+        - merchant_app
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          description: "成功；data 为本商户可申请让利的票种（没有时为空数组）。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MerchantConcessionTicketOption"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/concession-applications:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantConcessionApplications
+      summary: "商户专区·让利申请（本商户）"
+      description: "第十八批 BV 段第 264 条 264-R1（第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认」）：列出本商户提交并在线确认的让利申请，确认时间新的在前，一次返回全部、不分页；data 为 TicketConcessionApplication 数组，其中 binding_id、template_name、bound_at 恒为空（运营是否已选用不向商户展示）。只读，不落审计事件。无 merchant.portal.concession.apply 403 PERMISSION_DENIED；无商户归属 403 MERCHANT_SCOPE_REQUIRED。"
+      x-permission: merchant.portal.concession.apply
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+        - merchant_app
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          description: "成功；data 为本商户的让利申请（没有时为空数组）。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TicketConcessionApplication"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - merchant-portal
+      operationId: submitMerchantConcessionApplication
+      summary: "商户专区·提交并确认让利申请"
+      description: "第十八批 BV 段第 264 条 264-R1（BSM:1033、ENUM:53「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；ENUM:37「商户签约参加平台活动的其折扣即属后者」；第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。」）：商户用自己的账号为一张票提交让利申请并在线确认，提交即确认（请求须带 confirmed＝true）；不设待确认中间态、平台审核、撤回或修改。可申请的票同 listMerchantConcessionTicketTypes；entitlement_content 用一段文字写明让利的是该票的哪项权益。写入一份已确认的申请（id 以 tca_ 开头）：merchant_id 取登录账号的商户归属，confirmed_by 为提交账号的用户 id，confirmed_at 为提交时间；data 为该申请（TicketConcessionApplication，binding_id、template_name、bound_at 为空）。运营给该票绑定商户让利型权益时经 bindTicketTypeEntitlement 的 concession_application_id 选用，一份申请只能用于本票的一项权益，且只能用于零元权益（第十八批裁决 80：有价格的权益行不能标商户让利型，见 bindTicketTypeEntitlement）。缺 idempotency_key 400 VALIDATION_FAILED；ticket_type_id 或 entitlement_content 为空 400 VALIDATION_FAILED；entitlement_content 超过 200 字 400 VALIDATION_FAILED「让利权益内容不能超过 200 字」；confirmed 缺省或不为 true 400 VALIDATION_FAILED「须确认让利后才能提交」；票种不存在、已存档、待删除或为别家的单店票 404 TICKET_TYPE_NOT_FOUND「票种不存在或不可申请让利」；无 merchant.portal.concession.apply 403 PERMISSION_DENIED；无商户归属 403 MERCHANT_SCOPE_REQUIRED；以上都不写入申请。同一幂等键重放返回第一次的结果、不再写入（幂等范围按商户），同键换了请求内容 409 IDEMPOTENCY_CONFLICT。成功留痕 merchant_portal.concession_application.submitted（业务类型 ticket_concession_application，对象为申请编号，元数据 merchant_id、ticket_type_id、entitlement_content），失败留痕 merchant_portal.concession_application.submit_failed。"
+      x-permission: merchant.portal.concession.apply
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+        - merchant_app
+      x-idempotency-required: true
+      x-audit-event-success: merchant_portal.concession_application.submitted
+      x-audit-event-failure: merchant_portal.concession_application.submit_failed
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantConcessionApplicationRequest"
+            example:
+              idempotency_key: merchant-concession-apply-20261120-000001
+              ticket_type_id: ticket_weekend_adult
+              entitlement_content: "赠送招牌鸡尾酒一杯"
+              confirmed: true
+      responses:
+        "200":
+          description: "已提交并确认；data 为 TicketConcessionApplication。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TicketConcessionApplication"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -71903,7 +72066,110 @@ components:
           enum:
             - platform_funded
             - merchant_concession
-          description: 成本承担方：platform_funded 平台出资型／merchant_concession 商户让利型。赠送类权益（component_price_cent 为 0 或不填、且由提供方兑付）必填，漏标返回 400 TICKET_COST_BEARER_REQUIRED；非赠送类可空；其他取值返回 400 VALIDATION_FAILED。
+          description: 成本承担方：platform_funded 平台出资型／merchant_concession 商户让利型。赠送类权益（component_price_cent 为 0 或不填、且由提供方兑付）必填，漏标返回 400 TICKET_COST_BEARER_REQUIRED；非赠送类可空；其他取值返回 400 VALIDATION_FAILED；component_price_cent 大于 0 的行不能选 merchant_concession，返回 400 VALIDATION_FAILED（第十八批裁决 80）。
+        concession_application_id:
+          type: string
+          nullable: true
+          maxLength: 64
+          description: "第十八批 BV 段 264-R2（第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」）：让利申请编号（tca_ 开头）。cost_bearer 为 merchant_concession 时必填，须是该权益提供商户（模板商户，空则专属商户）在商户专区为本票提交并确认、尚未用于本票其他在用权益的申请（可选的见 listTicketTypeConcessionApplications）；校验与错误码见 bindTicketTypeEntitlement。cost_bearer 不是 merchant_concession 时不读，可为 null。"
+    MerchantConcessionApplicationRequest:
+      type: object
+      description: "第十八批 BV 段 264-R1 商户专区提交让利申请请求体（第十八批裁决 78「商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认」）：提交即在线确认，confirmed 须为 true。"
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - ticket_type_id
+        - entitlement_content
+        - confirmed
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: "操作幂等键；重复提交返回第一次的结果、不再写入。缺省 400 VALIDATION_FAILED。"
+        ticket_type_id:
+          type: string
+          maxLength: 64
+          description: "申请让利的票种 id，须是 listMerchantConcessionTicketTypes 列出的票；为空 400 VALIDATION_FAILED，不可申请 404 TICKET_TYPE_NOT_FOUND。"
+        entitlement_content:
+          type: string
+          maxLength: 200
+          description: "让利的是该票的哪项权益，由商户用一段文字写明（如「赠送招牌鸡尾酒一杯」），去掉首尾空白后保存；为空 400 VALIDATION_FAILED，超过 200 字 400 VALIDATION_FAILED「让利权益内容不能超过 200 字」。"
+        confirmed:
+          type: boolean
+          description: "商户在线确认让利，须为 true（页面勾选确认语后提交）；缺省或为 false 400 VALIDATION_FAILED「须确认让利后才能提交」。"
+    TicketConcessionApplication:
+      type: object
+      description: "第十八批 BV 段 264-R1、264-R2 一份已确认的商户让利申请（第十八批裁决 78；提交即在线确认，没有待确认状态）。binding_id、template_name、bound_at 只在票务侧按票种列表 listTicketTypeConcessionApplications 里对在用的选用填写；商户专区列表 listMerchantConcessionApplications 与提交返回 submitMerchantConcessionApplication 里恒为空。"
+      additionalProperties: false
+      required:
+        - id
+        - ticket_type_id
+        - ticket_name
+        - merchant_id
+        - merchant_name
+        - entitlement_content
+        - confirmed_by
+        - confirmed_at
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: "申请编号（tca_ 开头）；运营绑定商户让利型权益时作为 concession_application_id 传入。"
+        ticket_type_id:
+          type: string
+          maxLength: 64
+          description: "申请让利的票种 id。"
+        ticket_name:
+          type: string
+          description: "票种名称。"
+        merchant_id:
+          type: string
+          maxLength: 64
+          description: "提交并确认让利的商户 id。"
+        merchant_name:
+          type: string
+          description: "商户名称。"
+        entitlement_content:
+          type: string
+          maxLength: 200
+          description: "让利的是哪项权益（商户写明）。"
+        confirmed_by:
+          type: string
+          maxLength: 128
+          description: "提交并在线确认的商户账号（用户 id）。"
+        confirmed_at:
+          type: string
+          format: date-time
+          description: "在线确认时间（即提交时间）。"
+        binding_id:
+          type: string
+          nullable: true
+          maxLength: 64
+          description: "选用这份申请的票种权益绑定 id：该绑定仍在现表，或在该票的草稿版、待审版里才填；未选用、原选用已随草稿版撤回，以及商户专区列表里为空。"
+        template_name:
+          type: string
+          nullable: true
+          description: "选用这份申请的权益模板名称；binding_id 为空时为空。"
+        bound_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "运营选用时间；binding_id 为空时为空。"
+    MerchantConcessionTicketOption:
+      type: object
+      description: "第十八批 BV 段 264-R1 商户专区可申请让利的票种（listMerchantConcessionTicketTypes）。"
+      additionalProperties: false
+      required:
+        - id
+        - ticket_name
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: "票种 id；提交让利申请时作为 ticket_type_id 传入。"
+        ticket_name:
+          type: string
+          description: "票种名称。"
     TicketTypeGiftFloorRequest:
       type: object
       description: 请求载荷 `TicketTypeGiftFloorRequest`；第十八批 AH 段 215-R2 票种最低赠酒杯数，杯数与上下限同配，1 ≤ 下限 ≤ 杯数 ≤ 上限。

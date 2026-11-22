@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -196,11 +196,13 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
     }
 
     private ResultActions bind(String pass, String template, long componentPriceCent, String costBearer) throws Exception {
+        // 第十八批 BV 段 264-R2：商户让利型须带该商户为本票提交并确认的让利申请。
+        String application = "merchant_concession".equals(costBearer) ? ConcessionApplicationFixture.confirmed(jdbc, pass, template) : null;
         return mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + pass + "/entitlements").with(session(admin))
                 .contentType(MediaType.APPLICATION_JSON).content("""
                         {"idempotency_key": "c236-bind-%s", "entitlement_template_id": "%s", "quantity": 1,
-                         "total_times": 1, "num_people": 1, "component_price_cent": %d, "cost_bearer": %s}
-                        """.formatted(UUID.randomUUID(), template, componentPriceCent, quoted(costBearer))));
+                         "total_times": 1, "num_people": 1, "component_price_cent": %d, "cost_bearer": %s, "concession_application_id": %s}
+                        """.formatted(UUID.randomUUID(), template, componentPriceCent, quoted(costBearer), quoted(application))));
     }
 
     private ResultActions publish(String pass) throws Exception {

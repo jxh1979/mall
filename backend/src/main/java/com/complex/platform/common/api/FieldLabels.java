@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.56
+// 文件版本：V0.57
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -322,6 +322,7 @@ public final class FieldLabels {
         p("ticket_id", "票券");
         p("ticket_name", "票种名称");
         p("ticket_type_id", "票种");
+        p("entitlement_content", "让利权益内容");
         p("ticket_category", "票务类别");
         p("entitlement_id", "权益");
         p("entitlement_code", "权益编码");

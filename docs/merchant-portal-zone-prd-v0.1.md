@@ -1,6 +1,6 @@
-# 商户侧与商户专区产品口径 PRD V0.27
+# 商户侧与商户专区产品口径 PRD V0.28
 
-> 版本：V0.27 ｜ 最后更新：2026-11-18 ｜ 状态：现行 PRD
+> 版本：V0.28 ｜ 最后更新：2026-11-20 ｜ 状态：现行 PRD
 > 业务最终解释权：三份业务 HTML。本文同时记录当前实现；当前页面、接口或终端不足时，标为实现差距，不能据此缩小 HTML 的商户侧能力。
 
 ## 1. 定位与终端
@@ -55,6 +55,7 @@ HTML 明列两类商户终端：
 | 费用通知 | 默认发给商户主要联系人，商户可在后台改为指定接收人并维护手机号。房租/水电/物业账单与催缴、合同即将到期的续约提醒均须支持短信；此外，结算出账与调整、对账差异、押金抵扣与退还、违约金计提、分红出单与发放等商户应收应付金额变化一律短信通知，通知写明金额、原因与异议截止日期，且不得按类或按条关闭。续约提醒不属于金额变化强制通知，不强制携带金额与异议截止日期，可按后台提醒短信配置决定是否发送 | ADM-MER-007；房租/水电费/物业费账单出单、积分发行费月结出账、停车抵免费用出账，以及第十八批第 13 条接上的商户应收应付金额变化十类事件（通知日志域 `merchant_amount`：结算金额出账 `settlement_statement`、结算金额调整 `adjustment`、对账差异认定结果 `reconciliation_difference`、押金抵扣 `deposit_deduct`、押金退还 `deposit_refund`、押金补缴 `deposit_supplement`、违约金计提 `penalty`、分红出单 `dividend_issued`、分红发放 `dividend_paid`，第十八批 M 段第 117 条加工单用料费（商户承担）`work_order_material`；模板码 `sms.merchant_amount.<事件>`）均不看总开关、域开关、事件开关，后台不能关闭；报文含金额、原因与异议截止日期（对账差异认定结果不在异议期适用清单，不写截止日）；通票赠饮应付不逐笔发，只在本期一条门票分销出账短信中写明本期净额（追收不带，第十八批裁决第 2 条）。短信供应商未接入前每条如实记发送失败。催缴与 `renewal` 分项开关可继续按普通提醒配置 |
 | 我的分红 | 查看每期基数、比例、扣税、实发、状态和逐行算式，只看不改 | ADM-MER-008；主理人还应能查看本商户全部经营数据，包括人工成本明细、本店员工姓名和具体工资，当前专区未完整承载 |
 | 我的证照 | 查看本商户全部证照、资质、保险到期情况、预警和宽限状态 | ADM-MER-010（第十八批 E 段第 22 条）：本商户证照的到期、预警与宽限状态，已到期的证照或资质可在页内申请宽限期；口径见 §5 |
+| 让利申请 | 只有商户主动申请并书面确认让利的权益才记为商户让利、不结算（BSM:1033、ENUM:53）；商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型（第十八批裁决 78） | ADM-MER-011（第十八批 BV 段第 264 条）：选票、写明让利的是哪项权益，勾选确认后提交即在线确认；只见本商户可申请的票（单店票只列本店的）与本商户的申请；运营侧选用口径见 `ticketing-entitlement-checkin-product-prd-v0.1.md` §6「零元免费权益的出资方标注」 |
 | 员工车辆 | 为本商户员工登记车牌，停车场按项目配置免费或折扣（BSM「商户与员工车位：商户月租车位按合同约定」） | ADM-MER-009（HP-P01 第一组）：只能登记、撤销本商户员工车辆；员工离职或停用后不再下发 |
 
 ### 3.3 账单类型十二项、费用总表与综合账单
@@ -135,10 +136,11 @@ HTML 明列两类商户终端：
 | ADM-MER-008 | `/admin/merchant-zone/dividends` | `finance.dividend.view` | 我的分红只读；商户账号读到审批通过（含已发放）的分红单即记已读 |
 | ADM-MER-009 | `/admin/merchant-zone/staff-vehicles` | `parking.vehicle.manage` | 员工车辆登记与撤销（本商户员工） |
 | ADM-MER-010 | `/admin/merchant-zone/licenses` | `compliance.expiry_item.view`、`compliance.reminder.view` | 我的证照：本商户证照的到期、预警与宽限状态；已到期的证照或资质申请宽限期（另需 `compliance.grace_period.request`，最高权限审批），口径见 §5 |
+| ADM-MER-011 | `/admin/merchant-zone/concession-applications` | `merchant.portal.concession.apply` | 让利申请：选票、写明让利的是哪项权益（不超过 200 字），勾选确认后提交即在线确认（`POST /api/v1/merchant-portal/concession-applications`）；查看本商户已确认的申请（`GET /api/v1/merchant-portal/concession-applications`），运营是否已选用不向商户展示；可选的票为未存档、没有申请删除的票种，单店票只列本店的（`GET /api/v1/merchant-portal/concession-ticket-types`）；无商户归属 403 `MERCHANT_SCOPE_REQUIRED`（第十八批 BV 段第 264 条，第十八批裁决 78） |
 
 首页未读账单提醒（第十八批 K 段第 92 条，BSM 第 1597 行「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」）：商户形态账号的落地页 ADM-OV-001（商户打开 `/admin`、商户手机应用打开根路径都落到这里）顶部显示「未读账单提醒」（`GET /api/v1/merchant-portal/unread-bills`，没有驾驶舱权限也显示）：每个计费月一行「YYYY 年 M 月账单 N 笔未读」、门票分账一行「门票分账 N 笔未读」、每张未读分红单一行，各带「查看」分别进 ADM-MER-003（带该月）、ADM-MER-005、ADM-MER-008；没持对应查看码的那组不返回，三组都空、商户专区模块被终端开关关闭时不显示；平台与外包账号、商户的其他页不显示。
 
-`docs/full-admin-ui-acceptance-matrix-v0.1.md` 已存在 UI-ADM-MER-003..010 八行；不得再写成矩阵缺失。
+`docs/full-admin-ui-acceptance-matrix-v0.1.md` 已存在 UI-ADM-MER-003..011 九行；不得再写成矩阵缺失。
 
 `GET /api/v1/merchant-portal/contracts` 与 `GET /api/v1/merchant-portal/settlements` 默认 `page=1/size=500`；后端按当前账号的商户范围取回本商户全部记录后切片，`total` 为本商户记录的真实总数；当前账号没有商户范围时一律拒绝（403 `MERCHANT_SCOPE_REQUIRED`），不提供平台全量口径。
 

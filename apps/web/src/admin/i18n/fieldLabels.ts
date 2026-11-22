@@ -1,4 +1,4 @@
-// 文件版本：V0.56
+// 文件版本：V0.57
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -242,6 +242,7 @@ export const FIELD_LABELS: Record<string, string> = {
   ticket_id: "票券",
   ticket_name: "票种名称",
   ticket_type_id: "票种",
+  entitlement_content: "让利权益内容",
   ticket_category: "票务类别",
   entitlement_id: "权益",
   entitlement_code: "权益编码",
@@ -3401,6 +3402,7 @@ export const VALUE_LABELS: Record<string, string> = {
   ticket_policy_publish: "票务规则已发布",
   entitlement_template_created: "权益模板已创建",
   ticket_entitlement_bound: "票种权益已绑定",
+  merchant_concession_application_submitted: "让利申请已提交并确认",
   ticket_price_rule_created: "票价规则已创建",
   ticket_type_pricing_updated: "票种定价已更新",
   ticket_type_archived: "票种已存档",

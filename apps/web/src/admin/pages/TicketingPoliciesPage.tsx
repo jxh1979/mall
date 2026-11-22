@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -17,6 +17,7 @@ import { dynamicAdjustment } from "./DynamicPricingPage";
 import { TicketRefundableRequest } from "./TicketRefundableRequest";
 import { priceModeLabel, priceModeValue } from "./ticketPriceModes";
 import { TICKET_SALE_STATUS_LABELS, TicketTypeSaleSettings, saleTimeLabel } from "./TicketTypeSaleSettings";
+import { ConcessionApplicationSelect } from "./TicketConcessionApplicationSelect";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -55,6 +56,8 @@ type EntitlementTemplateRow = {
   // 配置中心批5：签约价（=内部结算价）与结算类别贯通到列表/详情，改价前运营先看得见现值。
   entitlementKind?: string | null;
   agreementPriceCent?: number | null;
+  // 第十八批 BV 段 264-R4：提供商户（选商户让利型时按它筛让利申请）。
+  merchantId?: string | null;
 };
 type PriceRuleRow = {
   id: string;
@@ -103,11 +106,14 @@ const COST_BEARER_OPTIONS = [
   { value: "platform_funded", label: "平台出资型（平台按内部结算价与商户结算）" },
   { value: "merchant_concession", label: "商户让利型（平台不结算）" },
 ];
+// 第十八批裁决 80（BSM:751「商户让利的零元免费权益不结算」）：填了价格的权益行出资方不列「商户让利型」，先选了再填价格即清空并提示。
+const CONCESSION_ZERO_PRICE_ONLY = "只有零元权益才能选商户让利：这一项填了价格，已清空所选的商户让利型。";
 
 // 组合表单里的酒吧权益行。
 // barItemRef：酒水兑换必填——指向该酒吧的商品，成本按这件商品的内部结算价与这家酒吧结算。
 // costBearer：酒水兑换为赠送（票面价 0）时必选——这杯酒的成本谁出（V376）。
-type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string; barItemRef: string; costBearer: string };
+// applicationId：第十八批 BV 段 264-R4，商户让利型须选该商户为本票已确认的让利申请（第十八批裁决 78）。
+type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string; barItemRef: string; costBearer: string; applicationId: string };
 // 提供方商品（下拉数据源：该酒吧自己的商品）。
 type BarProductRow = { id: string; barId: string; productName: string };
 // 票面赠酒清单行（按酒吧分组，售票时写明票面）。
@@ -126,7 +132,7 @@ type GiftFloorRow = { minGiftCups: number; minGiftCupsLower: number | null; minG
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
 // costBearer：价格 0（纯赠送）时必选——这份赠品的成本谁出（V376）。
-type DiningLine = { merchantId: string; valueYuan: string; discount: string; catalogCode: string; costBearer: string; totalTimes: string };
+type DiningLine = { merchantId: string; valueYuan: string; discount: string; catalogCode: string; costBearer: string; totalTimes: string; applicationId: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -246,7 +252,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: "" });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   // 区3 通票组装（票种绑权益）
-  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
+  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "", applicationId: "" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "80", fixedYuan: "", amountYuan: "" }); // 第十八批 AT 段 334-R1：折扣按百分数（80＝八折），同后端 0～100。
   // 批3 第三方券:把权益模板配成第三方券 + 对账文件核销回流导入。
@@ -616,6 +622,11 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setGlobalError(`「${boundTemplate.name}」是赠送权益（各业态价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
       return;
     }
+    // 第十八批 BV 段 264-R4（第十八批裁决 78「运营配票种时只能从已确认的申请里选商户让利型」）。
+    if (bindForm.costBearer === "merchant_concession" && !bindForm.applicationId) {
+      setGlobalError("选了商户让利型，请选择该商户已在商户专区提交并确认的让利申请。");
+      return;
+    }
     // 第十八批 AJ 段 236-R5⑩：后端拒绝（如第十八批裁决 62 的「另建票种」、待审期间改动）把中文报错显示出来，不再成未处理的拒绝。
     try {
       await api.post(`/api/v1/ticketing/ticket-types/${bindForm.ticketTypeId}/entitlements`, {
@@ -631,6 +642,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           : Math.round(Number(bindForm.componentPriceYuan) * 100),
         // V376：成本承担方（赠送权益必选；非赠送类可空）。
         cost_bearer: bindForm.costBearer || null,
+        concession_application_id: bindForm.costBearer === "merchant_concession" ? bindForm.applicationId : null,
       });
       setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId, note: DRAFT_VERSION_NOTE });
       // 已上架跨域组合通票加权益存进草稿版：② 已选这张票时当场重读规则版本。
@@ -827,11 +839,11 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
 
   function addBarLine() {
     const merchantId = merchants[0]?.id ?? "";
-    setBarLines([...barLines, { merchantId, kind: "gift_drink", totalTimes: "1", valueYuan: "", barItemRef: "", costBearer: "" }]);
+    setBarLines([...barLines, { merchantId, kind: "gift_drink", totalTimes: "1", valueYuan: "", barItemRef: "", costBearer: "", applicationId: "" }]);
     if (merchantId) void loadBarProducts(merchantId);
   }
   function addDiningLine() {
-    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", catalogCode: "", costBearer: "", totalTimes: "1" }]);
+    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", catalogCode: "", costBearer: "", totalTimes: "1", applicationId: "" }]);
   }
 
   // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
@@ -851,6 +863,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     componentPriceCent: number;
     // V376 成本承担方：赠送权益（票面价 0 的提供方兑付类）必填，漏标后端拒保存；非赠送类传 null。
     costBearer?: string | null;
+    // 第十八批 BV 段 264-R4：商户让利型所选的让利申请；其余传 null。
+    concessionApplicationId?: string | null;
   }, ticketTypeId: string) {
     const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
       idempotency_key: crypto.randomUUID(),
@@ -873,6 +887,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       component_price_cent: payload.componentPriceCent,
       // V376：赠送权益必须标成本承担方（商户让利型/平台出资型），漏标后端拒保存/拒发布。
       cost_bearer: payload.costBearer ?? null,
+      concession_application_id: payload.concessionApplicationId ?? null,
     });
   }
 
@@ -910,6 +925,20 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setComboError(`${merchantName(missingDiningBearer.merchantId)} 的餐饮/零售项是纯赠送（价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
       return;
     }
+    // 第十八批 BV 段 264-R4（第十八批裁决 78）：商户让利型须选让利申请，一份申请只用于一项权益（组合逐行先建模板再绑定，后端只能挡在半途，这里整体先拦）。
+    const concessionLines = [
+      ...barLines.filter((line) => line.merchantId && line.kind === "gift_drink" && line.costBearer === "merchant_concession"),
+      ...diningLines.filter((line) => line.merchantId && line.costBearer === "merchant_concession"),
+    ];
+    const missingApplication = concessionLines.find((line) => !line.applicationId);
+    if (missingApplication) {
+      setComboError(`${merchantName(missingApplication.merchantId)} 选了商户让利型，请选择该商户已在商户专区提交并确认的让利申请。`);
+      return;
+    }
+    if (new Set(concessionLines.map((line) => line.applicationId)).size < concessionLines.length) {
+      setComboError("同一份让利申请只能用于一项权益。");
+      return;
+    }
     setComboError("");
     setComboBusy(true);
     try {
@@ -931,6 +960,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           componentPriceCent,
           // V376：酒水兑换的成本承担方（赠送时必选，上方已前置拦）。入场资格无此概念。
           costBearer: line.kind === "gift_drink" ? (line.costBearer || null) : null,
+          concessionApplicationId: line.kind === "gift_drink" && line.costBearer === "merchant_concession" ? line.applicationId : null,
         }, comboTicketId) });
       }
       // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
@@ -976,6 +1006,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           componentPriceCent,
           // V376：纯赠送（价格 0）的餐饮项必须标成本承担方（上方已前置拦）；有价格的选填。
           costBearer: line.costBearer || null,
+          concessionApplicationId: line.costBearer === "merchant_concession" ? line.applicationId : null,
         }, comboTicketId) });
       }
       // 236-R5⑧（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：已上架、非单店、没有生效版（即不是
@@ -1485,15 +1516,21 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   ) : <span>—</span>}
                 </td>
                 <td>
-                  {line.kind === "gift_drink" ? (
+                  {line.kind === "gift_drink" ? (<>
                     <select aria-label="成本承担方" data-testid={`combo-bar-cost-bearer-${index}`} value={line.costBearer} onChange={(event) => updateBarLine(index, { costBearer: event.target.value })}>
                       <option value="">这杯酒的成本谁出（必选）</option>
-                      {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                      {COST_BEARER_OPTIONS.filter((o) => o.value !== "merchant_concession" || !(Number(line.valueYuan) > 0)).map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                     </select>
-                  ) : <span>—</span>}
+                    {line.costBearer === "merchant_concession" ? <ConcessionApplicationSelect api={api} ticketTypeId={comboTicketId} merchantId={line.merchantId} value={line.applicationId} testId={`combo-bar-concession-${index}`}
+                      onChange={(applicationId) => setBarLines((lines) => lines.map((l, i) => (i === index ? { ...l, applicationId } : l)))} /> : null}
+                  </>) : <span>—</span>}
                 </td>
                 <td><input aria-label="次数" type="number" min={1} value={line.totalTimes} onChange={(event) => updateBarLine(index, { totalTimes: event.target.value })} /></td>
-                <td><input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="可空" onChange={(event) => updateBarLine(index, { valueYuan: event.target.value })} /></td>
+                <td><input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="可空" onChange={(event) => {
+                  const cleared = Number(event.target.value) > 0 && line.costBearer === "merchant_concession";
+                  updateBarLine(index, cleared ? { valueYuan: event.target.value, costBearer: "", applicationId: "" } : { valueYuan: event.target.value });
+                  if (cleared) setComboError(CONCESSION_ZERO_PRICE_ONLY);
+                }} /></td>
                 <td><button type="button" className="admin-secondary-button" onClick={() => setBarLines(barLines.filter((_, i) => i !== index))}>移除</button></td>
               </tr>
             ))}
@@ -1588,7 +1625,11 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   </select>
                 </td>
                 <td>
-                  <input aria-label="价格（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="0=纯赠送" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, valueYuan: event.target.value } : l))} />
+                  <input aria-label="价格（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="0=纯赠送" onChange={(event) => {
+                    const cleared = Number(event.target.value) > 0 && line.costBearer === "merchant_concession";
+                    setDiningLines(diningLines.map((l, i) => i === index ? { ...l, valueYuan: event.target.value, ...(cleared ? { costBearer: "", applicationId: "" } : {}) } : l));
+                    if (cleared) setComboError(CONCESSION_ZERO_PRICE_ONLY);
+                  }} />
                 </td>
                 <td>
                   <input aria-label="折扣" type="number" min={0} max={10} step="0.5" value={line.discount} placeholder="选填，如 8" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, discount: event.target.value } : l))} />
@@ -1599,8 +1640,10 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                 <td>
                   <select aria-label="餐饮成本承担方" data-testid={`combo-dining-cost-bearer-${index}`} value={line.costBearer} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, costBearer: event.target.value } : l))}>
                     <option value="">纯赠送时必选</option>
-                    {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    {COST_BEARER_OPTIONS.filter((o) => o.value !== "merchant_concession" || !(Number(line.valueYuan) > 0)).map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                   </select>
+                  {line.costBearer === "merchant_concession" ? <ConcessionApplicationSelect api={api} ticketTypeId={comboTicketId} merchantId={line.merchantId} value={line.applicationId} testId={`combo-dining-concession-${index}`}
+                    onChange={(applicationId) => setDiningLines((lines) => lines.map((l, i) => (i === index ? { ...l, applicationId } : l)))} /> : null}
                 </td>
                 <td><input aria-label="餐饮次数" type="number" min={1} value={line.totalTimes} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, totalTimes: event.target.value } : l))} /></td>
                 <td><button type="button" className="admin-secondary-button" onClick={() => setDiningLines(diningLines.filter((_, i) => i !== index))}>移除</button></td>
@@ -1729,11 +1772,18 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         <input aria-label="份数" type="number" min={1} value={bindForm.quantity} onChange={(event) => setBindForm({ ...bindForm, quantity: event.target.value })} placeholder="份数" />
         <input aria-label="每份次数" type="number" min={1} value={bindForm.totalTimes} onChange={(event) => setBindForm({ ...bindForm, totalTimes: event.target.value })} placeholder="每份次数" />
         <input aria-label="每份核销人数" type="number" min={1} value={bindForm.numPeople} onChange={(event) => setBindForm({ ...bindForm, numPeople: event.target.value })} placeholder="每份人数（多人票>1）" />
-        <input aria-label="各业态价格（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => setBindForm({ ...bindForm, componentPriceYuan: event.target.value })} placeholder="各业态价格（元，免费填0）" data-testid="ticket-bind-component-price" />
+        <input aria-label="各业态价格（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => {
+          const cleared = Number(event.target.value) > 0 && bindForm.costBearer === "merchant_concession";
+          setBindForm({ ...bindForm, componentPriceYuan: event.target.value, ...(cleared ? { costBearer: "", applicationId: "" } : {}) });
+          if (cleared) setGlobalError(CONCESSION_ZERO_PRICE_ONLY);
+        }} placeholder="各业态价格（元，免费填0）" data-testid="ticket-bind-component-price" />
         <select aria-label="成本承担方" data-testid="ticket-bind-cost-bearer" value={bindForm.costBearer} onChange={(event) => setBindForm({ ...bindForm, costBearer: event.target.value })}>
           <option value="">成本承担方（赠送权益必选）</option>
-          {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+          {COST_BEARER_OPTIONS.filter((o) => o.value !== "merchant_concession" || !(Number(bindForm.componentPriceYuan) > 0)).map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
         </select>
+        {bindForm.costBearer === "merchant_concession" ? <ConcessionApplicationSelect api={api} ticketTypeId={bindForm.ticketTypeId} testId="ticket-bind-concession"
+          merchantId={templates.find((t) => t.id === bindForm.templateId)?.merchantId ?? ""} value={bindForm.applicationId}
+          onChange={(applicationId) => setBindForm((form) => ({ ...form, applicationId }))} /> : null}
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-bind-submit" onClick={() => void bindEntitlement()}>
           绑定权益
         </PermissionButton>
