@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-22T01:44:22.015Z",
+  "generated_at": "2026-11-22T02:11:31.034Z",
   "git": {
-    "head": "5c84c842ca3adca58a7caa209cc97703fcf49c37",
-    "head_short": "5c84c842",
-    "branch": "feature/business-code-batch96-20261106",
+    "head": "900a9cbba005889d73a3121920a80e10ad9129f0",
+    "head_short": "900a9cbb",
+    "branch": "feature/business-code-batch94-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "e8ad228303c4a876f0b823aeeefe66e327bcf52e8dbd8dcbf08262370cd6a9c7",
-    "source_fingerprint_file_count": 3661,
+    "source_fingerprint": "820354c499b7c235d3ae2befed3478bbfe3bc33658c2e283040a5cdf282c50d1",
+    "source_fingerprint_file_count": 3671,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 683,
-    "tests": 7296,
+    "suites": 684,
+    "tests": 7302,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-22T01:41:05.500Z",
+    "latest_mtime": "2026-11-22T02:08:15.704Z",
     "passed": true
   },
   "web_unit_source": {
@@ -276,6 +276,7 @@
       "apps/web/src/admin/pages/MerchantScopePage.test.tsx",
       "apps/web/src/admin/pages/MerchantWorkOrdersPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneBillsPage.test.tsx",
+      "apps/web/src/admin/pages/MerchantZoneConcessionApplicationsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneContractsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneDividendsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneFeeRecipientsPage.guidedcreate.test.tsx",
@@ -386,6 +387,7 @@
       "apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.test.tsx",
       "apps/web/src/admin/pages/TerminalDevicesPage.test.tsx",
       "apps/web/src/admin/pages/TerminalSwitchMatrixPage.test.tsx",
+      "apps/web/src/admin/pages/TicketConcessionApplicationSelect.test.tsx",
       "apps/web/src/admin/pages/TicketOrderTrace.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.anomaly.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.degraded.test.tsx",
@@ -435,8 +437,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 374,
-    "test_count_from_source": 2061
+    "file_count": 376,
+    "test_count_from_source": 2074
   },
   "web_build": {
     "dist_index_exists": true,
@@ -454,18 +456,18 @@
         "exists": true
       }
     ],
-    "asset_count": 175,
+    "asset_count": 176,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BncKIeOi.js",
+        "path": "apps/web/dist/assets/main-D50ik1D-.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-22T01:41:14.933Z"
+        "mtime": "2026-11-22T02:08:25.016Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-22T01:41:14.937Z"
+      "mtime": "2026-11-22T02:08:25.019Z"
     },
     "no_main_bundle_warning_expected": true
   },
