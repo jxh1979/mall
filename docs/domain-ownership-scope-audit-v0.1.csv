@@ -60,6 +60,7 @@ ar_ap_adjustments,single_complex_default,P0_SINGLE_COMPLEX,single-complex defaul
 ar_ap_item_sources,inherited,ar_ap_item_id,ar_ap_item_id -> ar_ap_items/finance_ar_ap_items -> merchant/entity scope,must join through scope path before multi-complex rollout,V0.07,covered
 ar_ap_items,direct,project_id,project_id column on ar_ap_items,ready for project/merchant scoped query enforcement,V0.07,covered
 ar_ap_payments,inherited,ar_ap_item_id,ar_ap_item_id -> ar_ap_items/finance_ar_ap_items -> merchant/entity scope,must join through scope path before multi-complex rollout,V0.07,covered
+audit_data_windows,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 audit_events,direct,merchant_id,merchant_id column on audit_events,ready for project/merchant scoped query enforcement,V0.07,covered
 auth_credentials,inherited,user_id/session,user_id/session -> access_users -> organization scope,must join through scope path before multi-complex rollout,V0.07,covered
 auth_sessions,inherited,user_id/session,user_id/session -> access_users -> organization scope,must join through scope path before multi-complex rollout,V0.07,covered

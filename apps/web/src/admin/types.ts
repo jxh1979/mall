@@ -1,4 +1,4 @@
-// 文件版本：V0.35
+// 文件版本：V0.36
 export type AdminUser = {
   id: string;
   username: string;
@@ -147,6 +147,9 @@ export type AccessUserRow = {
   evidenceAttachmentIds?: string[];
   operatorNote?: string | null;
 };
+
+/** 第十八批 BX 段第 372 条：外审数据时段一行（起止两端都含）。 */
+export type AuditDataWindowRow = { userId: string; dataFrom: string; dataTo: string };
 
 export type PermissionDefinitionRow = {
   permissionCode?: string;

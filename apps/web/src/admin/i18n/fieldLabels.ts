@@ -1,4 +1,4 @@
-// 文件版本：V0.55
+// 文件版本：V0.56
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -341,6 +341,9 @@ export const FIELD_LABELS: Record<string, string> = {
   zone_id: "所在地时区",
   renewed_until: "续约至",
   valid_until: "有效期至",
+  data_from: "数据起始日期",
+  data_to: "数据截止日期",
+  data_window: "外审数据时段",
   expires_at: "到期时间",
   expiry_action: "到期处理方式",
   lead_id: "线索",

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -195,6 +195,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                 where += " AND (source_type <> 'staff_payroll' OR id IN (:payroll_ids))";
             }
         }
+        // 第十八批 BX 段 372-R4（第十八批裁决 77）：外审数据时段按挂账时间 created_at，行与总数共用同一 where
+        where += com.complex.platform.access.AuditDataWindow.andInstant("created_at");
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -800,12 +802,15 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("projects", projectIds);
         return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE (:merchant IS NULL OR merchant_id = :merchant)"
                 + (projectIds == null ? "" : " AND project_id IN (:projects)")
+                + com.complex.platform.access.AuditDataWindow.andInstant("created_at") // 372-R4：外审数据时段按退款发起时刻
                 + " ORDER BY created_at DESC, id", params, this::mapRefund);
     }
 
     @Override
     public List<ArApPaymentRecord> listArApPayments(String itemId) {
-        return jdbcTemplate.query("SELECT * FROM ar_ap_payments WHERE ar_ap_item_id = :id ORDER BY payment_time DESC, id DESC",
+        // 372-R4：外审数据时段按付款自身时刻（不另判父台账）
+        return jdbcTemplate.query("SELECT * FROM ar_ap_payments WHERE ar_ap_item_id = :id"
+                        + com.complex.platform.access.AuditDataWindow.andInstant("payment_time") + " ORDER BY payment_time DESC, id DESC",
                 Map.of("id", itemId), this::mapArApPayment);
     }
 
@@ -877,14 +882,15 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     /**
      * 第十八批 Y 段第 180 条 180-R2：对账批次（别名 b）的读范围谓词，同 {@link #listDailyCloses}——merchant_id 非空只到该商户的 merchant、bar 范围；
-     * projectIds 非空只到这些项目的 project 范围与项目下商户的 merchant、bar 范围。
+     * projectIds 非空只到这些项目的 project 范围与项目下商户的 merchant、bar 范围。第十八批 BX 段 372-R4（第十八批裁决 77）：外审数据时段
+     * 按批次营业日 business_date（差异按所属批次）。
      */
     private static String reconciliationScopeWhere(java.util.Set<String> projectIds) {
         return " WHERE (:merchant_id IS NULL OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id = :merchant_id))"
                 + (projectIds == null ? "" : """
                    AND ((b.scope_type = 'project' AND b.scope_id IN (:project_ids))
                         OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id IN (SELECT id FROM merchants WHERE project_id IN (:project_ids))))
-                """);
+                """) + com.complex.platform.access.AuditDataWindow.andDate("b.business_date");
     }
 
     @Override

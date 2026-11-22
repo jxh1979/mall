@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -115,5 +115,14 @@ describe("MySecurityExportsPage 我的导出", () => {
     fireEvent.click(screen.getByTestId("my-exports-pager-next"));
     await waitFor(() => expect(screen.queryByTestId("my-export-exp_old")?.textContent ?? "").toContain("OLDPASS234"));
     expect(getPaged).toHaveBeenCalledWith("/api/v1/security/my-exports?page=2&size=20");
+  });
+
+  // 第十八批 BX 段第 372 条 372-R4：往来台账导出的筛选条件记下所用外审数据时段（无时段为空），按中文字段名显示（PGM:287 界面全中文）。
+  it("筛选条件里的外审数据时段按中文字段名显示，不露英文键", async () => {
+    renderPage([row({ filters: { dataWindow: "2026-01-01～2026-12-31" } }), row({ id: "exp_2", filters: { dataWindow: null } })]);
+
+    await waitFor(() => expect(screen.queryByTestId("my-export-exp_1")?.textContent ?? "").toContain("外审数据时段：2026-01-01～2026-12-31"));
+    expect(screen.getByTestId("my-export-exp_2").textContent).toContain("外审数据时段：不限");
+    expect(screen.getByTestId("my-exports-page").textContent).not.toMatch(/data_?window/i);
   });
 });

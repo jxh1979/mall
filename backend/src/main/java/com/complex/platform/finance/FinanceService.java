@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.57
+// 文件版本：V0.58
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -497,6 +497,8 @@ public class FinanceService implements TerminationSettlementPort {
         Map<String, Object> filters = new java.util.LinkedHashMap<>();
         filters.put("merchant_id", data.merchant());
         filters.put("project_ids", data.projects() == null ? null : new java.util.TreeSet<>(data.projects()));
+        // 第十八批 BX 段 372-R4（第十八批裁决 77）：导出记录与可编辑版重取记下所用外审数据时段（无时段为空）
+        filters.put("data_window", com.complex.platform.access.AuditDataWindow.current().map(com.complex.platform.access.AuditDataWindow::label).orElse(null));
         return new com.complex.platform.security.ExportFileService.Table("应收应付台账", filters, AR_AP_EXPORT_COLUMNS,
                 data.items().stream().map(FinanceService::arApExportRow).toList());
     }
@@ -3113,6 +3115,7 @@ public class FinanceService implements TerminationSettlementPort {
             if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), "finance.ar_ap.view")) {
                 throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目的经销退款");
             }
+            com.complex.platform.access.AuditDataWindow.requireCovers(refund.createdAt()); // 372-R4：过完项目闸再判外审数据时段
             return refund;
         }
         // FS-021-R6：按该动作权限码的可触及项目办理；商户账号仍只限本商户。
@@ -3127,6 +3130,7 @@ public class FinanceService implements TerminationSettlementPort {
         if (!merchantRead && !reach.covers(refund.projectId())) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目或归属未明的退款");
         }
+        com.complex.platform.access.AuditDataWindow.requireCovers(refund.createdAt()); // 372-R4：过完项目与商户闸再判外审数据时段
         return refund;
     }
 

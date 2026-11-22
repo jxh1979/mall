@@ -1,10 +1,10 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
-import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../types";
+import type { AccessUserRow, AdminPageProps, AuditDataWindowRow, PermissionTemplateRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -44,6 +44,13 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [bindUserId, setBindUserId] = React.useState("");
   const [bindOrgId, setBindOrgId] = React.useState("");
   const [bindBusy, setBindBusy] = React.useState(false);
+  // 第十八批 BX 段第 372 条 372-R5（第十八批裁决 77「开外审权限必须划定数据起止日期」）：外审数据时段（按账号对上）与划定区。
+  const [auditWindows, setAuditWindows] = React.useState<Record<string, AuditDataWindowRow>>({});
+  const [auditWindowNotice, setAuditWindowNotice] = React.useState<string | null>(null);
+  const [windowUserId, setWindowUserId] = React.useState("");
+  const [windowFrom, setWindowFrom] = React.useState("");
+  const [windowTo, setWindowTo] = React.useState("");
+  const [windowBusy, setWindowBusy] = React.useState(false);
   const [status, setStatus] = React.useState("active");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
   // 组织 / 商户显名字典（页面级拉取，失败降级回 ID）。
@@ -58,16 +65,20 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
 
   // 无权限副资源不请求（根因修）：权限模板端点需 access.permission_template.view，页面基础权限 access.user.view 不含之。
   const canPermissionTemplates = hasPermissions(effectivePermissions, ["access.permission_template.view"]);
+  const canViewUsers = hasPermissions(effectivePermissions, ["access.user.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // 副资源容错（外包页范式）：权限模板仅供创建账号时套用（下拉选项），可能因权限/500 单独失败——
       // 降级为空（下拉仅剩「暂不赋权」）+ 区块提示，不拖垮员工账号主列表。
       // 原第三个 /access/permissions 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
-      const [users, templatesRes] = await Promise.all([
+      const [users, templatesRes, windowsRes] = await Promise.all([
         api.get<AccessUserRow[]>("/api/v1/access/users"),
         loadSecondaryIfPermitted(canPermissionTemplates, () => api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"), [] as PermissionTemplateRow[]),
+        loadSecondaryIfPermitted(canViewUsers, () => api.get<AuditDataWindowRow[]>("/api/v1/access/audit-data-windows"), [] as AuditDataWindowRow[]),
       ]);
       setRows(users);
+      setAuditWindows(Object.fromEntries(windowsRes.data.map((entry) => [entry.userId, entry])));
+      setAuditWindowNotice(windowsRes.notice);
       setTemplates(templatesRes.data);
       setTemplateNotice(templatesRes.notice);
       setSelectedTemplateId((current) => current || templatesRes.data[0]?.id || "");
@@ -184,6 +195,11 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   function merchantDisplay(id?: string | null) {
     return id ? (merchantNames[id] ?? id) : "—";
   }
+  function windowDisplay(userId: string) {
+    if (auditWindowNotice) return "读取失败"; // 读取失败时不当作未划定
+    const entry = auditWindows[userId];
+    return entry ? `${entry.dataFrom}～${entry.dataTo}` : "-";
+  }
 
   function openUserDetail(row: AccessUserRow) {
     setDetail({
@@ -194,6 +210,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         { label: "组织", value: orgDisplay(row.organizationId) },
         { label: "商户", value: merchantDisplay(row.merchantId) },
         { label: "状态", value: formatBusinessStatus(row.status ?? "active") },
+        { label: "外审数据时段", value: windowDisplay(row.id) },
         { label: "开通方式", value: row.createdVia ? createdViaLabel(row.createdVia) : "—" },
         { label: "授权凭据", value: row.consentReference ?? "—" },
         { label: "证据附件", value: row.evidenceAttachmentIds?.length ? row.evidenceAttachmentIds.join("、") : "—" },
@@ -246,6 +263,27 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
+  async function saveAuditDataWindow() {
+    if (!windowUserId || !windowFrom || !windowTo) {
+      setFormError("请选择外部人员账号并填写数据起止日期。");
+      return;
+    }
+    setFormError("");
+    setWindowBusy(true);
+    try {
+      const saved = await api.put<AuditDataWindowRow>(`/api/v1/access/users/${encodeURIComponent(windowUserId)}/audit-data-window`, {
+        dataFrom: windowFrom,
+        dataTo: windowTo,
+      });
+      setAuditWindows((current) => ({ ...current, [saved.userId]: saved }));
+      setActionResult(`已划定外审数据时段：${rows.find((row) => row.id === saved.userId)?.username ?? saved.userId}，${saved.dataFrom}～${saved.dataTo}`);
+    } catch (windowError) {
+      setFormError(windowError instanceof Error ? windowError.message : "划定外审数据时段失败");
+    } finally {
+      setWindowBusy(false);
+    }
+  }
+
   // 第五批（人事域）KPI 接线：在职员工数=员工类启用账号计数（余额，平台口径），端点失败/无权回退「—」并隐藏入口。
   const headcountKpi = useMetricKpiValue(api, "staff.active_headcount", {});
 
@@ -280,11 +318,25 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
             解绑
           </PermissionButton>
         </div>
+        <div className="admin-inline-form" data-testid="access-audit-window">
+          <h3>划定外审数据时段</h3>
+          <p className="admin-preview">给外部审计、监管开查看权限前先划定；外审账号只看得到这段时间内发生的记录。</p>
+          <select aria-label="选择外部人员账号" data-testid="audit-window-user" value={windowUserId} onChange={(event) => setWindowUserId(event.target.value)}>
+            <option value="">选择账号</option>
+            {rows.filter((u) => u.accountType === "outsourced_vendor").map((u) => (<option key={u.id} value={u.id}>{u.username}（{shortId(u.id)}）</option>))}
+          </select>
+          <label>数据起始日期<input type="date" data-testid="audit-window-from" value={windowFrom} onChange={(event) => setWindowFrom(event.target.value)} /></label>
+          <label>数据截止日期<input type="date" data-testid="audit-window-to" value={windowTo} onChange={(event) => setWindowTo(event.target.value)} /></label>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="audit-window-submit" onClick={() => void saveAuditDataWindow()} disabled={windowBusy}>
+            划定时段
+          </PermissionButton>
+        </div>
+        {auditWindowNotice ? <div className="admin-state" data-testid="access-user-audit-window-degraded">外审数据时段{auditWindowNotice}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-users-table">
-            <thead><tr><th>员工账号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工账号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>外审数据时段</th><th>详情</th></tr></thead>
             <tbody>{rows.length === 0 ? (
-              <tr><td colSpan={6} className="admin-muted-action">暂无员工账号，可通过上方表单提交注册申请。</td></tr>
+              <tr><td colSpan={7} className="admin-muted-action">暂无员工账号，可通过上方表单提交注册申请。</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} data-testid={`access-user-row-${row.id}`}
                 className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`}
@@ -296,6 +348,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
                 <td>{row.organizationId ? (orgNames[row.organizationId] ?? <span className="admin-id-cell" title={row.organizationId}>{shortId(row.organizationId)}</span>) : "-"}</td>
                 <td>{row.merchantId ? (merchantNames[row.merchantId] ?? <span className="admin-id-cell" title={row.merchantId}>{shortId(row.merchantId)}</span>) : "-"}</td>
                 <td>{formatBusinessStatus(row.status ?? "active")}</td>
+                <td>{windowDisplay(row.id)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工账号详情" onClick={(event) => { event.stopPropagation(); openUserDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>

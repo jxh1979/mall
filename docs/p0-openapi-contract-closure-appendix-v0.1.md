@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.01
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.02
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1413 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1415 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2826 | 人工事件矩阵正文未覆盖 2777 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1413 | 人工任务映射正文未逐项覆盖 1407 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 867 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2830 | 人工事件矩阵正文未覆盖 2781 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1415 | 人工任务映射正文未逐项覆盖 1409 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 868 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -40,8 +40,8 @@
 | `access.staff_level.view` | staff-token | project | 1 | listStaffLevels | OpenAPI 补充，以本附录为准 |
 | `access.temporary_grant.create` | staff-token | project | 1 | createTemporaryGrant | 已在权限矩阵正文出现 |
 | `access.temporary_grant.revoke` | staff-token | project | 1 | revokeTemporaryGrant | 已在权限矩阵正文出现 |
-| `access.user.manage` | staff-token | project | 1 | createAccessUser | 已在权限矩阵正文出现 |
-| `access.user.view` | staff-token | project | 2 | listAccessUsers, getUserEffectivePermissions | 已在权限矩阵正文出现 |
+| `access.user.manage` | staff-token | project | 2 | createAccessUser, setAuditDataWindow | 已在权限矩阵正文出现 |
+| `access.user.view` | staff-token | project | 3 | listAccessUsers, listAuditDataWindows, getUserEffectivePermissions | 已在权限矩阵正文出现 |
 | `admission.policy.manage` | staff-token | platform | 2 | updateApprovalDeadline, updateAccessGrantPolicy | OpenAPI 补充，以本附录为准 |
 | `amusement.business_day.manage` | staff-token | project | 1 | submitAmusementBusinessDayConfig | OpenAPI 补充，以本附录为准 |
 | `amusement.business_day.view` | staff-token | project | 1 | listAmusementBusinessDayConfigs | OpenAPI 补充，以本附录为准 |
@@ -482,6 +482,9 @@
 | `access.approval_line.listed` | success | `listApprovalLines` | `GET` | `/api/v1/access/approval-lines` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.approval_line.save_failed` | failure | `upsertApprovalLine` | `PUT` | `/api/v1/access/approval-lines/{line_code}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.approval_line.saved` | success | `upsertApprovalLine` | `PUT` | `/api/v1/access/approval-lines/{line_code}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.audit_data_window.set` | success | `setAuditDataWindow` | `PUT` | `/api/v1/access/users/{user_id}/audit-data-window` | AUTH-账号权限 | `access.user.manage` | 接口级事件，以本附录为准 |
+| `access.audit_data_window.set_failed` | failure | `setAuditDataWindow` | `PUT` | `/api/v1/access/users/{user_id}/audit-data-window` | AUTH-账号权限 | `access.user.manage` | 接口级事件，以本附录为准 |
+| `access.audit_data_window.viewed` | success | `listAuditDataWindows` | `GET` | `/api/v1/access/audit-data-windows` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `access.grant_policy.change_failed` | failure | `updateAccessGrantPolicy` | `POST` | `/api/v1/access/grant-policy` | AUTH-账号权限 | `admission.policy.manage` | 接口级事件，以本附录为准 |
 | `access.grant_policy.changed` | success | `updateAccessGrantPolicy` | `POST` | `/api/v1/access/grant-policy` | AUTH-账号权限 | `admission.policy.manage` | 接口级事件，以本附录为准 |
 | `access.grant_request.applied` | success | `createAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.grant_request.apply` | 接口级事件，以本附录为准 |
@@ -2361,6 +2364,7 @@
 | `not_applicable` | failure | `listAmusementSpotCheckMisses` | `GET` | `/api/v1/amusement/spot-check-misses` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listAuditDataWindows` | `GET` | `/api/v1/access/audit-data-windows` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listBarProductCategories` | `GET` | `/api/v1/bar/catalog/categories` | BAR-酒吧经营 | `bar.category.view` | 接口级事件，以本附录为准 |
@@ -3483,6 +3487,7 @@
 | AUTH-账号权限 | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | 授权申请列表 | `access.grant_request.view` | `access.grant_request.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listAccessUsers` | `GET` | `/api/v1/access/users` | 查询权限用户 | `access.user.view` | `access.user.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listApprovalLines` | `GET` | `/api/v1/access/approval-lines` | 查询部门和平行审批线配置 | `access.role.assign` | `access.approval_line.listed` / `access.approval_line.list_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `listAuditDataWindows` | `GET` | `/api/v1/access/audit-data-windows` | 查看外审数据时段 | `access.user.view` | `access.audit_data_window.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | 查询员工通知 | `staff.notice.view` | `staff.notice.viewed` / `not_applicable` | staff_private_phone, web, mobile_admin, staff_work_phone | operation 级补充 |
 | AUTH-账号权限 | `listOrgHierarchy` | `GET` | `/api/v1/access/org-hierarchy` | 查询组织层级（直接上级与所属部门） | `access.role.assign` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listPaymentConfirmationFlows` | `GET` | `/api/v1/access/payment-confirmation-flows` | 查询付款确认各支付类型的必带平行线 | `access.role.assign` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -3503,6 +3508,7 @@
 | AUTH-账号权限 | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | 解绑/失效设备凭证 | `staff.device.revoke` | `staff_device.revoked` / `staff_device.revoke_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | 撤销临时授权 | `access.temporary_grant.revoke` | `permission_template.revoked` / `temporary_grant.revoke_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `savePaymentConfirmationFlow` | `PUT` | `/api/v1/access/payment-confirmation-flows/{payment_type}` | 设定某支付类型两线之外的必带平行线 | `access.role.assign` | `access.payment_confirmation_flow.saved` / `not_applicable` | web | operation 级补充 |
+| AUTH-账号权限 | `setAuditDataWindow` | `PUT` | `/api/v1/access/users/{user_id}/audit-data-window` | 划定外审数据时段 | `access.user.manage` | `access.audit_data_window.set` / `access.audit_data_window.set_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `setOrgDirectSuperior` | `PUT` | `/api/v1/access/org-hierarchy/{user_id}` | 设置员工的直接上级与所属部门 | `access.role.assign` | `access.org_hierarchy.superior_set` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | 设置员工销售岗标识 | `staff.profile.review` | `staff.profile.sales_position_changed` / `staff.profile.sales_position_change_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `setUserPermissionOverrides` | `POST` | `/api/v1/access/users/{id}/permission-overrides` | 设置员工单独授予或显式拒绝 | `access.role.assign` | `access.user_permission_override.set` / `access.user_permission_override.set_failed` | web | operation 级补充 |
