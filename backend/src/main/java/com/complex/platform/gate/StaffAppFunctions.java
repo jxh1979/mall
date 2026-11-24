@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.util.List;
 import java.util.Map;
@@ -48,7 +48,9 @@ public final class StaffAppFunctions {
                     "GET /api/v1/merchant-service/work-orders/assigned-to-me")),
             Map.entry("bar_reservation", List.of("GET /api/v1/bar/tables/availability", "POST /api/v1/bar/reservations")),
             Map.entry("my_shifts", List.of("GET /api/v1/staff/shifts/mine")),
-            Map.entry("shift_manage", List.of("POST /api/v1/staff/shifts")), // BSM:1474「主管在手机上也能排」。
+            // BSM:1474「主管在手机上也能排」；第十八批 CJ 段第 417 条 417-R1：员工与点位从可排员工、可选点位两个清单选。
+            Map.entry("shift_manage", List.of("POST /api/v1/staff/shifts", "GET /api/v1/staff/shift-staff-options",
+                    "GET /api/v1/staff/shift-point-options")),
             Map.entry("attendance_month", List.of("GET /api/v1/staff/attendance/month-view")),
             // BSM:1464 申诉入口不得限制。
             Map.entry("my_payroll", List.of("GET /api/v1/staff/payroll/mine", "GET /api/v1/staff/payroll/mine/**",

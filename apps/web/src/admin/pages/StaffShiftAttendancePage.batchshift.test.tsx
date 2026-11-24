@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,8 @@ function makeApi(): AdminApi {
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
       return Promise.resolve(raw({ created_count: 5, updated_count: 2, shifts: [], review_id: "review-batch", publication_status: "pending_review" }));
     }
+    // 第十八批 CJ 段第 416 条 416-R3：排班可排员工。
+    if (url.includes("/staff/shift-staff-options")) return Promise.resolve(listEnvelope([{ user_id: "staff-1", name: "员工一" }, { user_id: "staff-2", name: "员工二" }]));
     // 第十八批 BL 段第 390 条 390-R2：排班可选点位。
     if (url.includes("/staff/shift-point-options")) return Promise.resolve(listEnvelope([{ id: "sp-a", space_name: "A 区" }, { id: "sp-b", space_name: "B 区" }]));
     if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope([]));
@@ -59,7 +61,9 @@ function renderPage() {
 async function openBatchAndFill(startTime: string, endTime: string) {
   await waitFor(() => expect(screen.getByTestId("shift-batch-open")).toBeTruthy());
   fireEvent.click(screen.getByTestId("shift-batch-open"));
-  fireEvent.change(screen.getByTestId("shift-batch-users-input"), { target: { value: "staff-1, staff-2" } });
+  await waitFor(() => expect((screen.getByTestId("shift-batch-users-select") as HTMLSelectElement).options.length).toBe(2));
+  for (const option of Array.from((screen.getByTestId("shift-batch-users-select") as HTMLSelectElement).options)) option.selected = true;
+  fireEvent.change(screen.getByTestId("shift-batch-users-select"));
   fireEvent.change(screen.getByTestId("shift-batch-days-input"), { target: { value: "7" } });
   fireEvent.change(screen.getByTestId("shift-batch-start-time"), { target: { value: startTime } });
   fireEvent.change(screen.getByTestId("shift-batch-end-time"), { target: { value: endTime } });
@@ -78,7 +82,7 @@ describe("StaffShiftAttendancePage 按周批量排班", () => {
     await waitFor(() => expect(screen.getByTestId("shift-create-open")).toBeTruthy());
     expect(screen.getByTestId("shift-batch-open")).toBeTruthy();
     expect(screen.queryByTestId("shift-batch-guided")).toBeNull();
-    expect(screen.queryByTestId("shift-batch-users-input")).toBeNull();
+    expect(screen.queryByTestId("shift-batch-users-select")).toBeNull();
   });
 
   it("勾周一/周三/周五 + 每日时段 → POST 批量接口带员工列表/星期几/时刻，成功后显示新建与覆盖条数", async () => {
@@ -128,7 +132,9 @@ describe("StaffShiftAttendancePage 按周批量排班", () => {
     expect(screen.getByTestId("shift-batch-guided-error").textContent).toContain("员工");
     expect(screen.queryByTestId("shift-batch-guided-summary")).toBeNull();
 
-    fireEvent.change(screen.getByTestId("shift-batch-users-input"), { target: { value: "staff-1" } });
+    await waitFor(() => expect((screen.getByTestId("shift-batch-users-select") as HTMLSelectElement).options.length).toBe(2));
+    for (const option of Array.from((screen.getByTestId("shift-batch-users-select") as HTMLSelectElement).options)) option.selected = option.value === "staff-1";
+    fireEvent.change(screen.getByTestId("shift-batch-users-select"));
     fireEvent.change(screen.getByTestId("shift-batch-days-input"), { target: { value: "60" } });
     fireEvent.click(screen.getByTestId("shift-batch-guided-next"));
     expect(screen.getByTestId("shift-batch-guided-error").textContent).toContain("1 到 31");

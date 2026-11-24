@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { StaffShiftAttendancePage } from "./StaffShiftAttendancePage";
@@ -14,6 +14,8 @@ function fixture(nightDuty = false) {
     let data: unknown = [];
     if (url.includes("/staff/attendance/receipt-events")) data = [{ id: "event-1", device_id: "phone", status: "pending_review",
       observed_at: "2099-08-03T12:00:00Z", method: "charging_disconnect" }];
+    // 第十八批 CJ 段第 416 条 416-R3：排班可排员工（原员工不在清单里，照显示编号）。
+    if (url.includes("/staff/shift-staff-options")) data = [{ user_id: "cover", name: "顶班乙" }, { user_id: "night-manager", name: "夜班经理丙" }];
     if (url.includes("/staff/shifts?")) data = [{ id: "source", user_id: "original",
       start_at: new Date("2099-08-03T20:00").toISOString(), end_at: new Date("2099-08-04T04:00").toISOString(),
       created_by: "manager", night_duty_project_id: nightDuty ? "project-1" : null }];
@@ -49,6 +51,7 @@ it("临时顶班必须填写实际时段和交接，按原班编号提交部分�
   fireEvent.click(screen.getByText("确认安排顶班"));
   expect(await screen.findByRole("alert")).toHaveTextContent("请填写顶班员工");
   expect(posts).toHaveLength(0);
+  await waitFor(() => expect((screen.getByLabelText("顶班员工") as HTMLSelectElement).options.length).toBe(3));
   for (const [label, value] of [["顶班员工", "cover"], ["顶班开始", "2099-08-03T22:00"], ["顶班结束", "2099-08-04T04:00"],
     ["顶班事由", "临时缺岗"], ["实际交接事实", "领班确认交接"]] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -65,13 +68,14 @@ it("超出原班时段不提交，顶班记录展示交接事实和原员工", a
   const { props, posts } = fixture();
   render(<StaffShiftAttendancePage {...props} />);
   fireEvent.click(await screen.findByText("安排顶班"));
+  await waitFor(() => expect((screen.getByLabelText("顶班员工") as HTMLSelectElement).options.length).toBe(3));
   for (const [label, value] of [["顶班员工", "cover"], ["顶班开始", "2099-08-03T19:00"], ["顶班结束", "2099-08-04T04:00"],
     ["顶班事由", "临时缺岗"], ["实际交接事实", "已交接"]] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
   fireEvent.click(screen.getByText("确认安排顶班"));
   expect(await screen.findByRole("alert")).toHaveTextContent("顶班时段须在原班次内");
   expect(posts).toHaveLength(0);
   fireEvent.click(screen.getByText("顶班记录"));
-  expect(await screen.findByLabelText("顶班记录")).toHaveTextContent("原员工：original；顶班员工：cover");
+  expect(await screen.findByLabelText("顶班记录")).toHaveTextContent("原员工：original；顶班员工：顶班乙");
   expect(screen.getByLabelText("顶班记录")).toHaveTextContent("领班确认交接");
 });
 
@@ -79,7 +83,8 @@ it("超出原班时段不提交，顶班记录展示交接事实和原员工", a
 it("新增夜班职责随排班申请提交，确认页显示所选职责", async () => {
   const { props, posts } = fixture(); render(<StaffShiftAttendancePage {...props} />);
   fireEvent.click(await screen.findByTestId("shift-create-open"));
-  fireEvent.change(screen.getByTestId("shift-user-input"), { target: { value: "night-manager" } });
+  await waitFor(() => expect((screen.getByTestId("shift-user-select") as HTMLSelectElement).options.length).toBe(3));
+  fireEvent.change(screen.getByTestId("shift-user-select"), { target: { value: "night-manager" } });
   fireEvent.change(screen.getByTestId("shift-start-input"), { target: { value: "2099-08-03T20:00" } });
   fireEvent.change(screen.getByTestId("shift-end-input"), { target: { value: "2099-08-04T04:00" } });
   fireEvent.click(screen.getByTestId("shift-night-duty-input"));

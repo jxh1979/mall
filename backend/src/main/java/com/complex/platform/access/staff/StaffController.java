@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -38,6 +38,9 @@ public class StaffController {
     // 第十八批 BL 段第 390 条 390-R1：排班可选点位。
     @org.springframework.beans.factory.annotation.Autowired
     private StaffShiftPointOptionService shiftPointOptions;
+    // 第十八批 CJ 段第 416 条 416-R1：排班可选员工。
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffShiftStaffOptionService shiftStaffOptions;
 
     private final AuditedOperationExecutor operations;
 
@@ -233,6 +236,14 @@ public class StaffController {
     @GetMapping("/shift-point-options")
     public ApiResponse<PageResponse<StaffShiftPointOptionService.Option>> listShiftPointOptions() {
         java.util.List<StaffShiftPointOptionService.Option> options = shiftPointOptions.options();
+        return ApiResponse.ok(PageResponse.of(options, 1, options.size()));
+    }
+
+    // 第十八批 CJ 段第 416 条 416-R1（BSM:1474「主管排班……主管在手机上也能排。」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」）：
+    // 排班可选员工，与提交排班同一范围判定。
+    @GetMapping("/shift-staff-options")
+    public ApiResponse<PageResponse<StaffShiftStaffOptionService.Option>> listShiftStaffOptions() {
+        java.util.List<StaffShiftStaffOptionService.Option> options = shiftStaffOptions.options();
         return ApiResponse.ok(PageResponse.of(options, 1, options.size()));
     }
 

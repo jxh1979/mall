@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.net.URI
 import java.net.URLEncoder
@@ -245,6 +245,11 @@ class TerminalApiClient(
   /** 主管排班(双端;同员工同开始时刻幂等覆盖)。 */
   fun upsertStaffShift(request: StaffShiftUpsertRequest): StaffShiftRow =
     post("/api/v1/staff/shifts", request)
+
+  /** 第十八批 CJ 段第 417 条 417-R1（BSM:1474「主管在手机上也能排」）：主管排班的可排员工与可选点位（与后台同一清单、同一范围判定）。 */
+  fun staffShiftStaffOptions(): List<StaffShiftStaffOption> = get<Page<StaffShiftStaffOption>>("/api/v1/staff/shift-staff-options").items
+
+  fun staffShiftPointOptions(): List<StaffShiftPointOption> = get<Page<StaffShiftPointOption>>("/api/v1/staff/shift-point-options").items
 
   /** 我的班次与点位(今天起 7 天,时间到分钟)。 */
   fun listMyShifts(): List<StaffShiftRow> = get("/api/v1/staff/shifts/mine")

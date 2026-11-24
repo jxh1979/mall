@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import android.app.Activity
 import android.content.Intent
@@ -2117,22 +2117,29 @@ class MainActivity : Activity() {
   }
 
   private fun showShiftManage() {
-    val userId = editText("员工")
+    // 第十八批 CJ 段第 417 条 417-R1（BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）；主管在手机上也能排。」）：
+    // 员工从可排员工下拉选（首项占位，免得未选就排给清单第一人），点位从可选点位勾选（显示空间名，可不选）；两个清单与后台同一接口、同一范围判定。
+    val staffPicker = android.widget.Spinner(this)
+    var staffOptions: List<StaffShiftStaffOption> = emptyList()
+    staffPicker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("请选择员工"))
     val workDate = editText("日期(2026-07-03)")
     val startDate = editText("开始日期（如 2026-11-05）")
     val startAt = editText("开始时刻（如 10:00）")
     val endDate = editText("结束日期（如 2026-11-05）")
     val endAt = editText("结束时刻（如 18:30）")
-    val points = editText("点位,逗号分隔(可空)")
+    val points = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     val note = editText("备注(可空)")
     val nightDuty = android.widget.CheckBox(this).apply { text = "承担所属项目本日夜班值班经理职责" }
     val status = statusText("排班提交上一级审批后发布；同项目同日夜班值班经理仅一名，职责仅在已发布班次时段内生效")
     val submitButton = button("提交排班审批") {
-      val u = userId.text.toString().trim()
+      val u = staffOptions.getOrNull(staffPicker.selectedItemPosition - 1)?.userId
+      if (u == null) { status.text = "请选择员工"; return@button }
       val d = workDate.text.toString().trim()
       val st = localInstantOf(startDate.text.toString(), startAt.text.toString())
       val en = localInstantOf(endDate.text.toString(), endAt.text.toString())
-      if (u.isEmpty() || d.isEmpty() || st == null || en == null) {
+      val pointIds = (0 until points.childCount).map { points.getChildAt(it) as android.widget.CheckBox }
+        .filter { it.isChecked }.map { it.tag as String }.ifEmpty { null }
+      if (d.isEmpty() || st == null || en == null) {
         status.text = "请填全 员工/日期/起止日期与时刻（如 2026-11-05 和 10:00）"
         return@button
       }
@@ -2142,8 +2149,7 @@ class MainActivity : Activity() {
             idempotencyKey = "shift_${System.currentTimeMillis()}",
             nightDutyManager = nightDuty.isChecked,
             userId = u, workDate = d, startAt = st, endAt = en,
-            pointSpaceIds = points.text.toString().split(",").map { it.trim() }.filter { it.isNotEmpty() }
-              .ifEmpty { null },
+            pointSpaceIds = pointIds,
             note = note.text.toString().trim().ifEmpty { null },
           ))
         },
@@ -2151,10 +2157,22 @@ class MainActivity : Activity() {
         onError = { status.text = "保存失败：${friendly(it)}" },
       )
     }
+    runBackground(
+      action = { api.staffShiftStaffOptions() to api.staffShiftPointOptions() },
+      onSuccess = { (staff, pointOptions) ->
+        staffOptions = staff
+        staffPicker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+          listOf("请选择员工") + staff.map { it.name ?: it.userId })
+        pointOptions.forEach { option ->
+          points.addView(android.widget.CheckBox(this).apply { text = option.spaceName ?: option.id; tag = option.id })
+        }
+      },
+      onError = { status.text = "可排员工或点位读取失败：${friendly(it)}" },
+    )
     setContentView(screen(
       title = "主管排班",
-      children = listOf(status, userId, workDate, startDate, startAt, endDate, endAt, points, nightDuty, note, submitButton,
-        backButton()),
+      children = listOf(status, staffPicker, workDate, startDate, startAt, endDate, endAt, statusText("当天工作点位（可多选，可不选）"),
+        points, nightDuty, note, submitButton, backButton()),
     ))
   }
 

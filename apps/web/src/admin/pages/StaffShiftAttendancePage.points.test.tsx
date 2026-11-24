@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +30,8 @@ function renderPage() {
       posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> });
       return Promise.resolve(raw({ id: "sh-new", review_id: "review-1", created_count: 1, updated_count: 0, shifts: [] }));
     }
+    // 第十八批 CJ 段第 416 条 416-R3：排班可排员工。
+    if (url.includes("/staff/shift-staff-options")) return Promise.resolve(listEnvelope([{ user_id: "staff-9", name: "员工九" }, { user_id: "staff-1", name: "员工一" }]));
     if (url.includes("/staff/shift-point-options")) return Promise.resolve(listEnvelope(OPTIONS));
     if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope(shiftRows));
     return Promise.resolve(listEnvelope([]));
@@ -71,7 +73,8 @@ describe("StaffShiftAttendancePage 排班点位从可选点位多选（第 390 �
     await ready();
     fireEvent.click(screen.getByTestId("shift-create-open"));
     await waitFor(() => expect(optionTexts("shift-points-select")).toEqual(["卡座-01", "一楼保洁区"]));
-    fireEvent.change(screen.getByTestId("shift-user-input"), { target: { value: "staff-9" } });
+    await waitFor(() => expect(optionTexts("shift-user-select")).toEqual(["请选择员工", "员工九", "员工一"]));
+    fireEvent.change(screen.getByTestId("shift-user-select"), { target: { value: "staff-9" } });
     fireEvent.change(screen.getByTestId("shift-start-input"), { target: { value: "2026-07-05T09:00" } });
     fireEvent.change(screen.getByTestId("shift-end-input"), { target: { value: "2026-07-05T18:00" } });
     choose("shift-points-select", ["sp_1"]);
@@ -87,7 +90,8 @@ describe("StaffShiftAttendancePage 排班点位从可选点位多选（第 390 �
     await ready();
     fireEvent.click(screen.getByTestId("shift-batch-open"));
     await waitFor(() => expect(optionTexts("shift-batch-points-select")).toEqual(["卡座-01", "一楼保洁区"]));
-    fireEvent.change(screen.getByTestId("shift-batch-users-input"), { target: { value: "staff-1" } });
+    await waitFor(() => expect(optionTexts("shift-batch-users-select")).toEqual(["员工九", "员工一"]));
+    choose("shift-batch-users-select", ["staff-1"]);
     fireEvent.change(screen.getByTestId("shift-batch-start-time"), { target: { value: "09:00" } });
     fireEvent.change(screen.getByTestId("shift-batch-end-time"), { target: { value: "18:00" } });
     choose("shift-batch-points-select", ["sp_1", "sp_2"]);

@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -978,6 +978,14 @@ data class StaffShiftUpsertRequest(
   val note: String? = null,
   val nightDutyManager: Boolean = false,
 )
+
+/** 第十八批 CJ 段第 417 条 417-R1：主管排班可排员工一项（GET /api/v1/staff/shift-staff-options）。 */
+@Serializable
+data class StaffShiftStaffOption(val userId: String, val name: String? = null)
+
+/** 第十八批 CJ 段第 417 条 417-R1：主管排班可选点位一项（GET /api/v1/staff/shift-point-options）。 */
+@Serializable
+data class StaffShiftPointOption(val id: String, val spaceName: String? = null)
 
 @Serializable
 data class StaffShiftRow(

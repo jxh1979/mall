@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.14",
+    "version": "V1.15",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -51497,7 +51497,41 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web"
+          "web",
+          "staff_private_phone",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/shift-staff-options": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffShiftStaffOptions",
+        "summary": "排班可选员工",
+        "description": "第十八批 CJ 段第 416 条 416-R1（BSM:1474「主管排班……主管在手机上也能排。」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」；BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」）：排班、按周批量排班与安排顶班选员工用的可排员工清单，每项含 user_id（员工账号编号）、name（档案姓名，为空时为编号），按姓名、再按编号排序。范围与提交排班（upsertStaffShift）、按周批量排班（batchUpsertStaffShifts）、安排顶班（coverStaffShift）同一判定；商户账号另含派驻到本商户、结束日为空或不早于本店今日营业日的员工（第十八批裁决 46；未开始的派驻也列）。不列停岗（suspended）、离职（departed）、已存档的，也不列未通过登记、没有账号的档案。持授权 U 盘密钥的最高权限与平台管理员看全部（第十八批裁决 71）。缺 staff.shift.manage 403 PERMISSION_DENIED。",
+        "x-permission": "staff.shift.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",

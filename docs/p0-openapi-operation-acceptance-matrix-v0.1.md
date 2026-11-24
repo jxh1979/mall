@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.14
+# P0 OpenAPI Operation 验收矩阵 V1.15
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1419 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1420 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -931,7 +931,8 @@
 | bar | `GET` | `/api/v1/bar/tables/availability` | `listBarTableAvailability` | 酒吧空位视图(员工代订用) | `-` | `bar.reservation.create` | `staff-token` | `project-merchant-space` | staff_private_phone, web, tablet, kiosk, staff_work_phone | 否 | `bar.table_availability.viewed` | `bar.table_availability.view_failed` |
 | staff | `GET` | `/api/v1/staff/shifts` | `listStaffShifts` | 查排班(后台/主管) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/shifts` | `upsertStaffShift` | 主管排班(双端) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone, staff_work_phone | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
-| staff | `GET` | `/api/v1/staff/shift-point-options` | `listStaffShiftPointOptions` | 排班可选点位 | `-` | `staff.shift.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
+| staff | `GET` | `/api/v1/staff/shift-point-options` | `listStaffShiftPointOptions` | 排班可选点位 | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
+| staff | `GET` | `/api/v1/staff/shift-staff-options` | `listStaffShiftStaffOptions` | 排班可选员工 | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/shifts/batch` | `batchUpsertStaffShifts` | 按周批量排班(一次排一周) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
 | staff | `GET` | `/api/v1/staff/shifts/mine` | `listMyStaffShifts` | 我的班次与点位(员工手机) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/attendance/punch` | `punchStaffAttendance` | 考勤打卡(NFC/扫码) | `object` | `staff.attendance.punch` | `staff-token` | `platform` | staff_work_phone | 是 | `staff.attendance.punched` | `staff.attendance.punch_failed` |

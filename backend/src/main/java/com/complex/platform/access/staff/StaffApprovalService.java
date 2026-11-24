@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -36,6 +36,11 @@ public class StaffApprovalService {
     @org.springframework.beans.factory.annotation.Autowired private org.springframework.context.ApplicationEventPublisher events;
     // 第 96 条 96-R2（第十八批裁决 23）：停岗、离职生效时名下在用的设备转待归还
     @org.springframework.beans.factory.annotation.Autowired private com.complex.platform.terminal.TerminalDeviceService terminalDevices;
+    // 第十八批 CJ 段第 416 条 416-R2：排班发布审批原件的点位写空间名。
+    @org.springframework.beans.factory.annotation.Autowired private com.complex.platform.governance.PlatformRepository platform;
+    /** 第十八批 CJ 段第 416 条 416-R2（PGM:287 日期时间全中文）：排班发布审批原件的起止按北京时间到分钟。 */
+    private static final java.time.format.DateTimeFormatter TIME =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(com.complex.platform.common.LocalZone.ID);
     private final JdbcStaffRepository repository;
     private final SupervisorReviewService reviews;
     private final AuthorizationService authorization;
@@ -110,13 +115,20 @@ public class StaffApprovalService {
     StaffShiftBatchResult submitShifts(List<StaffShiftRecord> drafts, String key) {
         repository.requireDistinctNightDutyDrafts(drafts);
         String actor = authorization.currentActor().id();
+        // 第十八批 CJ 段第 416 条 416-R2（BSM:1474「排班表最终发布须经该主管的上一级审批后生效。」；PGM:287）：上一级看得懂的原件——起止为北京时间
+        // 到分钟，点位为空间名（取不到的照写编号，未选写「未指定」），夜班职责写职责句（项目恒为员工登记项目，不写编号）。单条与按周批量都经此处。
+        Map<String, String> spaceNames = new java.util.HashMap<>();
         String proposal = drafts.stream().map(draft -> {
             var before = repository.findShiftById(draft.id()).orElse(null);
             String name = repository.findProfileByUserId(draft.userId()).map(StaffProfileRecord::name).orElse(draft.userId());
-            return name + "：" + (before == null ? "新增" : before.startAt() + " 至 " + before.endAt())
-                    + " → " + draft.startAt() + " 至 " + draft.endAt()
-                    + "；夜班值班职责：" + (draft.nightDutyProjectId() == null ? "无" : "项目 " + draft.nightDutyProjectId())
-                    + "；点位：" + String.join("、", draft.pointSpaceIds())
+            return name + "：" + (before == null ? "新增" : TIME.format(before.startAt()) + " 至 " + TIME.format(before.endAt()))
+                    + " → " + TIME.format(draft.startAt()) + " 至 " + TIME.format(draft.endAt())
+                    + "；夜班值班职责：" + (draft.nightDutyProjectId() == null ? "无" : "承担所属项目本日夜班值班经理职责")
+                    + "；点位：" + (draft.pointSpaceIds().isEmpty() ? "未指定" : draft.pointSpaceIds().stream()
+                            .map(id -> spaceNames.computeIfAbsent(id, spaceId -> platform.findSpaceById(spaceId)
+                                    .map(com.complex.platform.governance.SpaceRecord::spaceName)
+                                    .filter(spaceName -> !spaceName.isBlank()).orElse(spaceId)))
+                            .collect(java.util.stream.Collectors.joining("、")))
                     + "；缘由：" + (draft.note() == null ? "新排班" : draft.note());
         }).collect(java.util.stream.Collectors.joining("\n"));
         var review = reviews.evaluate(new SupervisorReviewEvaluateRequest(key + ":review", "排班发布审批",

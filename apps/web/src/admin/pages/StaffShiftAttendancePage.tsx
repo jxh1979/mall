@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -25,11 +25,6 @@ type ReceiptReview = { id: string; reviewId: string; status: string; actualAt: s
 const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "人工记录", charging_disconnect: "离开充电设施", device_return: "本班手机归还" };
 const TYPE_LABELS: Record<string, string> = { check_in: "上班", check_out: "下班" };
 const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-
-/** 员工/点位这类「一行填多个」的输入：中英文逗号、空白、换行都当分隔符（排班员从名单里粘一串进来也认）。 */
-function splitList(value: string) {
-  return value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean);
-}
 
 /** 结束时刻不晚于开始时刻 = 跨零点班，后端把班次结束顺延到次日；这里照同一口径提示排班员。 */
 function crossesMidnight(startTime: string, endTime: string) {
@@ -80,7 +75,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 按周批量排班（2026-08-02 用户拍板）：排班员一次排出一周的班，不再一人一天点一次。
   const [batchOpen, setBatchOpen] = React.useState(false);
-  const [batchUsers, setBatchUsers] = React.useState("");
+  const [batchUsers, setBatchUsers] = React.useState<string[]>([]);
   const [batchStartDate, setBatchStartDate] = React.useState(today);
   const [batchDays, setBatchDays] = React.useState("7");
   const [batchWeekdays, setBatchWeekdays] = React.useState<number[]>([]);
@@ -108,6 +103,21 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   // 修改排班时原点位不在清单里的也保留为选项（显示编号），免得只改时间保存时把原点位静默丢掉。
   const pointChoices = (selected: string[]) => [...pointOptions,
     ...selected.filter((id) => !pointOptions.some((option) => option.id === id)).map((id) => ({ id, spaceName: id }))];
+  // 第十八批 CJ 段第 416 条 416-R3（BSM:1474「主管排班……」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」）：员工从可排员工清单选
+  // （与提交同一范围判定）；排班表、明细、顶班与确认摘要显示姓名，清单里没有的显示编号。
+  const [staffOptions, setStaffOptions] = React.useState<Array<{ userId: string; name?: string }>>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    api.get<Array<{ userId: string; name?: string }>>("/api/v1/staff/shift-staff-options").then(
+      (rows) => { if (!cancelled) setStaffOptions(Array.isArray(rows) ? rows : []); },
+      (actionError) => { if (!cancelled) setGlobalError(actionError instanceof Error ? actionError.message : "可排员工读取失败"); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+  const staffName = (id?: string) => (id ? staffOptions.find((option) => option.userId === id)?.name ?? id : "—");
+  // 申请修改时锁定的原员工不在清单里的也保留为选项（显示编号）。
+  const staffChoices = (selected: string[]) => [...staffOptions,
+    ...selected.filter((id) => id && !staffOptions.some((option) => option.userId === id)).map((id) => ({ userId: id, name: id }))];
 
   const toggleWeekday = (weekday: number) => {
     setBatchWeekdays((prev) => (prev.includes(weekday)
@@ -117,9 +127,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
 
   function openShiftDetail(row: ShiftRow) {
     setDetail({
-      title: `排班明细 · ${row.userId ?? row.id}`,
+      title: `排班明细 · ${row.userId ? staffName(row.userId) : row.id}`,
       fields: [
-        { label: "员工", value: row.userId ?? "—" },
+        { label: "员工", value: staffName(row.userId) },
         { label: "开始", value: localTime(row.startAt) },
         { label: "结束", value: localTime(row.endAt) },
         { label: "点位", value: pointNames(row.pointSpaceIds) },
@@ -233,7 +243,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   // 批量排班：一批员工 × 日期窗口内勾中的星期几 × 每日同一时段，一次生成。跨零点顺延在后端做
   // （前端只提示），口径单点在服务端，避免两边各算一套。
   const saveBatchShifts = async () => {
-    const userIds = splitList(batchUsers);
+    const userIds = batchUsers;
     const days = Number(batchDays);
     if (!userIds.length || !batchStartDate || !batchStartTime || !batchEndTime) {
       setBatchError("请填全 员工/起始日期/每日开始与结束时刻");
@@ -308,9 +318,12 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       {settingMessage ? <p role="status">{settingMessage}</p> : null}
       {historyText ? <pre aria-label="排班修改历史">{historyText}</pre> : null}
       {coverHistory ? <pre aria-label="顶班记录">{coverHistory}</pre> : null}
-      {coverShift ? <fieldset><legend>安排临时顶班 · 原员工 {coverShift.userId}</legend>
+      {coverShift ? <fieldset><legend>安排临时顶班 · 原员工 {staffName(coverShift.userId)}</legend>
         <p>原班次：{localTime(coverShift.startAt)} 至 {localTime(coverShift.endAt)}。记录实际交接，原员工缺勤不被抹除；顶班不直接等同加班。</p>
-        <label>顶班员工<input aria-label="顶班员工" value={coverForm.userId} onChange={(e) => setCoverForm({ ...coverForm, userId: e.target.value })} /></label>
+        <label>顶班员工<select aria-label="顶班员工" value={coverForm.userId} onChange={(e) => setCoverForm({ ...coverForm, userId: e.target.value })}>
+          <option value="">请选择顶班员工</option>
+          {staffOptions.filter((option) => option.userId !== coverShift.userId).map((option) => <option key={option.userId} value={option.userId}>{option.name ?? option.userId}</option>)}
+        </select></label>
         <label>顶班开始<input aria-label="顶班开始" type="datetime-local" value={coverForm.start} onChange={(e) => setCoverForm({ ...coverForm, start: e.target.value })} /></label>
         <label>顶班结束<input aria-label="顶班结束" type="datetime-local" value={coverForm.end} onChange={(e) => setCoverForm({ ...coverForm, end: e.target.value })} /></label>
         <label>顶班事由<input aria-label="顶班事由" value={coverForm.reason} onChange={(e) => setCoverForm({ ...coverForm, reason: e.target.value })} /></label>
@@ -333,7 +346,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`shift-row-${row.id}`}
                   onClick={() => openShiftDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openShiftDetail(row); } }}>
-                  <td>{row.userId ?? "—"}</td>
+                  <td>{staffName(row.userId)}</td>
                   <td>{localTime(row.startAt)}</td>
                   <td>{localTime(row.endAt)}</td>
                   <td>{pointNames(row.pointSpaceIds)}</td>
@@ -348,7 +361,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                     event.stopPropagation();
                     try {
                       const entries = await api.get<Array<{ coverUserId: string; originalUserId: string; startAt: string; endAt: string; reason: string; handoverNote: string }>>("/api/v1/staff/shifts/" + encodeURIComponent(row.id) + "/covers");
-                      setCoverHistory(entries.length ? entries.map((entry) => "原员工：" + entry.originalUserId + "；顶班员工：" + entry.coverUserId + "\n安排时段：" + localTime(entry.startAt) + " ~ " + localTime(entry.endAt) + "\n事由：" + entry.reason + "\n实际交接：" + entry.handoverNote).join("\n\n") : "暂无顶班记录。");
+                      setCoverHistory(entries.length ? entries.map((entry) => "原员工：" + staffName(entry.originalUserId) + "；顶班员工：" + staffName(entry.coverUserId) + "\n安排时段：" + localTime(entry.startAt) + " ~ " + localTime(entry.endAt) + "\n事由：" + entry.reason + "\n实际交接：" + entry.handoverNote).join("\n\n") : "暂无顶班记录。");
                     } catch (error) { setCoverHistory((error as Error).message); }
                   }}>顶班记录</button>
                   {row.createdBy === user.id && new Date(row.startAt ?? "").getTime() > Date.now() ? <button type="button" onClick={(event) => {
@@ -453,7 +466,10 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             validate: () => (userId.trim() && start && end ? null : "请填全 员工/开始/结束时间"),
             content: (
               <>
-                <label>员工编号<input data-testid="shift-user-input" value={userId} disabled={Boolean(editingShift)} onChange={(event) => setUserId(event.target.value)} /></label>
+                <label>员工<select data-testid="shift-user-select" aria-label="员工" value={userId} disabled={Boolean(editingShift)} onChange={(event) => setUserId(event.target.value)}>
+                  <option value="">请选择员工</option>
+                  {staffChoices([userId]).map((option) => <option key={option.userId} value={option.userId}>{option.name ?? option.userId}</option>)}
+                </select></label>
                 <label>开始<input data-testid="shift-start-input" type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label>
                 <label>结束<input data-testid="shift-end-input" type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
               </>
@@ -478,7 +494,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         ]}
         summary={[
           { label: "日期", value: date },
-          { label: "员工", value: userId.trim() || "未填写" },
+          { label: "员工", value: userId ? staffName(userId) : "未填写" },
           { label: "开始", value: start ? localTime(start) : "未填写" },
           { label: "结束", value: end ? localTime(end) : "未填写" },
           { label: "点位", value: pointNames(points) },
@@ -499,15 +515,17 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         steps={[
           {
             title: "员工与日期范围",
-            description: "一次排一周:填多名员工(逗号分隔)、起始日期与天数,再勾要排的星期几;不勾=范围内每天都排。",
+            description: "一次排一周:选多名员工、起始日期与天数,再勾要排的星期几;不勾=范围内每天都排。",
             validate: () => {
-              if (!splitList(batchUsers).length || !batchStartDate) return "请填 员工(逗号分隔) 与 起始日期";
+              if (!batchUsers.length || !batchStartDate) return "请选员工与起始日期";
               const days = Number(batchDays);
               return Number.isInteger(days) && days >= 1 && days <= 31 ? null : "排班天数必须是 1 到 31 之间的整数";
             },
             content: (
               <>
-                <label>员工编号(逗号分隔,可多名)<input data-testid="shift-batch-users-input" value={batchUsers} onChange={(event) => setBatchUsers(event.target.value)} /></label>
+                <label>员工(可多选)<select multiple data-testid="shift-batch-users-select" aria-label="员工" value={batchUsers} onChange={(event) => setBatchUsers(Array.from(event.target.selectedOptions, (option) => option.value))}>
+                  {staffOptions.map((option) => <option key={option.userId} value={option.userId}>{option.name ?? option.userId}</option>)}
+                </select></label>
                 <label>起始日期<CnDatePicker data-testid="shift-batch-start-date" value={batchStartDate} onChange={(v) => setBatchStartDate(v || today())} /></label>
                 <label>天数(自起始日期起算,默认一周 7 天)<input data-testid="shift-batch-days-input" type="number" min={1} max={31} value={batchDays} onChange={(event) => setBatchDays(event.target.value)} /></label>
                 <fieldset data-testid="shift-batch-weekdays">
@@ -544,7 +562,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           },
         ]}
         summary={[
-          { label: "员工", value: splitList(batchUsers).length ? `${splitList(batchUsers).join("、")}(共 ${splitList(batchUsers).length} 名)` : "未填写" },
+          { label: "员工", value: batchUsers.length ? `${batchUsers.map((id) => staffName(id)).join("、")}(共 ${batchUsers.length} 名)` : "未填写" },
           { label: "日期范围", value: `${batchStartDate} 起 ${batchDays || "—"} 天` },
           { label: "只排", value: batchWeekdays.length ? batchWeekdays.map((day) => WEEKDAY_LABELS[day - 1]).join("、") : "范围内每天" },
           { label: "每日时段", value: `${batchStartTime || "未填写"} 至 ${batchEndTime || "未填写"}${crossesMidnight(batchStartTime, batchEndTime) ? "(次日)" : ""}` },

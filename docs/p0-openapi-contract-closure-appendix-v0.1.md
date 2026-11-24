@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.14
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.15
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1419 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1420 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 446 | 人工权限矩阵正文未覆盖 345 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2838 | 人工事件矩阵正文未覆盖 2789 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1419 | 人工任务映射正文未逐项覆盖 1413 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 2840 | 人工事件矩阵正文未覆盖 2791 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1420 | 人工任务映射正文未逐项覆盖 1414 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 869 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -426,7 +426,7 @@
 | `staff.profile.self` | staff-token | self | 2 | getMyStaffProfile, issueStaffLockerScanToken | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 3 | submitStaffRegistration, archiveStaffProfile, unarchiveStaffProfile | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 2 | listStaffProfiles, listStaffDispatches | OpenAPI 补充，以本附录为准 |
-| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 15 | listStaffShifts, upsertStaffShift, listStaffShiftPointOptions, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, revokeStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift, listStaffShiftCovers ... | OpenAPI 补充，以本附录为准 |
+| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 16 | listStaffShifts, upsertStaffShift, listStaffShiftPointOptions, listStaffShiftStaffOptions, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, revokeStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift ... | OpenAPI 补充，以本附录为准 |
 | `staff.shift.view` | staff-token | platform, self-project | 5 | listMyStaffShifts, listMyStaffAttendance, myStaffAttendanceMonthView, listStaffPhoneReceipts, listStaffAttendanceReceiptReviews | OpenAPI 补充，以本附录为准 |
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
@@ -2622,6 +2622,8 @@
 | `not_applicable` | failure | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listStaffShiftStaffOptions` | `GET` | `/api/v1/staff/shift-staff-options` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listStaffShiftStaffOptions` | `GET` | `/api/v1/staff/shift-staff-options` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | P0-待归类 | `partner.subordinate.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | P0-待归类 | `partner.subordinate.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
@@ -4597,8 +4599,9 @@
 | STAFF-员工 | `listStaffRegistrationCompanies` | `GET` | `/api/v1/staff/registration-companies` | 获取可注册公司 | `public` | `staff.registration_companies_viewed` / `not_applicable` | staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftCovers` | `GET` | `/api/v1/staff/shifts/{id}/covers` | 查看班次顶班记录 | `staff.shift.manage` | `staff.shift.covers_viewed` / `not_applicable` | web, staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftHistory` | `GET` | `/api/v1/staff/shifts/{id}/history` | 查看排班修改历史 | `staff.shift.manage` | `staff.shift.history_viewed` / `not_applicable` | web, staff_work_phone | operation 级补充 |
-| STAFF-员工 | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | 排班可选点位 | `staff.shift.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| STAFF-员工 | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | 排班可选点位 | `staff.shift.manage` | `not_applicable` / `not_applicable` | web, staff_private_phone, staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | 查排班(后台/主管) | `staff.shift.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| STAFF-员工 | `listStaffShiftStaffOptions` | `GET` | `/api/v1/staff/shift-staff-options` | 排班可选员工 | `staff.shift.manage` | `not_applicable` / `not_applicable` | web, staff_private_phone, staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listStaffWorkPhoneContextsForRecovery` | `GET` | `/api/v1/staff/attendance/work-phone-contexts` | 主管查询本工作手机指定员工的历史领用记录 | `staff.shift.manage` | `staff.attendance.contexts_viewed` / `staff.attendance.contexts_view_failed` | staff_work_phone | operation 级补充 |
 | STAFF-员工 | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | 旧手填已发工资入口已关闭 | `staff.payroll.manage` | `not_applicable` / `staff.payroll.pay_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | STAFF-员工 | `myStaffAttendanceMonthView` | `GET` | `/api/v1/staff/attendance/month-view` | 考勤月视图(员工手机,逐日六态) | `staff.shift.view` | `not_applicable` / `not_applicable` | staff_private_phone, web, staff_work_phone | operation 级补充 |

@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,6 +19,9 @@ class StaffAppFunctionsTests {
                 {"GET", "/api/v1/staff/payroll/mine"},
                 {"GET", "/api/v1/staff/payroll/mine/statements/s1"},
                 {"POST", "/api/v1/staff/shifts"},
+                // 第十八批 CJ 段第 417 条 417-R1（BSM:1474「主管在手机上也能排」）：主管排班读可排员工与可选点位两个清单。
+                {"GET", "/api/v1/staff/shift-staff-options"},
+                {"GET", "/api/v1/staff/shift-point-options"},
                 {"POST", "/api/v1/bar/reservations"},
                 {"POST", "/api/v1/facility/work-orders/w1/review"},
                 {"GET", "/api/v1/merchant-service/work-orders/assigned-to-me"},
