@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -167,6 +167,7 @@ public class BarSuspendedOrderBoard {
         Map<String, Object> filters = new LinkedHashMap<>();
         filters.put("status", status);
         filters.put("bar_id", barId);
+        filters.put("data_window", com.complex.platform.access.AuditDataWindow.current().map(com.complex.platform.access.AuditDataWindow::label).orElse(null)); // 372-S4-R2：导出记录记所用外审数据时段
         var actor = authorization.currentActor();
         Optional<String> merchant = authorization.currentMerchantIdQuietly();
         if (merchant.isPresent()) {
@@ -183,6 +184,11 @@ public class BarSuspendedOrderBoard {
         if (barId != null && !barId.isBlank()) {
             where.add("s.bar_id = ?");
             args.add(barId);
+        }
+        // 372-S4-R2（第十八批裁决 77）：外审数据时段按挂起时刻，进 scoped——列表、总数、未结清汇总、导出与可编辑版重取同一条件。
+        String window = com.complex.platform.access.AuditDataWindow.andInstant("s.suspended_at");
+        if (!window.isEmpty()) {
+            where.add("TRUE" + window);
         }
         String scoped = clause(where);
         List<Object> scopedArgs = List.copyOf(args);

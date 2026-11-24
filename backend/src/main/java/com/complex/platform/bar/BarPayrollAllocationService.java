@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -92,6 +92,8 @@ public class BarPayrollAllocationService {
     }
     public List<MonthRun> overview(String project,String merchant,String month) {
         p.requireReadScope(project,merchant,VIEW);var period=month(month);
+        // 372-S4-R3（第十八批裁决 77）：外审数据时段——所查月份须整月落在时段内才返回月结与待月结，否则空（口径同 AuditDataWindow.andMonth）。
+        if(com.complex.platform.access.AuditDataWindow.current().filter(w->period.atDay(1).isBefore(w.from())||period.atEndOfMonth().isAfter(w.to())).isPresent())return List.of();
         List<MonthRun> rows=new ArrayList<>(p.jdbc.query("SELECT * FROM bar_payroll_runs WHERE project_id=? AND merchant_id=? AND month=? ORDER BY created_at,id",
             this::runRow,project,merchant,month));
         for(String source:sources(project,merchant,period)) {
