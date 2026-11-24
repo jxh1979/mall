@@ -1,8 +1,9 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StoredValueRefundPage } from "./StoredValueRefundPage";
 import { AdminApi } from "../client/adminClient";
+import { ReplayedNotice } from "../../shared/ReplayedNotice";
 import type { AdminUser } from "../types";
 
 // 第十八批 AZ 段第 278 条 278-R2（BSM:833「商户卡仍由发卡商户直接收款和退款」「综合体通用卡的未消费本金默认全额可退，赠送金不退现」；
@@ -136,5 +137,35 @@ describe("储值退卡", () => {
     await waitFor(() => expect(screen.getByText("柜台退卡")).toBeTruthy());
     expect(screen.queryByText("解冻")).toBeNull();
     expect(screen.queryByText("冻结")).toBeNull();
+  });
+
+  // 第十八批 CS 段第 448 条 448-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：退卡重复提交拿回第一次的结果时
+  // 顶部提示已完成；退卡后按手机号重查卡是查询、不是下一次提交，不撤下提示（修复前重查卡把提示立刻撤下）。
+  it("退卡重复提交拿回第一次的结果：提示已完成，随后按手机号重查卡不撤下提示", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const calls: Call[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null });
+      if (url.endsWith(LOOKUP)) return new Response(JSON.stringify({ success: true, code: "OK", data: [general] }));
+      return new Response(JSON.stringify({ success: true, code: "OK", message: "该操作已完成（重复提交，返回首次结果）",
+        data: { id: "svtxn_1", txn_type: "refund", amount_cent: -5000 }, replayed: true }));
+    }));
+    render(
+      <>
+        <ReplayedNotice />
+        <StoredValueRefundPage api={new AdminApi("test")} user={projectStaff} setActionResult={vi.fn()} setGlobalError={vi.fn()}
+          effectivePermissions={{ status: "ready", value: { grants: ["customer.stored_value.refund"], denies: [], wildcard: false } }} />
+      </>,
+    );
+    await search(calls);
+    await waitFor(() => expect(screen.getByText("办理退卡")).toBeTruthy());
+    fireEvent.click(screen.getByText("办理退卡"));
+    await waitFor(() => expect(screen.getByLabelText("退卡原因")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("退卡原因"), { target: { value: "客人到服务台退卡" } });
+    fireEvent.click(screen.getByText("退卡"));
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith(LOOKUP)).length).toBe(2));
+    expect(callTo(calls, "/api/v1/loyalty/stored-value/cus_1/refund")).toBeTruthy();
+    expect(screen.queryByTestId("replayed-notice")?.textContent ?? "").toContain("该操作已完成（重复提交，返回首次结果）");
   });
 });

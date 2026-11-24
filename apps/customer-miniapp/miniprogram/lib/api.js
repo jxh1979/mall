@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 小程序的请求、会话与终端开关：全工程只有本文件发网络请求、读写本地存储、读本地临时文件（上传附件用；test/structure.test.js 断言）。
 // - 请求经三端共用的客人业务模块（core，构建时由 packages/customer-core 编译而来），本端只把 wx.request 包成它要的请求通道；
 //   每个请求带 X-Terminal-Type: miniapp 与 X-Client-Version，有会话带 X-Customer-Token，带当前请求所属客人模块 X-Module-Code
@@ -9,6 +9,7 @@
 // - 终端开关（PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」）：读本端已关闭的开关行，本端总开关、本版本被关或拉取失败
 //   → 本端暂停服务；某模块被关 → 只隐藏该模块入口；只有一个综合体且它被关 → 本端暂停服务；选综合体的页面不列被关的综合体，
 //   链接带的综合体被关该页只提示暂停服务。
+// - 重复提交拿回第一次的结果（replayed=true）时弹窗提示「该操作已完成（重复提交，返回首次结果）」（PGM:303 末句、第 449 条 449-R1）。
 const core = require('../core/index')
 const config = require('../config')
 
@@ -111,6 +112,14 @@ function clearSession() {
 core.setCustomerSessionExpiredHandler(() => {
   clearSession()
   wx.reLaunch({ url: '/pages/login/index?expired=1' })
+})
+
+// 第 449 条 449-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；BSM:852「客人端包括 App 和小程序，两者同步建设。」）：
+// core 收到 replayed=true 时广播已完成提示，这里弹窗显示，只有确定按钮，页面照常按成功处理。各页没有共用的页面顶部，页面成功后会马上
+// 弹自己的轻提示（如「已撤回转赠」），已完成提示若也用轻提示会被它盖掉，故用弹窗；下一次提交开始时广播的空提示不处理——弹窗由客人
+// 点确定关闭后才能再提交。
+core.onReplayedNotice((notice) => {
+  if (notice) wx.showModal({ title: '提示', content: notice, showCancel: false })
 })
 
 module.exports = {

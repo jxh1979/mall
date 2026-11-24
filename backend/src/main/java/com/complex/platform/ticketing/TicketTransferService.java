@@ -1,10 +1,11 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.BlindIndex;
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.customer.dto.CustomerTicketTransferRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.notification.NotificationService;
@@ -233,6 +234,10 @@ public class TicketTransferService {
             throw ApiException.forbidden("TICKET_TRANSFER_NOT_INITIATOR", "只有发起人可以撤回转赠");
         }
         if ("revoked".equals(transfer.status())) {
+            // 第十八批 CS 段第 425 条 425-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作
+            // 重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」）：revoked 只由发起人撤回写入，发起人对已撤回的转赠再撤回
+            // ＝同一次操作重复提交（按常理定，同 393-R1），返回该转赠并提示已完成；排在转赠不存在、非发起人与综合体开关之后。
+            IdempotentReplayContext.markCurrentReplayed();
             return respond(transfer, true); // 幂等
         }
         if (!"pending".equals(transfer.status())) {
@@ -243,6 +248,8 @@ public class TicketTransferService {
         if (rows == 0) {
             TicketTransferRecord latest = repository.findTicketTransferById(id).orElse(transfer);
             if ("revoked".equals(latest.status())) {
+                // 425-R1：同一次撤回同时到达，后到者条件更新 0 行、重读为已撤回——同上，提示已完成。
+                IdempotentReplayContext.markCurrentReplayed();
                 return respond(latest, true);
             }
             throw statusConflict(latest); // 撤回时对方已先领 → 409 已被领取

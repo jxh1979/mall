@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.22",
+    "version": "V1.23",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -56943,7 +56943,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回。"
+        "description": "PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回。发起人对已撤回的转赠再撤回（重复点击、网络重发，含同时到达）：返回该转赠并带 replayed=true、提示已完成，不再留痕 ticket_transfer.revoked（第十八批 CS 段第 425 条 425-R1；PGM:303、PGM:528⑤）。"
       }
     },
     "/api/v1/customer/ticket-transfers/preview": {
