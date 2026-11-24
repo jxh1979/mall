@@ -111,6 +111,8 @@ class JdbcAuditEventRepository implements AuditEventRepository {
                     + " AND " + ALL_ACTIVE_PROJECTS_IN_SCOPE + "))");
             params.addValue("project_scope", projectScope);
         }
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R1（PGM:682；第十八批裁决 77）：外审数据时段按留痕发生时刻，与 from、to 同时生效。
+        sql.append(com.complex.platform.access.AuditDataWindow.andInstant("occurred_at"));
         sql.append(" ORDER BY occurred_at DESC, id LIMIT :limit");
         params.addValue("limit", Math.max(1, Math.min(limit, 1000)));
         return jdbcTemplate.query(sql.toString(), params, this::mapAuditRow);

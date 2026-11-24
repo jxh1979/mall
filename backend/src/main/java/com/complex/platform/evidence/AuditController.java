@@ -146,6 +146,8 @@ public class AuditController implements ExportFileService.Source {
         filters.put("limit", limit);
         filters.put("merchant_id", scope.merchantId());
         filters.put("project_ids", scope.projectIds() == null ? null : new java.util.TreeSet<>(scope.projectIds()));
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R1（PGM:686 导出记录记下导出内容范围与筛选条件）：记下取数所按的外审数据时段。
+        filters.put("data_window", com.complex.platform.access.AuditDataWindow.current().map(com.complex.platform.access.AuditDataWindow::label).orElse(null));
         return new ExportFileService.Table("操作留痕", filters, EXPORT_COLUMNS, events.stream().map(AuditController::exportRow).toList());
     }
 

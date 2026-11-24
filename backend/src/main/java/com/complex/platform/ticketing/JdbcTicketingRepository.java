@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -747,6 +747,7 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<VerificationRecord> listVerifications() {
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R3（第十八批裁决 77）：外审数据时段按核销时刻。
         return jdbcTemplate.query("""
                 SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
                        credential_payload, device_id, point_id, status, result_reason, source_type,
@@ -754,8 +755,9 @@ class JdbcTicketingRepository implements TicketingRepository {
                        verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
                        amusement_verification_id, settlement_catalog_entry_id, %s
                   FROM ticket_verifications
+                 WHERE TRUE%s
                  ORDER BY created_at DESC, id
-                """.formatted(ANOMALY_COLUMNS), this::mapVerification);
+                """.formatted(ANOMALY_COLUMNS, com.complex.platform.access.AuditDataWindow.andInstant("created_at")), this::mapVerification);
     }
 
     @Override
@@ -850,13 +852,15 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<TicketRefundRecord> listTicketRefunds() {
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R3（第十八批裁决 77）：外审数据时段按退款发起时刻。
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
                        requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
                        reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items, payout_result
                   FROM ticket_refunds
+                 WHERE TRUE%s
                  ORDER BY created_at DESC, id
-                """, Map.of(), rowMapper::mapTicketRefund);
+                """.formatted(com.complex.platform.access.AuditDataWindow.andInstant("created_at")), Map.of(), rowMapper::mapTicketRefund);
     }
 
     @Override
@@ -1138,7 +1142,9 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<TicketOrderRecord> listTicketOrders() {
-        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " ORDER BY created_at DESC, id", rowMapper::mapTicketOrder);
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R3（第十八批裁决 77）：外审数据时段按下单时刻。
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " WHERE TRUE" + com.complex.platform.access.AuditDataWindow.andInstant("created_at")
+                + " ORDER BY created_at DESC, id", rowMapper::mapTicketOrder);
     }
 
     @Override
@@ -1274,7 +1280,9 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<IssuedEntitlementRecord> listIssuedEntitlements() {
-        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + " ORDER BY created_at DESC, id", rowMapper::mapIssuedEntitlement);
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R3（第十八批裁决 77）：外审数据时段按出票时刻。
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + " WHERE TRUE" + com.complex.platform.access.AuditDataWindow.andInstant("created_at")
+                + " ORDER BY created_at DESC, id", rowMapper::mapIssuedEntitlement);
     }
 
     @Override
