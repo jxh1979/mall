@@ -1,4 +1,4 @@
-// 文件版本：V0.61
+// 文件版本：V0.62
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3765,6 +3765,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     reconciliation_difference: "对账差异",
     // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     inventory_transfer: "门店要货货款", media_performance_settlement: "传媒演出结算", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
+    // 第十八批 CD 段第 402 条 402-R3（BSM:1201）：开票清单台账来源组的键（台账来源仍是 inventory_transfer），同后端 AR_AP_SOURCE_TYPE_LABELS。
+    inventory_lending: "商户借调货款与赔偿",
     // 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：后端 AR_AP_SOURCE_TYPE_LABELS 有、此前缺的 20 项，中文名逐字同后端。
     contract: "合同", order: "订单", refund: "退款", manual: "手工录入", settlement: "结算", employee_commission: "员工提成",
     inventory_difference: "库存差异", cam: "公共区域维护费", property_fee: "物业费", pass_drink_settlement: "通票酒水结算",

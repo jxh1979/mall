@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -187,7 +187,8 @@ class LedgerInvoiceItemsJdbcTests {
         item("payable", supplier, "inventory_transfer", 2_000, LocalDate.of(2026, 6, 25), null, store, null);
         item("payable", bar, "inventory_transfer", 7_000, LocalDate.of(2026, 6, 26), null, store, null);
 
-        assertThat(generate()).isEqualTo(1);
+        // 第十八批 CD 段第 402 条 402-R3：往来对方是商户的那笔另成「商户借调货款与赔偿」行（inventory_lending），不进本组。
+        assertThat(generate()).isEqualTo(2);
 
         list(JUNE).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[?(@.ledger_source == 'inventory_transfer')].amount_cent", contains(16_000)))

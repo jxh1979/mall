@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -154,6 +154,8 @@ class FinanceServiceTests {
     @Test
     void generalCardConsumeSourceHasChineseLabel() {
         assertThat(FinanceService.sourceTypeLabel("general_card_consume")).isEqualTo("通用卡消费结算");
+        // 第十八批 CD 段第 402 条 402-R3（BSM:1201）：开票清单借调来源组的中文名（开票清单导出来源单号列取它），与前端 KEY_VALUE_LABELS.source_type 同名。
+        assertThat(FinanceService.sourceTypeLabel("inventory_lending")).isEqualTo("商户借调货款与赔偿");
     }
 
     /** 第十八批 BR 段 357-R3（BSM:753、1673）：游乐域内结算往来的来源中文名，与前端 KEY_VALUE_LABELS.source_type、付款确认支付类型同名；平台主体付款的应收同样过闸。 */

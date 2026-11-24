@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.evidence.AuditEventService;
@@ -21,6 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>停车抵免成本（BSM:1436）：收入类型 parking，开票主体＝停车收款主体城市项目公司，购方＝承担主体；</li>
  *   <li>通用卡消费结算（BSM:1704；ENUM:86）：开票主体＝收款的经营主体或酒吧收款主体，收入类型按收款方（酒吧 catering，游乐 game，演出 show，其余 ticket），
  *       购方＝该综合体唯一的城市项目公司。</li>
+ *   <li>第十八批 CD 段第 402 条——通票免费酒水结算（BSM:751、1691）：收入类型 spv_service（同结算单分账明细），开票主体＝出品酒吧收款主体，
+ *       购方＝通票收入归属主体（娱乐平台公司），按会计期间取应付减对冲应收；</li>
+ *   <li>补偿新增履约结算（BSM:800）：收入类型 spv_service，开票主体＝提供方商户收款主体，购方＝补偿批次承担主体，冲正、重述与已付追收都并入原履约月；</li>
+ *   <li>商户之间借调买断货款与借用物赔偿（BSM:1201）：组来源键 inventory_lending（台账来源仍是 inventory_transfer），收入类型 goods，
+ *       开票主体＝借出方收款主体，购方＝借入方及其收款主体，按到期日所在月合计。</li>
  * </ul>
  * 只出已结束月份；可开额＝该组应开额（台账现值）−已开额，≤0 不生成，故晚到流水另出差额行，冲回致应开额低于已开额时列入已超开、红冲或作废后下一轮按新额重开。
  */
@@ -28,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class LedgerInvoiceService {
 
     private static final Map<String, String> INCOME_TYPES = Map.of("single_bar_service_fee", "ticket", "inventory_transfer", "goods",
-            "dispatch_commission_transfer", "staff_remuneration", "bar_payroll_transfer", "staff_remuneration", "parking_credit_cost", "parking");
+            "dispatch_commission_transfer", "staff_remuneration", "bar_payroll_transfer", "staff_remuneration", "parking_credit_cost", "parking",
+            "pass_drink_settlement", "spv_service", "compensation_fulfillment", "spv_service", "inventory_lending", "goods");
 
     private final JdbcLedgerInvoiceRepository ledger;
     private final JdbcSettlementInvoiceRepository invoices;
@@ -78,6 +84,9 @@ public class LedgerInvoiceService {
         if (card) {
             List<String> companies = transactions.findProjectCompanies(g.projectId());
             buyer = companies.size() == 1 ? companies.getFirst() : null;
+        } else if ("pass_drink_settlement".equals(g.ledgerSource())) {
+            // 第 402 条 402-R1（BSM:1691「娱乐平台公司出资的通票免费酒水」）：购方＝通票收入归属主体，取法同 290-R1 业态份额行。
+            buyer = attribution.resolveManagementEntity(g.projectId(), TicketDistributionSettlementService.REVENUE_STREAM_ALL_PASS_TICKET);
         }
         LocalDate end = g.periodStart().withDayOfMonth(g.periodStart().lengthOfMonth());
         SettlementInvoiceService.Tax tax = invoiceService.tax(subject, incomeType, invoiceable, end);

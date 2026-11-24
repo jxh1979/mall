@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,7 +14,7 @@ const SUMMARY = {
   ],
   rules: [
     { incomeType: "ticket", revenueStream: "all_pass_ticket", invoiceItemName: "综合体验服务费", taxCategory: "综合体验/娱乐平台服务", evidenceRequired: "购票页截图、用户协议、对账单", invoiceable: true },
-    { incomeType: "giveaway_transfer", revenueStream: null, invoiceItemName: "内部领用单/成本转付单", taxCategory: "内部成本转付", evidenceRequired: "核销记录、内部结算价快照", invoiceable: false },
+    { incomeType: "marketing", revenueStream: null, invoiceItemName: "营销成本", taxCategory: "营销成本", evidenceRequired: "", invoiceable: false },
     { incomeType: "points_issuance", revenueStream: null, invoiceItemName: "积分发行费", taxCategory: "积分发行费", evidenceRequired: "", invoiceable: true },
   ],
   overIssued: [
@@ -161,12 +161,20 @@ describe("开票清单 ADM-STL-002", () => {
     errors.mockRestore();
   });
 
-  it("规则表把内部成本转付标为不开票", async () => {
+  it("规则表把营销成本标为不开票", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("settlement-invoice-rule-table")).toBeTruthy());
     const rules = screen.getByTestId("settlement-invoice-rule-table");
-    expect(rules.textContent).toContain("内部领用单/成本转付单");
+    expect(rules.textContent).toContain("营销成本");
     expect(rules.textContent).toContain("不开票（内部单据）");
+  });
+
+  // 第十八批 CD 段复核：V760 停用通票赠送权益兑付「不开票」后，固定说明只写营销成本一类。
+  it("固定说明不再写通票赠送权益兑付不开票", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("settlement-invoice-rule-table")).toBeTruthy());
+    expect(document.body.textContent).not.toContain("通票赠送权益兑付是娱乐平台公司与提供商户之间的内部成本转付");
+    expect(document.body.textContent).toContain("会员积分／门票折扣券是营销成本，不进对外开票清单");
   });
 
   // 18AZ 收尾复核（控制席补充 c；SettlementInvoiceService.generateForBill 第 ③ 步：开票主体＝该业态份额归属主体，购方＝娱乐平台公司）：
@@ -201,5 +209,21 @@ describe("开票清单 ADM-STL-002", () => {
     expect(detail()).toContain("供货货款");
     expect(detail()).not.toMatch(/staff_remuneration|dispatch_commission_transfer|inventory_transfer|goods/);
     expect(screen.getByTestId("settlement-invoice-rule-table").textContent).toContain("人员所属主体（购方为拨付酒吧）");
+  });
+
+  // 第十八批 CD 段第 402 条 402-R3（PGM:287「界面全中文」；BSM:1201「商户之间也可借调货物」）：商户之间借调买断货款与借用物赔偿行的来源显示中文名。
+  it("商户借调货款与赔偿行显示中文来源", async () => {
+    const items = { items: [
+      { id: "sii_lg_lnd", billId: null, settlementItemId: null, projectId: "p1", periodStart: "2026-06-01", periodEnd: "2026-06-30",
+        incomeType: "goods", subjectEntityId: "be_lender", subjectName: "借出酒吧经营公司", invoiceItemName: "借调开票项目",
+        taxCategory: "借调税目", evidenceRequired: "对账单", amountCent: 3500, vatRateBps: 0, vatAmountCent: 0,
+        culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0, status: "pending", invoiceNo: null, remark: null,
+        buyerEntityId: "be_borrower", buyerName: "借入酒吧经营公司", ledgerSource: "inventory_lending" },
+    ], page: 1, pageSize: 200, total: 1 };
+    renderPage(SUMMARY, items);
+    const detail = () => screen.queryAllByTestId("settlement-invoice-item-table").map((t) => t.textContent ?? "").join("");
+    await waitFor(() => expect(detail()).toContain("供货货款"));
+    expect(detail()).toContain("商户借调货款与赔偿");
+    expect(detail()).not.toMatch(/inventory_lending/);
   });
 });

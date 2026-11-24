@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -316,8 +316,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
         <h3>开票主体与税目映射规则</h3>
         <p>
           清单里每一项的开票主体、发票项目名称、凭证要件按下表规则生成；税率取自结算配置中心的税务配置（后台可改）。
-          标「不开票」的两类为内部单据：通票赠送权益兑付是娱乐平台公司与提供商户之间的内部成本转付，
-          会员积分／门票折扣券是营销成本，两者都不进对外开票清单。
+          标「不开票」的为内部单据：会员积分／门票折扣券是营销成本，不进对外开票清单。
         </p>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="settlement-invoice-rule-table">
