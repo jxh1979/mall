@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.09",
+    "version": "V1.10",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -6376,7 +6376,7 @@
         ],
         "operationId": "listEvidenceEvents",
         "summary": "事件查询",
-        "description": "第十八批 BA 段第 324 条 324-R2（PGM:899；PGM:682；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户的证据事件；其余不挂商户的账号按 evidence.event.view 可触及的项目，看这些项目内商户的证据事件；不带商户的证据事件：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。",
+        "description": "第十八批 BA 段第 324 条 324-R2（PGM:899；PGM:682；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户的证据事件；其余不挂商户的账号按 evidence.event.view 可触及的项目，看这些项目内商户的证据事件；不带商户的证据事件：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的证据事件，发生时间取 occurred_at，total 同口径。",
         "x-permission": "evidence.event.view",
         "x-data-scope": "project-object",
         "x-terminal-allowed": [
@@ -6511,7 +6511,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）：按商户范围判的对象类型（经销准入、经销多付款与单列口径以外，如酒吧账单）最高权限看任一商户的时间线，不按商户范围。"
+        "description": "dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）：按商户范围判的对象类型（经销准入、经销多付款与单列口径以外，如酒吧账单）最高权限看任一商户的时间线，不按商户范围。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，时间线里的操作留痕、证据事件、复核只列发生在时段内的（操作留痕取 occurred_at、证据事件取事件发生时刻 occurred_at、复核取建立时刻 created_at），附件随所属对象照常列出。"
       }
     },
     "/api/v1/finance/ar-ap-items": {
@@ -18939,7 +18939,7 @@
         ],
         "operationId": "listIssuedEntitlements",
         "summary": "查询已发放权益",
-        "description": "用于查询已发放权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询已发放权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取出票时刻 created_at。",
         "x-permission": "ticket.verify.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -18969,7 +18969,7 @@
         ],
         "operationId": "listTicketOrders",
         "summary": "查询票务订单",
-        "description": "用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 响应订单含可空 project_id 项目快照；未知项目不能借操作人范围猜定。 第十八批 N 段 120-R2（DEC-R7-05「售票型触摸屏一体机能力补「订单查询」」；BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单……」）：可带 buyer_phone 只列该购票手机号的订单（去空格、横线后按盲索引精确匹配，数据范围口径不变），出参购票手机号照旧掩码；售票一体机上授权服务人员按客人手机号查订单用。",
+        "description": "用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 响应订单含可空 project_id 项目快照；未知项目不能借操作人范围猜定。 第十八批 N 段 120-R2（DEC-R7-05「售票型触摸屏一体机能力补「订单查询」」；BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单……」）：可带 buyer_phone 只列该购票手机号的订单（去空格、横线后按盲索引精确匹配，数据范围口径不变），出参购票手机号照旧掩码；售票一体机上授权服务人员按客人手机号查订单用。第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取下单时刻 created_at。",
         "x-permission": "ticket.order.read",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19802,7 +19802,7 @@
         ],
         "operationId": "listTicketRefunds",
         "summary": "查询退款单列表",
-        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。每行带 payout_items（[{channel, amount_cent}]）：ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回原卡、不在其中，财务按此打款，不按整笔 refund_amount_cent。未分笔的为空。第十八批 AH 段 256-R1：每行另带 payout_result（财务确认拨付时填的原路退回结果；储值部分当场回原卡的自动成功退款与尚未确认拨付的为空）。",
+        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。每行带 payout_items（[{channel, amount_cent}]）：ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回原卡、不在其中，财务按此打款，不按整笔 refund_amount_cent。未分笔的为空。第十八批 AH 段 256-R1：每行另带 payout_result（财务确认拨付时填的原路退回结果；储值部分当场回原卡的自动成功退款与尚未确认拨付的为空）。第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取退款发起时刻 created_at。",
         "x-auth-context": "staff-token",
         "x-permission": "ticket.refund.view",
         "x-data-scope": "project-order",
@@ -20041,7 +20041,7 @@
         ],
         "operationId": "listTicketSafetyEvents",
         "summary": "查询通票安全事件",
-        "description": "TK-05 通票安全事件台账（待批准在前）：原因、当时情形、处理结论、申请人、批准人及其依据（当班夜班值班经理 / 夜班值班经理的上级 / 最高权限）。商户范围只见本商户受理订单的事件。",
+        "description": "TK-05 通票安全事件台账（待批准在前）：原因、当时情形、处理结论、申请人、批准人及其依据（当班夜班值班经理 / 夜班值班经理的上级 / 最高权限）。商户范围只见本商户受理订单的事件。第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取申请时刻 requested_at。",
         "x-auth-context": "staff-token",
         "x-permission": "ticket.refund.view",
         "x-data-scope": "project-order",
@@ -21546,7 +21546,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 anomaly 记录带 anomaly_of_verification_id（原成功核销）、anomaly_resolution（null=待主管处置 / restored 更正后恢复 / voided_reversed 作废并冲正）、anomaly_resolved_by、anomaly_resolved_at、anomaly_resolution_reason。 第十八批 AI 段 236-R1（ENUM:54「核销或结算时锁定当时版本」）：每条记录另带 settlement_catalog_entry_id（可空）——按内部结算价核销成功时所用内部结算价目录行（internal_price_catalog.id＝审批版本，补偿补发履约按目录锁价的同记）；票面价或协议价取价、商户让利专属直付的核销，以及冲正、异常复核等其余记录为空。"
+        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 anomaly 记录带 anomaly_of_verification_id（原成功核销）、anomaly_resolution（null=待主管处置 / restored 更正后恢复 / voided_reversed 作废并冲正）、anomaly_resolved_by、anomaly_resolved_at、anomaly_resolution_reason。 第十八批 AI 段 236-R1（ENUM:54「核销或结算时锁定当时版本」）：每条记录另带 settlement_catalog_entry_id（可空）——按内部结算价核销成功时所用内部结算价目录行（internal_price_catalog.id＝审批版本，补偿补发履约按目录锁价的同记）；票面价或协议价取价、商户让利专属直付的核销，以及冲正、异常复核等其余记录为空。第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取核销时刻 created_at。"
       }
     },
     "/api/v1/ticketing/verifications/{id}/reverse": {
@@ -47275,7 +47275,7 @@
         "x-auth-context": "staff-token",
         "operationId": "queryAuditOperationEvents",
         "summary": "跨对象查询操作留痕",
-        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.view 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。",
+        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.view 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效。",
         "parameters": [
           {
             "name": "business_type",
@@ -47384,7 +47384,7 @@
         "x-auth-context": "staff-token",
         "operationId": "exportAuditOperationEvents",
         "summary": "导出操作留痕（敏感）",
-        "description": "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与取数所按的 merchant_id、project_ids（按项目口径取数时为项目集合，否则为空）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.export 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。",
+        "description": "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与取数所按的 merchant_id、project_ids（按项目口径取数时为项目集合，否则为空）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.export 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只导出时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效；导出记录 filters 记 data_window，可编辑版重取同按时段取数。",
         "parameters": [
           {
             "name": "business_type",
@@ -122486,7 +122486,7 @@
     "authContextExtension": "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文",
     "requestBodyRule": "所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入",
     "idempotencyRule": "x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕",
-    "auditDataWindowRule": "外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。",
+    "auditDataWindowRule": "外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款、操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。",
     "terminalAllowedRule": "x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码加受控第十一端 dealer_portal（独立经销商 Web 门户，CG-11d）；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。",
     "authContextRule": "每个 operation 必须显式声明 x-auth-context，允许值为 public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或 x-data-scope 代替认证上下文。"
   },

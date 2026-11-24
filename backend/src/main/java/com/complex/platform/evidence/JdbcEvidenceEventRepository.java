@@ -94,6 +94,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                     + " OR (merchant_id IS NULL AND " + JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE + "))";
             params.addValue("project_scope", projectScope);
         }
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R2（PGM:682；第十八批裁决 77）：外审数据时段按证据事件发生时刻（不按接收时刻），总数与分页行同口径。
+        where += com.complex.platform.access.AuditDataWindow.andInstant("occurred_at");
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM evidence_events" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
@@ -176,6 +178,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
     @Override
     public List<EvidenceTimelineItem> listTimeline(String objectType, String objectId, String merchantId) {
         String merchantFilter = merchantId != null ? " AND merchant_id = :merchant_id" : "";
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R2（第十八批裁决 77）：外审数据时段在各子查询里按各自发生时刻——留痕 occurred_at、证据事件 occurred_at
+        // （WHERE 里是表列，不是输出别名）、复核 created_at；附件是所属对象的凭证资料，随所属对象照常列出、不拼。
         String sql = """
                 SELECT item_type, reference_id, event_name, result, summary, occurred_at
                   FROM (
@@ -188,7 +192,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM audit_events
                          WHERE business_type = :object_type
                            AND business_id = :object_id
-                """ + merchantFilter + """
+                """ + merchantFilter + com.complex.platform.access.AuditDataWindow.andInstant("occurred_at") + """
                         UNION ALL
                         SELECT 'evidence_event' AS item_type,
                                id AS reference_id,
@@ -199,7 +203,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM evidence_events
                          WHERE payload->>'business_type' = :object_type
                            AND payload->>'business_id' = :object_id
-                """ + merchantFilter + """
+                """ + merchantFilter + com.complex.platform.access.AuditDataWindow.andInstant("occurred_at") + """
                         UNION ALL
                         SELECT 'attachment' AS item_type,
                                id AS reference_id,
@@ -221,7 +225,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM evidence_reviews
                          WHERE business_type = :object_type
                            AND business_id = :object_id
-                """ + merchantFilter + """
+                """ + merchantFilter + com.complex.platform.access.AuditDataWindow.andInstant("created_at") + """
                   ) timeline
                  ORDER BY occurred_at, item_type, reference_id
                 """;

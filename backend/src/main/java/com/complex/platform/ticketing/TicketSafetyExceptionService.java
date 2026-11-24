@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -171,11 +171,12 @@ public class TicketSafetyExceptionService {
     List<TicketSafetyEventRecord> list() {
         AccessActor actor = authorizationService.currentActor();
         String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+        // 第十八批 CM 段第 372 条第 2 段 372-S2-R3（第十八批裁决 77）：外审数据时段按申请时刻；项目可触及过滤照旧在其后。
         List<TicketSafetyEventRecord> rows = jdbc.query("""
                 SELECT e.* FROM ticket_safety_events e JOIN ticket_orders o ON o.id = e.order_id
-                 WHERE (CAST(:merchant AS text) IS NULL OR o.merchant_id = :merchant)
+                 WHERE (CAST(:merchant AS text) IS NULL OR o.merchant_id = :merchant)%s
                  ORDER BY CASE e.status WHEN 'pending' THEN 0 ELSE 1 END, e.requested_at DESC, e.id
-                """, new MapSqlParameterSource("merchant", merchant), this::map);
+                """.formatted(com.complex.platform.access.AuditDataWindow.andInstant("e.requested_at")), new MapSqlParameterSource("merchant", merchant), this::map);
         if (merchant != null || authorizationService.isMasterAuthority(actor)) {
             return rows;
         }

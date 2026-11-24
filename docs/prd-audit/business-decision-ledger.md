@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.38
+文档版本：V1.39
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12611,3 +12611,90 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本段增量：新增 0 个操作、0 个 schema，无迁移。
 - 18BZ 合并前变基（2026-11-24）：本段自 6068f50e 变基到 origin/main 85ae6705；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.09、决策台账 V1.38，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BZ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 33a533b2 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7335 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 11:43 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CM 落地位置补记（2026-11-20）：第十八批 CM 段（batch111）按 18CM 只读设计实现待开发清单第 372 条（外审数据时段第 2 段（操作记录与证据＋票务核销））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CM 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CM 段，batch111）实现待开发清单第 372 条（18CM 只读设计 b111-audit/d7-cm.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 77 定）。控制席判定：照设计做 372-S2-R1、372-S2-R2、372-S2-R3、372-S2-R4（R1～R3 先后串行做、R4 收尾）。第 372 条按第十八批裁决 77（按数据发生时间）分段，第 1 段底座与财务域已由 18BX 合入（AuditDataWindowService、AuditDataWindowWebMvcConfig 等照现码复用，不另起时段判定口径）。本段工作树已快进到 18BT（第 370 条不带商户留痕与证据事件的可见范围，JdbcAuditEventRepository.searchOperationEvents、JdbcEvidenceEventRepository.listPage）与 18CH（第 411、412 条证据登记商户归属、系统作业与第三方系统留痕）合并后的主干，设计里引用的行号以现码 grep 为准，时段条件与 18BT 的范围条件叠加、不替换。设计旁见①（票务订单、已发放权益、核销记录三个后台清单不按项目隔离）②（审计事件页没有操作留痕的服务端导出）已登记待开发清单第 456、457 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 593bdf7b 开工（第七轮），变基到 e936ab4a 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CM 落地位置补记（第 372 条第 2 段：操作记录与证据＋票务核销；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增操作 0 个，迁移 0 个（预留 V796～V799 未用），改 9 个既有操作描述 queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents、getEvidenceTimeline、listTicketOrders、listIssuedEntitlements、listTicketVerifications、listTicketRefunds、listTicketSafetyEvents，改 1 条契约规则 auditDataWindowRule 的已承载清单）
+  372-S2-R1 操作留痕查询与导出（含可编辑版重取）按外审数据时段承载
+  - 改法：
+    - evidence 包 JdbcAuditEventRepository.searchOperationEvents 在排序前拼 AuditDataWindow.andInstant("occurred_at")：已划定时段的外审账号只取时段内发生的留痕，与 from、to 同时生效。queryAuditOperationEvents、exportAuditOperationEvents 与可编辑版重取 AuditController.viewTable 都经 AuditEventService.searchOperationEvents 落到这里。
+    - AuditController.operationEventsTable 的导出记录 filters 加 data_window，记所用外审数据时段，无时段为空；写法同 FinanceService.arApTable。audit.operation_log.exported 的 row_count 即时段内条数。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - PGM:683「审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。」
+    - PGM:686「每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。」
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录」
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests.operationEventsListOnlyInsideWindowWhileUnwindowedStaffSeesAll、operationEventsExportRecordsWindowAndCountsOnlyEventsInsideIt。
+  372-S2-R2 证据事件清单与证据时间线按外审数据时段承载
+  - 改法：
+    - JdbcEvidenceEventRepository.listPage 在项目谓词后拼 AuditDataWindow.andInstant("occurred_at")，按证据事件发生时刻，不按接收时刻；COUNT 与分页行共用同一 where，total 同口径。
+    - JdbcEvidenceEventRepository.listTimeline 在各子查询的商户条件后就地拼时段：操作留痕按 occurred_at，证据事件按事件发生时刻 occurred_at，复核按建立时刻 created_at；附件是所属对象的凭证资料，随所属对象照常列出、不拼。时间线留痕 evidence.timeline_viewed 的 count 为过滤后条数。
+    - EvidenceEventService.evidenceScope 不改。
+  - 依据：
+    - PGM:682（同上）；PGM:683（同上）。
+    - 第十八批裁决 77 所选选项原文「外审账号在各清单、明细和导出里只看得到这段时间内发生的记录；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests.evidenceEventsListByOccurredAtWithTotalOnSameBasis、evidenceTimelineKeepsAuditEventsAndReviewsInsideWindowAndListsAttachmentsWithTheirObject。
+  372-S2-R3 票务订单、已发放权益、核销记录、门票退款台账、通票安全事件清单按外审数据时段承载
+  - 改法：
+    - ticketing 包 JdbcTicketingRepository 就地改四个清单查询：listTicketOrders 按下单时刻 created_at，listIssuedEntitlements 按出票时刻 created_at，listVerifications 按核销时刻 created_at，listTicketRefunds 按退款发起时刻 created_at，各拼 AuditDataWindow.andInstant。
+    - TicketSafetyExceptionService.list 按申请时刻 requested_at 拼时段，项目可触及过滤照旧在其后。
+    - 清单 total 由 TicketingOperationExecutor.readPage 取返回条数，与行同口径。
+    - 票种、价格规则、权益模板等票务规则与资料入口，以及 getAuditLabels，照常显示、不改。
+  - 依据：
+    - PGM:682（同上）
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests.ticketOrdersEntitlementsVerificationsRefundsAndSafetyEventsFollowWindow。
+  372-S2-R4 契约与文档同步
+  - 改法：
+    - 上列 9 个操作描述末尾各补一句本段口径。
+    - x-contract-rules 的 auditDataWindowRule「已承载」清单补「操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件」。
+    - docs/platform-governance-prd-v0.1.md §4「审计人员」条补分段承载进度；data-isolation 规格审计人员行改为「财务域、操作记录与证据、票务核销已按时段过滤」；html-prd-coverage PGM-0095 行补本段落点、尚未承载的业务域改指段 3～段 6。
+  - 依据：PGM:682；第十八批裁决 77「十二个业务域上百个读取入口逐个加，分几轮做完」。
+  不做（按设计 not_doing）：
+  - readEvidenceAttachmentFile 不按附件自身时刻另判，附件随所属记录显示。
+  - getTraceabilityAutoCaptureRate、listTicketInstances、listTicketRefundLines、getTicketCredential 在客户端没有调用方。
+  - listTicketOrdersByMerchant、listTicketOrdersByBuyerPhone 不加时段（外审不挂商户；后台票务订单页不传 buyer_phone）。
+  - 票务三个清单不按项目隔离、审计事件页没有服务端导出：已由控制席登记待开发清单第 456、457 条。
+- 契约（本段新增操作 0 个、迁移 0 个；改 9 个既有操作的描述和 1 条契约总规则；权限码、x-audit-event、x-data-scope、x-auth-context、x-terminal-allowed、x-failure-codes 都不变；不新增错误码，OUT_OF_AUDIT_DATA_WINDOW 本段不用）：
+  372-S2-R1
+  - 改法：queryAuditOperationEvents 描述末尾补「外部审计账号划定了数据时段的，只列时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效」。exportAuditOperationEvents 描述末尾补「只导出时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效；导出记录 filters 记 data_window，可编辑版重取同按时段取数」。
+  - 对应代码：JdbcAuditEventRepository.searchOperationEvents 拼 AuditDataWindow.andInstant；AuditController.operationEventsTable 记 data_window；可编辑版重取经 AuditController.viewTable。
+  - 依据：PGM:682「外部审计/监管只能查看划定的范围与时间段」；PGM:683「审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」。
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests。
+  372-S2-R2
+  - 改法：listEvidenceEvents 描述末尾补「只列时段内发生的证据事件，发生时间取 occurred_at，total 同口径」。getEvidenceTimeline 描述末尾补「时间线里的操作留痕、证据事件、复核只列发生在时段内的（操作留痕取 occurred_at、证据事件取事件发生时刻 occurred_at、复核取建立时刻 created_at），附件随所属对象照常列出」。
+  - 对应代码：JdbcEvidenceEventRepository.listPage、JdbcEvidenceEventRepository.listTimeline。
+  - 依据：同 R1，即 PGM:682、PGM:683、第十八批裁决 77。
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests。
+  372-S2-R3
+  - 改法：listTicketOrders、listIssuedEntitlements、listTicketVerifications、listTicketRefunds、listTicketSafetyEvents 描述末尾各补「第十八批 CM 段第 372 条第 2 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取 …」，依次为下单时刻 created_at、出票时刻 created_at、核销时刻 created_at、退款发起时刻 created_at、申请时刻 requested_at。
+  - 对应代码：JdbcTicketingRepository.listTicketOrders、listIssuedEntitlements、listVerifications、listTicketRefunds；TicketSafetyExceptionService.list。
+  - 依据：PGM:682；第十八批裁决 77。
+  - 测试：AuditDataWindowEvidenceTicketingJdbcIntegrationTests。
+  372-S2-R4（契约部分）
+  - 改法：x-contract-rules 的 auditDataWindowRule 在「已承载：……」清单末尾就地补「操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件」。yaml、json 同步，不用锚点。
+  - 依据：第十八批裁决 77。
+  - 门禁：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全绿；yaml 与 json 深比较一致。
+- 18CM 汇合段（J）：本段新增 0 个操作，没有迁移（预留 V796～V799 不用）。改了 9 个既有操作的说明（queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents、getEvidenceTimeline、listTicketOrders、listIssuedEntitlements、listTicketVerifications、listTicketRefunds、listTicketSafetyEvents）和契约总规则 auditDataWindowRule；schema 与 response 没有改动。e2e 不用改：前端页面没改，导出 filters 的 data_window 中文名段 1 已在 FieldLabels 与 fieldLabels 里配好；tests/e2e 的 mock 按路径返回清单，响应结构没变；也没有重拍视觉基线。门禁结论（在 593bdf7b 基线上实跑）：后端全量 0 红；apps/web 的 typecheck 与 vitest 全量 0 红；客人三个工作区单测 0 红；安卓员工端 gradle test 0 红，android-app 编译通过；镜像里 chromium 跑五份后台 e2e spec（full-admin-mvp、full-admin-remaining、full-admin-ui-hardening、full-admin-visual、property-fee-evidence）全部通过；在镜像里重生成 operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 后与工作树无差异，verify:p0-contract 整条通过；yaml 与 json 深比较一致，操作数不变；git diff --check 通过。
+- 372-S2-R4（文档组，第十八批 CM 段第 372 条第 2 段）
+  - 改法与落地位置：
+    - 平台治理层 PRD（platform-governance-prd）§4「角色与使用场景」审计人员条的实现现状句：在「分段承载进度」财务域之后补一句——操作记录与证据、票务核销已承载。各入口按以下时刻取时段：
+      - 操作留痕查询与导出、可编辑版重取：按留痕发生时刻；带起止时间的，起止时间与时段同时生效；导出记录筛选记下所用时段。
+      - 证据事件清单：按事件发生时刻。
+      - 证据时间线：留痕、证据事件、复核各按自己的发生时刻；附件随所属对象照常列出。
+      - 票务订单、已发放权益、核销记录、门票退款台账：按各自建立时刻。
+      - 通票安全事件：按申请时刻。
+      - 票种、价格规则、权益模板等票务规则照常显示。
+    - 同一 PRD 修订表加一行。
+    - 多租户数据隔离规格（data-isolation-and-tenant-scope-security-spec）§10 审计人员行「落地承接」：「财务域已按时段过滤」改为「财务域、操作记录与证据、票务核销已按时段过滤」；其余业务域仍分段承载中。
+  - 对应代码：JdbcAuditEventRepository.searchOperationEvents、AuditController.operationEventsTable、JdbcEvidenceEventRepository.listPage 与 listTimeline、JdbcTicketingRepository 的 listTicketOrders、listIssuedEntitlements、listVerifications、listTicketRefunds，以及 TicketSafetyExceptionService.list。
+  - 对应契约：queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents、getEvidenceTimeline、listTicketOrders、listIssuedEntitlements、listTicketVerifications、listTicketRefunds、listTicketSafetyEvents，以及 x-contract-rules.auditDataWindowRule。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - PGM:683「审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。」
+    - 第十八批裁决 77「按数据发生时间」。
+  - 本组增量：新增操作 0 个，迁移 0 个，没有测试类。
+  - 门禁：verify:data-isolation-spec、verify-full-admin-page-matrix、git diff --check 通过。
+- 18CM 合并前变基（2026-11-24）：本段自 e936ab4a 变基到 origin/main f8d8260e；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.10、决策台账 V1.39，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 a839c766 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7340 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 12:01 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
