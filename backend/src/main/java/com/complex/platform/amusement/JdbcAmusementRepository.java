@@ -1,8 +1,9 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.access.AuditDataWindow;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -853,6 +854,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 """;
         if (!unrestricted) sql += " AND s.complex_id IN (:complex_ids)";
         if (merchantId != null) sql += " AND p.merchant_id = :merchant_id";
+        sql += AuditDataWindow.andDate("s.business_date"); // 第十八批 CP 段第 372 条第 5 段 372-S5-R1（第十八批裁决 77）：外审数据时段按场次营业日
         sql += " ORDER BY s.start_time DESC, s.id";
         return jdbcTemplate.query(sql, new MapSqlParameterSource()
                 .addValue("complex_ids", complexIds).addValue("merchant_id", merchantId), rowMapper::mapSession);
@@ -1348,6 +1350,7 @@ class JdbcAmusementRepository implements AmusementRepository {
             sql.append(" AND av.created_at < :date_to");
             params.addValue("date_to", timestampWithTimeZone(query.dateTo().plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)));
         }
+        sql.append(AuditDataWindow.andInstant("av.created_at")); // 第十八批 CP 段第 372 条第 5 段 372-S5-R2：外审数据时段按核销时刻，与日期参数取交集
         sql.append(" ORDER BY av.created_at DESC, av.id");
         return jdbcTemplate.query(sql.toString(), params, rowMapper::mapVerificationListItem);
     }

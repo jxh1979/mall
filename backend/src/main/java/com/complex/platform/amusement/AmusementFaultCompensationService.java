@@ -1,10 +1,11 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.dto.CompensationBatchConfirmRequest;
 import com.complex.platform.amusement.dto.CompensationBatchInitiateRequest;
@@ -299,7 +300,9 @@ public class AmusementFaultCompensationService {
         AmusementFaultCompensationBatchRecord batch = repository.findBatchById(batchId)
                 .orElseThrow(() -> ApiException.notFound("COMPENSATION_BATCH_NOT_FOUND", "补偿批次不存在"));
         requireProjectInScope(batch.projectId(), reach(AmusementParkWideFaultService.PERMISSION_VIEW));
-        List<AmusementFaultCompensationItemRecord> items = repository.listItems(batch.id());
+        // 第十八批 CP 段第 372 条第 5 段 372-S5-R3（第十八批裁决 77）：外审数据时段按补偿记录生成时刻（仓储 listItems 另被发放流程使用，在此内存筛）
+        List<AmusementFaultCompensationItemRecord> items = repository.listItems(batch.id()).stream()
+                .filter(item -> AuditDataWindow.covers(item.createdAt())).toList();
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
     }
 

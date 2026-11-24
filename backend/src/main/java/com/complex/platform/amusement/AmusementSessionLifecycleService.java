@@ -1,7 +1,8 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -308,7 +309,8 @@ public class AmusementSessionLifecycleService {
     public List<Ending> endings(String sessionId) {
         return auditedRead(VIEW,"amusement_session",sessionId,()->{
             requireScope(sessionId,VIEW,true);
-            return jdbc.query("SELECT id FROM amusement_session_endings WHERE session_id=? ORDER BY confirmed_at",
+            // 第十八批 CP 段第 372 条第 5 段 372-S5-R1（第十八批裁决 77）：外审数据时段按结束原件营业日；未履约事项按自身生成时刻
+            return jdbc.query("SELECT id FROM amusement_session_endings WHERE session_id=?"+AuditDataWindow.andDate("business_date")+" ORDER BY confirmed_at",
                     (rs,n)->findEnding(rs.getString(1)),sessionId);
         });
     }
@@ -318,8 +320,8 @@ public class AmusementSessionLifecycleService {
             requireScope(sessionId,VIEW,true);
             return jdbc.queryForList("""
                 SELECT f.* FROM amusement_session_followups f JOIN amusement_session_endings e ON e.id=f.ending_id
-                 WHERE e.session_id=? ORDER BY f.created_at,f.id
-                """,sessionId);
+                 WHERE e.session_id=?%s ORDER BY f.created_at,f.id
+                """.formatted(AuditDataWindow.andInstant("f.created_at")),sessionId);
         });
     }
 
@@ -334,9 +336,9 @@ public class AmusementSessionLifecycleService {
             return jdbc.queryForList("""
                 SELECT l.*,p.merchant_id FROM amusement_concurrent_reset_log l
                   JOIN amusement_projects p ON p.id=l.project_id
-                 WHERE l.complex_id IS NOT NULL AND (?::text IS NULL OR l.project_id=?)
+                 WHERE l.complex_id IS NOT NULL AND (?::text IS NULL OR l.project_id=?)%s
                  ORDER BY l.reset_at DESC,l.id
-                """,projectId,projectId).stream()
+                """.formatted(AuditDataWindow.andInstant("l.reset_at")),projectId,projectId).stream() // 第十八批 CP 段第 372 条第 5 段 372-S5-R2：外审数据时段按释放执行时刻
                     .filter(row->merchant==null?reach.covers((String)row.get("complex_id")):merchant.equals(row.get("merchant_id")))
                     .toList();
         });

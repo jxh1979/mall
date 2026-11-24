@@ -1,7 +1,8 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -169,7 +170,9 @@ public class AmusementDeviceClassService {
     public List<Change> history(String projectId) {
         String project = requireText(projectId, "project_id");
         scope.requireReadScope(project, VIEW);
-        return jdbc.query("SELECT * FROM amusement_device_class_changes WHERE project_id=? ORDER BY requested_at, id", this::map, project);
+        // 第十八批 CP 段第 372 条第 5 段（控制席补定，第十八批裁决 77）：外审数据时段按申请时刻
+        return jdbc.query("SELECT * FROM amusement_device_class_changes WHERE project_id=?" + AuditDataWindow.andInstant("requested_at")
+                + " ORDER BY requested_at, id", this::map, project);
     }
 
     private Change find(String id) {

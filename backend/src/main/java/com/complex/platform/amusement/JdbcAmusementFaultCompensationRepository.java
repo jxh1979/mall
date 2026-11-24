@@ -1,7 +1,8 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
+import com.complex.platform.access.AuditDataWindow;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -105,7 +106,8 @@ public class JdbcAmusementFaultCompensationRepository {
     }
 
     public List<AmusementFaultCompensationBatchRecord> listBatches(String faultId) {
-        return jdbcTemplate.query(BATCH_SELECT + " WHERE fault_id = :fault_id ORDER BY created_at DESC",
+        // 第十八批 CP 段第 372 条第 5 段 372-S5-R3（第十八批裁决 77）：外审数据时段按批次生成时刻（按事件列批次同）
+        return jdbcTemplate.query(BATCH_SELECT + " WHERE fault_id = :fault_id" + AuditDataWindow.andInstant("created_at") + " ORDER BY created_at DESC",
                 new MapSqlParameterSource("fault_id", faultId), this::mapBatch);
     }
 
@@ -113,9 +115,9 @@ public class JdbcAmusementFaultCompensationRepository {
     public List<AmusementFaultCompensationBatchRecord> listBatchesByEvent(String eventType, String projectId) {
         return jdbcTemplate.query(BATCH_SELECT + """
                  WHERE (CAST(:event_type AS text) IS NULL OR event_type = :event_type)
-                   AND (CAST(:project_id AS text) IS NULL OR project_id = :project_id)
+                   AND (CAST(:project_id AS text) IS NULL OR project_id = :project_id)%s
                  ORDER BY CASE status WHEN 'pending_confirmation' THEN 0 ELSE 1 END, created_at DESC
-                """, new MapSqlParameterSource().addValue("event_type", eventType).addValue("project_id", projectId), this::mapBatch);
+                """.formatted(AuditDataWindow.andInstant("created_at")), new MapSqlParameterSource().addValue("event_type", eventType).addValue("project_id", projectId), this::mapBatch);
     }
 
     // ---------- 补偿记录 ----------
