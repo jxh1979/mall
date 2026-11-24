@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.20
+  version: V1.21
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -5865,7 +5865,7 @@ paths:
         - floor-plan
       operationId: listFloorPlanImports
       summary: 查询平面图导入任务
-      description: 返回指定平面图的 SVG 或标准 JSON 导入任务列表。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
+      description: 返回指定平面图的 SVG 或标准 JSON 导入任务列表。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。第十八批 CQ 段第 372 条第 6 段 372-S6-R3（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内建立的导入任务，发生时间取建立时刻 created_at，items 与 total 同一条件；平面图与形状照常显示。
       x-permission: floor_plan.import.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -5934,7 +5934,9 @@ paths:
         - floor-plan
       operationId: getFloorPlanImportDetails
       summary: 查询导入候选和错误
-      description: 返回导入任务解析出的候选区域和错误明细，供人工复核。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
+      description: 返回导入任务解析出的候选区域和错误明细，供人工复核。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。第十八批 CQ 段第 372 条第 6 段 372-S6-R3（第十八批裁决 77）：外部审计账号划定了数据时段的，导入任务建立时刻 created_at 不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在平面图项目与商户判定、任务归属核对之后判；候选与错误明细随该任务列出。
+      x-failure-codes:
+        - OUT_OF_AUDIT_DATA_WINDOW
       x-permission: floor_plan.import.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -9070,7 +9072,7 @@ paths:
         - inventory
       operationId: listTransferOrders
       summary: "跨主体调拨与借调单列表"
-      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：列出调拨（supply）与借调（lending）单，按建单时间倒序，按单上所属项目与当事商户过滤（第十八批 AO 段第 250 条 250-R1）：商户账号只见本商户为出让方或接收方的单；非商户账号只见按 inventory.transfer_order.view 可触及项目的单（平台管理员全部）；总数按过滤后的条数；列表不带明细行，明细见 GET /api/v1/inventory/transfer-orders/{order_id}。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：列出调拨（supply）与借调（lending）单，按建单时间倒序，按单上所属项目与当事商户过滤（第十八批 AO 段第 250 条 250-R1）：商户账号只见本商户为出让方或接收方的单；非商户账号只见按 inventory.transfer_order.view 可触及项目的单（平台管理员全部）；总数按过滤后的条数；列表不带明细行，明细见 GET /api/v1/inventory/transfer-orders/{order_id}。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。第十八批 CQ 段第 372 条第 6 段 372-S6-R2（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内建立的调拨与借调单，发生时间取建单时刻 created_at，items 与 total 同一条件。"
       x-auth-context: staff-token
       x-permission: inventory.transfer_order.view
       x-data-scope: project
@@ -9094,7 +9096,7 @@ paths:
         - inventory
       operationId: getTransferOrder
       summary: "调拨与借调单详情"
-      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：按单号读取一张调拨或借调单及其明细行（lines）。单号不存在 404 TRANSFER_ORDER_NOT_FOUND。按单上所属项目与当事商户判可见（第十八批 AO 段第 250 条 250-R1，口径同 listTransferOrders）：商户账号看非本商户为出让方或接收方的单 403 CROSS_MERCHANT_FORBIDDEN「只能查看本商户为出让方或接收方的调拨单」；非商户账号看按 inventory.transfer_order.view 不可触及项目的单 403 CROSS_PROJECT_FORBIDDEN「所选项目不在本权限可触及的项目范围内」（平台管理员全部可看）。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：按单号读取一张调拨或借调单及其明细行（lines）。单号不存在 404 TRANSFER_ORDER_NOT_FOUND。按单上所属项目与当事商户判可见（第十八批 AO 段第 250 条 250-R1，口径同 listTransferOrders）：商户账号看非本商户为出让方或接收方的单 403 CROSS_MERCHANT_FORBIDDEN「只能查看本商户为出让方或接收方的调拨单」；非商户账号看按 inventory.transfer_order.view 不可触及项目的单 403 CROSS_PROJECT_FORBIDDEN「所选项目不在本权限可触及的项目范围内」（平台管理员全部可看）。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。第十八批 CQ 段第 372 条第 6 段 372-S6-R2（第十八批裁决 77）：外部审计账号划定了数据时段的，建单时刻 created_at 不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在所属项目与当事商户判定之后判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。"
       x-auth-context: staff-token
       x-permission: inventory.transfer_order.view
       x-data-scope: project
@@ -9108,6 +9110,7 @@ paths:
         - TRANSFER_ORDER_NOT_FOUND
         - CROSS_MERCHANT_FORBIDDEN
         - CROSS_PROJECT_FORBIDDEN
+        - OUT_OF_AUDIT_DATA_WINDOW
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
@@ -9747,7 +9750,7 @@ paths:
         - "inventory"
       operationId: "getTransferOrderFulfillment"
       summary: "门店要货签收结果与差异处理"
-      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量……全部数量处理完且库存、款项记录齐全后完成要货单，付款是否结清另行显示」）：返回 lines（逐行 quantity 发货、accepted_quantity 合格、rejected_quantity 拒收、short_quantity 短少、resolved_quantity 已通过复核的退回验收与损失、claimed_quantity 未驳回的退回验收与损失、reshipped_quantity 未驳回的补发、unresolved_quantity 待处理＝发货－合格－已通过的退回验收与损失）、payable_item_id（当前有效的签收货款应付：货款调减通过后为重述行，全额调减后为空）与 dispositions（全部差异处理登记）。商户账号只能查看本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非门店要货单 400 TRANSFER_NOT_REQUISITION。FS-019：借用型（lending/borrow）已收货/已归还的单也可查（借出方与借入方商户账号都可），返回 return_due_at、lines（quantity、returned_quantity 已归还、unreturnable_claimed_quantity 无法归还登记中、unreturnable_closed_quantity 实物处置已完成、outstanding_quantity 尚未归还）、returns（归还登记）与 dispositions（无法归还登记，状态 pending_counterparty/pending_supervisor/pending_review/approved/rejected/disposal_completed）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量……全部数量处理完且库存、款项记录齐全后完成要货单，付款是否结清另行显示」）：返回 lines（逐行 quantity 发货、accepted_quantity 合格、rejected_quantity 拒收、short_quantity 短少、resolved_quantity 已通过复核的退回验收与损失、claimed_quantity 未驳回的退回验收与损失、reshipped_quantity 未驳回的补发、unresolved_quantity 待处理＝发货－合格－已通过的退回验收与损失）、payable_item_id（当前有效的签收货款应付：货款调减通过后为重述行，全额调减后为空）与 dispositions（全部差异处理登记）。商户账号只能查看本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非门店要货单 400 TRANSFER_NOT_REQUISITION。FS-019：借用型（lending/borrow）已收货/已归还的单也可查（借出方与借入方商户账号都可），返回 return_due_at、lines（quantity、returned_quantity 已归还、unreturnable_claimed_quantity 无法归还登记中、unreturnable_closed_quantity 实物处置已完成、outstanding_quantity 尚未归还）、returns（归还登记）与 dispositions（无法归还登记，状态 pending_counterparty/pending_supervisor/pending_review/approved/rejected/disposal_completed）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。第十八批 CQ 段第 372 条第 6 段 372-S6-R2（第十八批裁决 77）：外部审计账号划定了数据时段的，所属调拨单建单时刻 created_at 不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在所属项目与当事方判定之后判；签收结果、归还登记与差异处理随该单列出。"
       x-permission: "inventory.transfer_order.view"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -9776,6 +9779,7 @@ paths:
       x-auth-context: "staff-token"
       x-failure-codes:
         - "CROSS_MERCHANT_FORBIDDEN"
+        - "OUT_OF_AUDIT_DATA_WINDOW"
         - "TRANSFER_NOT_REQUISITION"
         - "TRANSFER_ORDER_NOT_FOUND"
     post:
@@ -28088,7 +28092,7 @@ paths:
         - inventory
       operationId: listInventoryStocktakes
       summary: 查询库存盘点单列表
-      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：最高权限与平台管理员看全部盘点单；商户账号只看本商户库房的盘点单；不挂商户的账号（财务 BP、平台库管）看以 inventory.stocktake.view 可触及综合体内库房的盘点单（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。平台侧账号给酒吧库房建的盘点单带该酒吧商户，酒吧账号看得到。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。
+      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：最高权限与平台管理员看全部盘点单；商户账号只看本商户库房的盘点单；不挂商户的账号（财务 BP、平台库管）看以 inventory.stocktake.view 可触及综合体内库房的盘点单（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。平台侧账号给酒吧库房建的盘点单带该酒吧商户，酒吧账号看得到。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。第十八批 CQ 段第 372 条第 6 段 372-S6-R5（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列盘点营业日 business_date 在时段内的盘点单，items 与 total 同一条件。
       x-permission: inventory.stocktake.view
       x-data-scope: project
       x-terminal-allowed:
@@ -28141,7 +28145,9 @@ paths:
         - inventory
       operationId: getInventoryStocktake
       summary: 查询库存盘点单详情（含差异明细）
-      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：盘点单不存在 404 STOCKTAKE_NOT_FOUND；最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.view 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235；BSM:588）：差异行另带 has_variance_amount（差异金额不为 0 即 true，不含价格）；不持 inventory.cost.view 的读者 variance_amount_cent 为空（null），持的照常返回金额；估算、复核、纠账与过账仍按真实金额。
+      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：盘点单不存在 404 STOCKTAKE_NOT_FOUND；最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.view 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235；BSM:588）：差异行另带 has_variance_amount（差异金额不为 0 即 true，不含价格）；不持 inventory.cost.view 的读者 variance_amount_cent 为空（null），持的照常返回金额；估算、复核、纠账与过账仍按真实金额。第十八批 CQ 段第 372 条第 6 段 372-S6-R5（第十八批裁决 77）：外部审计账号划定了数据时段的，盘点营业日 business_date 不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在库房商户与综合体判定之后判；差异明细随该盘点单列出。
+      x-failure-codes:
+        - OUT_OF_AUDIT_DATA_WINDOW
       x-permission: inventory.stocktake.view
       x-data-scope: project
       x-terminal-allowed:
@@ -55323,7 +55329,7 @@ paths:
         - inventory
       operationId: listInventoryQuarantine
       summary: 查看仓库隔离库存
-      description: 隔离数量包含于stock_balance总数量内，不是新增一份库存；不得出售，须同时符合实际仓库、项目及余额货权范围。
+      description: 隔离数量包含于stock_balance总数量内，不是新增一份库存；不得出售，须同时符合实际仓库、项目及余额货权范围。第十八批 CQ 段第 372 条第 6 段 372-S6-R1（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内转入隔离的实物，发生时间取转入隔离时刻 received_at；warehouse_id 与时段同时生效，仓库选项 listQuarantineWarehouses 照常列出。
       x-permission: inventory.stock.view
       x-data-scope: project-merchant
       x-auth-context: staff-token
@@ -55400,7 +55406,7 @@ paths:
         - inventory
       operationId: listQuarantineDispositions
       summary: 查看隔离后续处置记录
-      description: 查看隔离后续处置记录
+      description: 查看隔离后续处置记录。第十八批 CQ 段第 372 条第 6 段 372-S6-R1（第十八批裁决 77）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内提出的处置方案，发生时间取提出时刻 requested_at，按处置记录自身时刻判，不另判所属隔离实物。
       x-permission: inventory.stock.view
       x-data-scope: project-merchant
       x-auth-context: staff-token
@@ -90143,7 +90149,7 @@ x-contract-rules:
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  auditDataWindowRule: 外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款、操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件、通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细、酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结、游乐场次、场次结束原件与未履约事项、游乐核销记录、游乐在玩人数释放记录、全园故障状态与其留痕、全园故障补偿批次与补偿记录、游乐当班未抽检记录、游乐设备分级申请与历史），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。
+  auditDataWindowRule: 外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款、操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件、通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细、酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结、游乐场次、场次结束原件与未履约事项、游乐核销记录、游乐在玩人数释放记录、全园故障状态与其留痕、全园故障补偿批次与补偿记录、游乐当班未抽检记录、游乐设备分级申请与历史、库存隔离实物与处置记录、跨主体调拨与借调单（含详情与签收差异处理）、库存盘点单（含差异明细）、平面图导入任务（含候选明细）），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。
   terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码加受控第十一端 dealer_portal（独立经销商 Web 门户，CG-11d）；设备能力写入
     x-device-capability，服务端/监控调用写入 x-invocation-channel。
   authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为

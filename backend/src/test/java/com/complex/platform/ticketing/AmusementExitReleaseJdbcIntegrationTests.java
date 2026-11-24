@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -322,7 +322,7 @@ class AmusementExitReleaseJdbcIntegrationTests {
         complexId = AmusementBusinessDayTestFixture.complex(jdbcTemplate);
         AmusementBusinessDayTestFixture.bind(jdbcTemplate, projectId, complexId);
         AmusementBusinessDayTestFixture.approve(jdbcTemplate, businessDays, reviews, complexId,
-                "Asia/Shanghai", 4, now.minusSeconds(3 * 86400));
+                "Asia/Shanghai", 10, now.minusSeconds(3 * 86400));
         amusementRepository.saveSession(new AmusementSessionRecord(
                 "session_amuse_" + suffix, projectId, now.minusSeconds(600), now.plusSeconds(3600),
                 0, 0, 0, "open", List.of(), now, now));

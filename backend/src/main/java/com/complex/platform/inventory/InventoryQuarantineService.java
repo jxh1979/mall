@@ -1,9 +1,10 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -174,10 +175,11 @@ public class InventoryQuarantineService {
             authorization.requirePermission("inventory.stock.view");
             requireWarehouseScope(requireText(warehouseId,"warehouse_id"),"inventory.stock.view");
             String merchant=merchantScope();
+            // 第十八批 CQ 段第 372 条第 6 段 372-S6-R1（第十八批裁决 77）：外审数据时段按转入隔离时刻 received_at。
             var rows=jdbc.query("""
                     SELECT q.id FROM inventory_quarantine_lots q JOIN inventory_stock_balances b ON b.id=q.stock_balance_id
-                     WHERE q.warehouse_id=? AND (?::text IS NULL OR b.merchant_id=?) ORDER BY q.received_at,q.id
-                    """,(r,n)->inventory.findQuarantineLotById(r.getString(1)).orElseThrow(),warehouseId,merchant,merchant);
+                     WHERE q.warehouse_id=? AND (?::text IS NULL OR b.merchant_id=?)"""+AuditDataWindow.andInstant("q.received_at")+" ORDER BY q.received_at,q.id",
+                    (r,n)->inventory.findQuarantineLotById(r.getString(1)).orElseThrow(),warehouseId,merchant,merchant);
             audit.recordSuccess("inventory.quarantine.viewed","inventory.stock.view","warehouse",warehouseId,null,null,Map.of("count",rows.size()));
             return rows;
         } catch(RuntimeException error) {
@@ -188,7 +190,8 @@ public class InventoryQuarantineService {
     public List<InventoryQuarantineDispositionRecord> dispositions(String lotId) {
         try {
             scopedLot(lotId,"inventory.stock.view");
-            var rows=jdbc.query("SELECT * FROM inventory_quarantine_dispositions WHERE lot_id=? ORDER BY requested_at,id",(r,n)->map(r),lotId);
+            // 372-S6-R1：外审数据时段按处置方案自身的提出时刻 requested_at，不另判所属隔离实物。
+            var rows=jdbc.query("SELECT * FROM inventory_quarantine_dispositions WHERE lot_id=?"+AuditDataWindow.andInstant("requested_at")+" ORDER BY requested_at,id",(r,n)->map(r),lotId);
             audit.recordSuccess("inventory.quarantine.dispositions_viewed","inventory.stock.view","inventory_quarantine",lotId,null,null,Map.of("count",rows.size()));
             return rows;
         } catch(RuntimeException error) {

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -2698,12 +2698,13 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public List<StocktakeRecord> listStocktakes() {
+        // 第十八批 CQ 段第 372 条第 6 段 372-S6-R5（第十八批裁决 77）：外审数据时段按盘点营业日 business_date。
         return jdbcTemplate.query("""
                 SELECT id, stocktake_no, warehouse_id, merchant_id, business_date, status, remark,
                        created_at, updated_at
                   FROM stocktake
-                 ORDER BY created_at DESC, id
-                """, rowMapper::mapStocktake);
+                 WHERE TRUE"""
+                + com.complex.platform.access.AuditDataWindow.andDate("business_date") + " ORDER BY created_at DESC, id", rowMapper::mapStocktake);
     }
 
     @Override
@@ -2991,11 +2992,12 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public List<InventoryTransferOrderRecord> listTransferOrders() {
+        // 第十八批 CQ 段第 372 条第 6 段 372-S6-R2（第十八批裁决 77）：外审数据时段按建单时刻 created_at。
         return jdbcTemplate.query("""
                 SELECT id, transfer_type, lending_mode, from_owner_type, from_owner_id, to_owner_type, to_owner_id,
                        from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at, project_id
-                  FROM inventory_transfer_orders ORDER BY created_at DESC, id
-                """, (rs, n) -> mapTransferOrder(rs));
+                  FROM inventory_transfer_orders WHERE TRUE"""
+                + com.complex.platform.access.AuditDataWindow.andInstant("created_at") + " ORDER BY created_at DESC, id", (rs, n) -> mapTransferOrder(rs));
     }
 
     @Override

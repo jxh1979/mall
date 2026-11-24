@@ -1,6 +1,7 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -156,6 +157,8 @@ public class FloorPlanService {
         String planId = requireText(floorPlanId, "floor_plan_id");
         String taskId = requireText(importTaskId, "import_task_id");
         FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(planId, taskId, "floor_plan.import.view");
+        // 第十八批 CQ 段第 372 条第 6 段 372-S6-R3（第十八批裁决 77）：过完平面图项目与商户闸、任务归属核对再按任务建立时刻判。
+        AuditDataWindow.requireCovers(task.createdAt());
         List<FloorPlanImportCandidateRecord> candidates = repository.findImportCandidatesByTaskId(task.id());
         List<FloorPlanImportErrorRecord> errors = repository.findImportErrorsByTaskId(task.id());
         auditEventService.recordSuccess(

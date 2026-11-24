@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -978,7 +978,7 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
         String complex=AmusementBusinessDayTestFixture.complex(jdbcTemplate);
         AmusementBusinessDayTestFixture.bind(jdbcTemplate,projectId,complex);
         jdbcTemplate.update("UPDATE ticket_orders SET project_id=? WHERE id=?", complex, "order_cg02_" + suffix);
-        AmusementBusinessDayTestFixture.approve(jdbcTemplate,businessDays,reviews,complex,"Asia/Shanghai",4,
+        AmusementBusinessDayTestFixture.approve(jdbcTemplate,businessDays,reviews,complex,"Asia/Shanghai",10,
                 Instant.now().minusSeconds(7*86400));
     }
 
