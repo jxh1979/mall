@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 门禁：操作留痕（audit_events）写入的业务类型与事件名都要在 backend/src/main/resources/audit/audit-labels.json 里有中文名
 // （业务类型在 business_types，事件名在 event_names）。
 // 依据：PGM:287「全局原则 · 界面全中文（所有终端零英文）……字段名、状态、枚举取值……必须全部为中文……」；第十八批 AN 段第 227 条
@@ -206,14 +206,14 @@ for (const { file, rel, text } of files) {
 const J = "backend/src/main/java/com/complex/platform/";
 const DECLARED = [
   ["business", `${J}settlement/SettlementConfigWriteService.java:575（activateDraft 默认分支 auditActivated(type)，type 为页面传来的单行配置组码）`,
-    ["distribution_method", "merchant_rate", "comprehensive_service_fee", "combo_discount", "channel_fee", "commission_rate", "points_accrual_rate",
-      "turnover_rent_rule", "pass_gift_cost"]],
+    ["distribution_method", "distribution_notice_period", "objection_period", "merchant_rate", "comprehensive_service_fee", "combo_discount",
+      "channel_fee", "commission_rate", "turnover_rent_rule", "pass_gift_cost"]],
   ["business", `${J}settlement/SettlementConfigWriteService.java:648（archive 下线留痕，table 为 :616 不带初值的局部变量，取下线配置的表名）`,
-    ["ticket_distribution_merchant_rates", "revenue_stream_attribution", "bar_commission_rate_configs", "points_accrual_rate_configs",
+    ["ticket_distribution_merchant_rates", "revenue_stream_attribution", "bar_commission_rate_configs",
       "turnover_rent_rules", "pass_gift_cost_configs", "internal_price_catalog"]],
   ["business", `${J}settlement/SettlementConfigController.java:327、:340（转正、下线失败留痕，业务类型为路径上的配置组码，即待转正队列各组）`,
-    ["distribution_method", "merchant_rate", "comprehensive_service_fee", "combo_discount", "channel_fee", "commission_rate", "points_accrual_rate",
-      "high_value_threshold", "revenue_stream_attribution", "attribution_rule", "pass_gift_cost", "turnover_rent_rule", "internal_price_item"]],
+    ["distribution_method", "distribution_notice_period", "objection_period", "merchant_rate", "comprehensive_service_fee", "combo_discount",
+      "channel_fee", "commission_rate", "high_value_threshold", "revenue_stream_attribution", "attribution_rule", "pass_gift_cost", "turnover_rent_rule", "internal_price_item"]],
   ["business", `${J}access/staff/StaffHandoverService.java:145（业务交接留痕，业务类型为 StaffHandoverRepository.Kind 的 name()）`,
     ["approval_node", "facility_work_order", "facility_inspection", "merchant_work_order", "service_order", "leasing_lead", "integration_difference",
       "bar_table_session", "risk_alert"]],

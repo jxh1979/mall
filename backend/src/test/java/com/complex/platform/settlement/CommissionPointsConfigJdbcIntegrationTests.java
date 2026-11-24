@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.support.TestSecurityActors;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -24,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>⚠️ 走真实 Flyway 迁移库;{@code @Transactional} = 每用例结束自动回滚(含删表行的 fail-loud 用例不污染库)。
  * <p>差人转正:起草用 {@code DRAFTER}、复核转正用 {@code APPROVER}(二者不同,否则 403)。
  * <p>第十八批 BQ 段第 371 条 371-R1:卡座提成费率落草案带次日生效起始日期,批准后待生效,经 {@link #activate} 按次日调到日转正再读新值;
- * 积分累计率不在其列,仍批准即生效。
+ * 第十八批 CB 段第 397 条:积分累计率业务不读、已撤下(表留库),本类只验卡座提成。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -100,13 +99,11 @@ class CommissionPointsConfigJdbcIntegrationTests {
     void factorySeedsEqualThePreviousHardcodedValues() {
         assertThat(configRepository.findCommissionRateBp(null, null, "sales")).isEqualTo(1500);
         assertThat(configRepository.findCommissionRateBp(null, null, "non_sales")).isEqualTo(1000);
-        assertThat(configRepository.findAmountCentPerPoint(null, null)).isEqualTo(100L);
         // 任意项目/商户在无特例时同样回落到全局默认种子(= 现值),不因新增维度而改数。
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(1500);
-        assertThat(configRepository.findAmountCentPerPoint(PROJECT, MERCHANT)).isEqualTo(100L);
     }
 
-    /** Path 2 保值:草案期引擎仍读旧生效值;差人复核转正后才切换。提成/积分两类各证一遍。 */
+    /** Path 2 保值:草案期引擎仍读旧生效值;差人复核转正后才切换。 */
     @Test
     void draftsDoNotAffectEngineUntilActivated() {
         writeService.saveCommissionRate(
@@ -116,12 +113,6 @@ class CommissionPointsConfigJdbcIntegrationTests {
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(2500);
         // 同项目的 non_sales 未配特例 → 仍全局默认(维度互不串)。
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "non_sales")).isEqualTo(1000);
-
-        writeService.savePointsAccrualRate(
-                new PointsAccrualRateRequest("pa1", PROJECT, MERCHANT, 50L), DRAFTER);
-        assertThat(configRepository.findAmountCentPerPoint(PROJECT, MERCHANT)).isEqualTo(100L); // 草案不被读
-        writeService.activateDraft("points_accrual_rate", draftRowId("points_accrual_rate_configs"), APPROVER);
-        assertThat(configRepository.findAmountCentPerPoint(PROJECT, MERCHANT)).isEqualTo(50L);
     }
 
     /** 作用域越具体越优先:项目通用 < 项目×商户;未命中特例的商户回落项目通用。 */
@@ -150,18 +141,12 @@ class CommissionPointsConfigJdbcIntegrationTests {
         writeService.saveCommissionRate(
                 new CommissionRateRequest("iso1", PROJECT, null, "sales", 4000, next), DRAFTER);
         activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
-        writeService.savePointsAccrualRate(
-                new PointsAccrualRateRequest("iso2", PROJECT, null, 25L), DRAFTER);
-        writeService.activateDraft("points_accrual_rate", draftRowId("points_accrual_rate_configs"), APPROVER);
 
         // 本项目读得到自己的特例
         assertThat(configRepository.findCommissionRateBp(PROJECT, null, "sales")).isEqualTo(4000);
-        assertThat(configRepository.findAmountCentPerPoint(PROJECT, null)).isEqualTo(25L);
         // 他项目 / 无 scope(平台默认口径)一律读不到,回落全局默认
         assertThat(configRepository.findCommissionRateBp("proj_other_tenant", null, "sales")).isEqualTo(1500);
         assertThat(configRepository.findCommissionRateBp(null, null, "sales")).isEqualTo(1500);
-        assertThat(configRepository.findAmountCentPerPoint("proj_other_tenant", null)).isEqualTo(100L);
-        assertThat(configRepository.findAmountCentPerPoint(null, null)).isEqualTo(100L);
     }
 
     /**
@@ -215,11 +200,6 @@ class CommissionPointsConfigJdbcIntegrationTests {
         assertThatThrownBy(() -> configRepository.findCommissionRateBp(null, null, "sales"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SETTLEMENT_CONFIG_MISSING"));
-
-        jdbcTemplate.update("DELETE FROM points_accrual_rate_configs");
-        assertThatThrownBy(() -> configRepository.findAmountCentPerPoint(null, null))
-                .isInstanceOf(ApiException.class)
-                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SETTLEMENT_CONFIG_MISSING"));
     }
 
     /** 未知角色档查不到行 → 同样 fail-loud(不返回 0 悄悄少发提成)。 */
@@ -253,7 +233,7 @@ class CommissionPointsConfigJdbcIntegrationTests {
         assertThat(configRepository.findCommissionRateBp(null, null, "sales")).isEqualTo(1500);
     }
 
-    /** 写面校验:角色档枚举、费率区间、积分单位须 &gt;0。 */
+    /** 写面校验:角色档枚举、费率区间。 */
     @Test
     void writeSideValidatesEnumAndRanges() {
         assertThatThrownBy(() -> writeService.saveCommissionRate(
@@ -262,22 +242,17 @@ class CommissionPointsConfigJdbcIntegrationTests {
         assertThatThrownBy(() -> writeService.saveCommissionRate(
                 new CommissionRateRequest("bad2", PROJECT, null, "sales", 10001, next), DRAFTER))
                 .isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> writeService.savePointsAccrualRate(
-                new PointsAccrualRateRequest("bad3", PROJECT, null, 0L), DRAFTER))
-                .isInstanceOf(ApiException.class);
     }
 
-    /** 两类草案进「待复核草案队列」,供总控页复核转正。 */
+    /** 卡座提成草案进「待复核草案队列」,供总控页复核转正;积分累计率(第十八批 CB 段第 397 条撤下)不再进队列。 */
     @Test
     void draftsAppearInPendingQueue() {
         writeService.saveCommissionRate(
                 new CommissionRateRequest("q1", PROJECT, MERCHANT, "non_sales", 900, next), DRAFTER);
-        writeService.savePointsAccrualRate(
-                new PointsAccrualRateRequest("q2", PROJECT, MERCHANT, 200L), DRAFTER);
-        // 覆盖 listPendingConfigDrafts 新增的两条 UNION 分支(总控页草案队列的数据源)。
+        // 覆盖 listPendingConfigDrafts 的卡座提成 UNION 分支(总控页草案队列的数据源)。
         assertThat(writeRepository.listPendingConfigDrafts())
                 .extracting(JdbcSettlementConfigWriteRepository.PendingConfigDraft::configGroup)
-                .contains("commission_rate", "points_accrual_rate");
+                .contains("commission_rate").doesNotContain("points_accrual_rate");
         assertThat(writeRepository.listPendingConfigDrafts())
                 .filteredOn(d -> "commission_rate".equals(d.configGroup()) && d.summary().contains(PROJECT))
                 .singleElement()

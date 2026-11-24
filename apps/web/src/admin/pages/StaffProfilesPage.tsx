@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -62,7 +62,7 @@ const DEVICE_STATUS: Record<string, string> = { active: "生效中", pending_rev
  *
  * 办理员工注册审批、档案存档/删除，并维护员工是否为「销售岗」。
  * 这一个勾直接决定该员工卖出的卡座按哪档费率计提提成（销售岗按销售人员费率、其余按非销售人员费率，
- * 两档费率在「结算配置中心 → 提成与积分」维护）。所以：
+ * 两档费率在「结算配置中心 → 卡座提成」维护）。所以：
  *   · 改动必须填事由，落审计留痕，对账时能回溯是谁哪天为什么改的；
  *   · 改岗位只影响此后新开的账单，不回算已开账单的历史提成——否则改一次岗位就悄悄改写旧账。
  */
@@ -265,7 +265,7 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     <section data-testid="staff-profiles-page">
       <AdminPageHeader
         title="员工档案"
-        description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属起共三个组织层级全部通过且到生效时间才生效。停岗、离职生效即停止业务权限与原会话，未交接事项继续由有权人员承接；设备交接、工资结清继续办理。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
+        description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属起共三个组织层级全部通过且到生效时间才生效。停岗、离职生效即停止业务权限与原会话，未交接事项继续由有权人员承接；设备交接、工资结清继续办理。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 卡座提成」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
       />
       <label><input type="checkbox" data-testid="staff-profiles-include-archived" checked={includeArchived} onChange={(event) => { includeArchivedRef.current = event.target.checked; setIncludeArchived(event.target.checked); void reload(); }} />显示已存档</label>
       <AdminDataState loading={loading} error={error} empty={visibleRows.length === 0} onRetry={reload}>

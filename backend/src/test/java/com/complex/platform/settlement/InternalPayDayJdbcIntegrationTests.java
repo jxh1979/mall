@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -254,14 +254,19 @@ class InternalPayDayJdbcIntegrationTests {
                 e -> assertThat(e.code()).isEqualTo("SELF_APPROVAL_FORBIDDEN"));
     }
 
+    /** 第十八批 CB 段第 398 条 398-R1：异议期改动只落本项目草案（须带生效起始日期），返回仍是现行异议期，草案行记新值。 */
     @Test
     void objectionPolicyRequiresBoundsAroundValue() {
         act(financeA);
+        String from = LocalDate.now(LocalZone.ID).plusDays(1).toString();
         assertThatThrownBy(() -> payDays.saveObjectionPolicy(new InternalPayDayService.ObjectionPolicyRequest(
-                key(), project, 12, null, null, "按项目配置异议期")))
+                key(), project, 12, null, null, "按项目配置异议期", from)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        int current = payDays.objectionPolicy(project).workingDays();
         assertThat(payDays.saveObjectionPolicy(new InternalPayDayService.ObjectionPolicyRequest(
-                key(), project, 12, 8, 15, "按项目配置异议期")).workingDays()).isEqualTo(12);
+                key(), project, 12, 8, 15, "按项目配置异议期", from)).workingDays()).isEqualTo(current);
+        assertThat(jdbc.queryForObject("SELECT working_days FROM settlement_objection_period_policy WHERE project_id = ?"
+                + " AND is_draft = TRUE AND status = 'active'", Integer.class, project)).isEqualTo(12);
     }
 
     /** 按前端真实请求形状（adminClient.mapKeys 蛇形键）经网关提交钱路规则。 */

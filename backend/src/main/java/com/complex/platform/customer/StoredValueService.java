@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -324,11 +324,14 @@ public class StoredValueService {
             // TK-19-R1（ENUM「储值卡类型与收款主体」：「通用卡的每笔充值分别保留当前剩余本金、支付通路和支付成功时固化费率，同一通路不同费率的
             // 充值分批保存，不得用新费率覆盖旧批次」「通道费以每笔充值支付成功时平台与该支付通路的生效合同费率为准，随该笔充值一并固化」；
             // DEC-P1A-04）：按 (项目, 支付通路) 取此刻生效费率钉进批次；未配置 = 0，不拒绝入账。批次 id = 充值流水 id。
-            int feeBps = repository.findStoredValueChannelFeeBps(account.projectId(), intent.channel());
+            // 第十八批 CB 段第 396 条 396-R1（BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」；第十八批裁决 72「每单记录所用版本号」）：
+            //   批次同时记所用通路费配置行与版本号（与费率同一条查询取出）。
+            CustomerRepository.StoredValueRouteFee fee = repository.findStoredValueRouteFee(account.projectId(), intent.channel());
             repository.saveStoredValueTopupBatch(new StoredValueTopupBatchRecord(txn.id(), account.id(), customerId,
-                    account.projectId(), intent.channel(), feeBps, intent.amountCent(), intent.amountCent(), now));
+                    account.projectId(), intent.channel(), fee.feeBps(), fee.configId(), fee.configVersion(),
+                    intent.amountCent(), intent.amountCent(), now));
             detail.put("payment_channel", intent.channel());
-            detail.put("channel_fee_bps", feeBps);
+            detail.put("channel_fee_bps", fee.feeBps());
         }
         auditEventService.recordSuccess(EVENT_TOPUP, "customer.stored_value.topup",
                 "customer_stored_value", account.id(), null, null, detail);

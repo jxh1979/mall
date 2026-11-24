@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1430,26 +1430,27 @@ class JdbcCustomerRepository implements CustomerRepository {
     // ---------- TK-19 / TK-20（V517）：充值批次、消费分摊、退款恢复、消费退款回冲 ----------
 
     @Override
-    public int findStoredValueChannelFeeBps(String projectId, String channel) {
-        // 与 JdbcSettlementBillRepository.findRouteFee 同口径（通路费层、生效、非草稿、项目特例 > 全局默认），只认该支付通路的专属配置；未配置 = 0。
-        Integer bps = jdbcTemplate.query("""
-                SELECT fee_bps FROM channel_fee_configs
+    public StoredValueRouteFee findStoredValueRouteFee(String projectId, String channel) {
+        // 与 JdbcSettlementBillRepository.findRouteFee 同口径（通路费层、生效、非草稿、项目特例 > 全局默认），只认该支付通路的专属配置；未配置 = (null, 0, null)。
+        // 第十八批 CB 段第 396 条 396-R1（第十八批裁决 72「每单记录所用版本号」）：配置行、费率与版本号同一条查询取出。
+        StoredValueRouteFee fee = jdbcTemplate.query("""
+                SELECT id, fee_bps, version_no FROM channel_fee_configs
                  WHERE status = 'active' AND is_draft = FALSE AND fee_layer = 'route' AND channel = :channel
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
                 """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("channel", channel),
-                rs -> rs.next() ? rs.getInt("fee_bps") : null);
-        return bps == null ? 0 : bps;
+                rs -> rs.next() ? new StoredValueRouteFee(rs.getString("id"), rs.getInt("fee_bps"), rs.getInt("version_no")) : null);
+        return fee == null ? new StoredValueRouteFee(null, 0, null) : fee;
     }
 
     @Override
     public void saveStoredValueTopupBatch(StoredValueTopupBatchRecord batch) {
         jdbcTemplate.update("""
                 INSERT INTO stored_value_topup_batches (id, account_id, customer_id, project_id, payment_channel, fee_bps,
-                    principal_cent, remaining_principal_cent, paid_at)
+                    fee_config_id, fee_config_version, principal_cent, remaining_principal_cent, paid_at)
                 VALUES (:id, :account_id, :customer_id, :project_id, :payment_channel, :fee_bps,
-                    :principal_cent, :remaining_principal_cent, :paid_at)
+                    :fee_config_id, :fee_config_version, :principal_cent, :remaining_principal_cent, :paid_at)
                 """, new MapSqlParameterSource()
                 .addValue("id", batch.id())
                 .addValue("account_id", batch.accountId())
@@ -1457,6 +1458,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("project_id", batch.projectId())
                 .addValue("payment_channel", batch.paymentChannel())
                 .addValue("fee_bps", batch.feeBps())
+                .addValue("fee_config_id", batch.feeConfigId())
+                .addValue("fee_config_version", batch.feeConfigVersion(), java.sql.Types.INTEGER)
                 .addValue("principal_cent", batch.principalCent())
                 .addValue("remaining_principal_cent", batch.remainingPrincipalCent())
                 .addValue("paid_at", timestampWithTimeZone(batch.paidAt())));
@@ -1465,7 +1468,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public List<StoredValueTopupBatchRecord> listOpenStoredValueTopupBatchesForUpdate(String accountId) {
         return jdbcTemplate.query("""
-                SELECT id, account_id, customer_id, project_id, payment_channel, fee_bps, principal_cent, remaining_principal_cent, paid_at
+                SELECT id, account_id, customer_id, project_id, payment_channel, fee_bps, fee_config_id, fee_config_version, principal_cent,
+                       remaining_principal_cent, paid_at
                   FROM stored_value_topup_batches
                  WHERE account_id = :account_id AND remaining_principal_cent > 0
                  ORDER BY paid_at, id
@@ -1620,7 +1624,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     private StoredValueTopupBatchRecord mapTopupBatch(ResultSet rs, int rowNumber) throws SQLException {
         return new StoredValueTopupBatchRecord(
                 rs.getString("id"), rs.getString("account_id"), rs.getString("customer_id"), rs.getString("project_id"),
-                rs.getString("payment_channel"), rs.getInt("fee_bps"), rs.getLong("principal_cent"),
+                rs.getString("payment_channel"), rs.getInt("fee_bps"), rs.getString("fee_config_id"),
+                rs.getObject("fee_config_version", Integer.class), rs.getLong("principal_cent"),
                 rs.getLong("remaining_principal_cent"), nullableInstant(rs, "paid_at"));
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,10 +11,9 @@ const DEFAULTS = [
   // S4:原「项目公司留存比例」已并入门票综合服务费(同一项只扣一次),留存卡片下线。
   // 第十八批 AW 段 293-R1、339-R1：不再有套票折扣归属；凑整允许误差全平台一行、连同上下限显示。
   { group: "通票分账", key: "rounding_tolerance_cent", label: "通票凑整允许误差", value: "5 元（上下限未配置）" },
-  // V340(P0-D):提成/积分出厂默认 = 改造前写死值(销售 1500bp / 每积 1 分需 100 分)。
-  { group: "提成与积分", key: "commission_rate_sales", label: "卡座提成率·销售人员(万分比)", value: "1500" },
-  { group: "提成与积分", key: "commission_rate_non_sales", label: "卡座提成率·非销售人员(万分比)", value: "1000" },
-  { group: "提成与积分", key: "points_amount_cent_per_point", label: "积分累计率(每积1分所需消费·分)", value: "100" },
+  // V340(P0-D):卡座提成出厂默认 = 改造前写死值(销售 1500bp)。第十八批 CB 段第 397 条：积分累计率已撤下，栏目名「卡座提成」。
+  { group: "卡座提成", key: "commission_rate_sales", label: "卡座提成率·销售人员(万分比)", value: "1500" },
+  { group: "卡座提成", key: "commission_rate_non_sales", label: "卡座提成率·非销售人员(万分比)", value: "1000" },
 ];
 const OVERVIEW_NO_DRAFT = { platformDefaults: DEFAULTS, pendingDraftCount: 0, pendingDrafts: [] };
 const OVERVIEW_WITH_DRAFTS = {
@@ -229,14 +228,22 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(screen.queryByTestId("settlement-config-archive-trt_d_1")).toBeNull();
   });
 
-  // V340(P0-D/CFG-01):提成率/积分累计率原写死在代码里,现进本页「提成与积分」栏目,同走落草案 + 差人复核转正。
-  it("提成与积分栏目渲染 2 个配置块 + 概览展示其当前生效值", async () => {
+  // V340(P0-D/CFG-01):卡座提成率原写死在代码里,现进本页「卡座提成」栏目,同走落草案 + 差人复核转正。
+  it("卡座提成栏目渲染卡座提成配置块 + 概览展示其当前生效值", async () => {
     renderPage(makeApi());
     await screen.findByTestId("settlement-config-commission-points");
     expect(screen.getByTestId("settlement-config-block-commission_rate")).toBeTruthy();
-    expect(screen.getByTestId("settlement-config-block-points_accrual_rate")).toBeTruthy();
     expect(screen.getByTestId("settlement-config-default-commission_rate_sales").textContent).toContain("1500");
-    expect(screen.getByTestId("settlement-config-default-points_amount_cent_per_point").textContent).toContain("100");
+  });
+
+  // 第十八批 CB 段第 397 条 397-R2（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：积分累计率业务不读，本页撤下该块，页签改名「卡座提成」。
+  it("397：结算配置中心不再有积分累计率", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByRole("tab", { name: "卡座提成" })).toBeInTheDocument());
+    expect(screen.queryByRole("tab", { name: "提成与积分" })).toBeNull();
+    expect(screen.queryByText("积分累计率")).toBeNull();
+    expect(screen.queryByTestId("settlement-config-block-points_accrual_rate")).toBeNull();
+    expect(screen.queryByTestId("settlement-config-field-amountCentPerPoint")).toBeNull();
   });
 
   // 第十八批第 3 条（BSM 第 749 行「渠道费用分两层、性质不同不可混用……官方渠道售出的票不扣销售渠道费，但仍扣通路费」）。
@@ -306,25 +313,6 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
         merchantId: "m_bar_1", roleType: "non_sales", rateBp: 1200, idempotencyKey: expect.any(String), effectiveFrom: "2026-12-01",
       }),
     ));
-  });
-
-  it("「改」积分累计率 → POST 落草案端点；累计单位须大于 0", async () => {
-    const post = vi.fn().mockResolvedValue({});
-    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
-    fireEvent.click(await screen.findByTestId("settlement-config-edit-points_accrual_rate"));
-    // 0 非法 → 不放行进确认步
-    fireEvent.change(screen.getByTestId("settlement-config-field-amountCentPerPoint"), { target: { value: "0" } });
-    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
-    expect(screen.getByTestId("settlement-config-field-amountCentPerPoint")).toBeTruthy(); // 仍停在填写步
-    fireEvent.change(screen.getByTestId("settlement-config-field-amountCentPerPoint"), { target: { value: "50" } });
-    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
-    fireEvent.click(screen.getByTestId("settlement-config-submit"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith(
-      "/api/v1/settlement/config/points-accrual-rate",
-      expect.objectContaining({ amountCentPerPoint: 50, idempotencyKey: expect.any(String) }),
-    ));
-    expect(screen.queryByTestId("settlement-config-field-effectiveFrom")).toBeNull();
-    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("effectiveFrom");
   });
 
   it("371-R2：生效起始日期必填并随草案以蛇形键提交", async () => {
@@ -482,10 +470,11 @@ describe("SettlementConfigPage 通票分账方案（参与家数档位表＋第�
     fireEvent.change(screen.getByTestId("distribution-scheme-notice-unit"), { target: { value: "day" } });
     fireEvent.change(screen.getByTestId("distribution-scheme-notice-min"), { target: { value: "7" } });
     fireEvent.change(screen.getByTestId("distribution-scheme-notice-max"), { target: { value: "30" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-effective-from"), { target: { value: "2026-12-01" } });
     fireEvent.click(screen.getByTestId("distribution-scheme-notice-save"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/notice-period"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/distribution-scheme/notice-period"))!.body)
-      .toMatchObject({ period_value: 10, period_unit: "day", min_value: 7, max_value: 30 });
+      .toMatchObject({ period_value: 10, period_unit: "day", min_value: 7, max_value: 30, effective_from: "2026-12-01" });
   });
 });
 
@@ -699,6 +688,76 @@ describe("SettlementConfigPage 付账日与钱路指派", () => {
   });
 });
 
+// 第十八批 CB 段第 398 条 398-R2（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批
+// 通过后按指定日期生效，不即改即生效。」）：通告期与异议期改动落草案，须填生效起始日期；保存后草案出现在本页待复核队列。走真实 AdminApi（蛇形键）。
+describe("SettlementConfigPage 通告期与异议期（第 398 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("398：通告期与异议期须填生效起始日期并以蛇形键提交", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    const drafts: { id: string; config_group: string; summary: string }[] = [];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (url.endsWith("/distribution-scheme/notice-period")) {
+        drafts.push({ id: "tdnp_d_1", config_group: "distribution_notice_period", summary: "通告期 2 个月（下限 1，上限 3） 生效起=2026-12-01" });
+        return Promise.resolve(ok({ period_value: 1, period_unit: "month", min_value: null, max_value: null }));
+      }
+      if (url.endsWith("/internal-pay-days/objection-period")) {
+        drafts.push({ id: "sopp_d_1", config_group: "objection_period", summary: "project=prj_1 异议期 12 个工作日（下限 5，上限 15） 生效起=2026-12-01" });
+        return Promise.resolve(ok({ project_id: "__global__", working_days: 10, min_days: null, max_days: null }));
+      }
+      if (url.endsWith("/distribution-scheme")) {
+        return Promise.resolve(ok({ notice_period: { period_value: 1, period_unit: "month", min_value: null, max_value: null },
+          versions: [], missing_rows: [] }));
+      }
+      if (url.includes("/overview")) {
+        return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: drafts.length, pending_drafts: [...drafts] }));
+      }
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.getByTestId("distribution-scheme-notice-effective-from")).toBeInTheDocument());
+    await waitFor(() => expect((screen.getByTestId("distribution-scheme-notice-value") as HTMLInputElement).value).toBe("1"));
+
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-value"), { target: { value: "2" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-min"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-max"), { target: { value: "3" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-notice-save"));
+    await waitFor(() => expect(screen.getByTestId("distribution-scheme-error").textContent).toContain("生效起始日期必填。"));
+    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/notice-period"))).toBe(false);
+
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-effective-from"), { target: { value: "2026-12-01" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-notice-save"));
+    await waitFor(() => expect(screen.getByTestId("settlement-config-draft-tdnp_d_1").textContent).toContain("通票分账通告期"));
+    expect(calls.find((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/notice-period"))!.body)
+      .toMatchObject({ period_value: 2, period_unit: "month", min_value: 1, max_value: 3, effective_from: "2026-12-01" });
+
+    await waitFor(() => expect(screen.getByTestId("internal-pay-day-objection-project")).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId("internal-pay-day-objection-project"), { target: { value: "prj_1" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-objection-days"), { target: { value: "12" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-objection-min"), { target: { value: "5" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-objection-max"), { target: { value: "15" } });
+    fireEvent.click(screen.getByTestId("internal-pay-day-objection-save"));
+    await waitFor(() => expect(screen.getByTestId("internal-pay-day-error").textContent).toContain("生效起始日期必填。"));
+    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/internal-pay-days/objection-period"))).toBe(false);
+
+    fireEvent.change(screen.getByTestId("internal-pay-day-objection-effective-from"), { target: { value: "2026-12-01" } });
+    fireEvent.click(screen.getByTestId("internal-pay-day-objection-save"));
+    await waitFor(() => expect(screen.getByTestId("settlement-config-draft-sopp_d_1").textContent).toContain("非积分商户账单异议期"));
+    expect(calls.find((c) => c.method === "POST" && c.url.endsWith("/internal-pay-days/objection-period"))!.body)
+      .toMatchObject({ project_id: "prj_1", working_days: 12, min_days: 5, max_days: 15, effective_from: "2026-12-01" });
+  });
+});
+
 // 第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，
 // 须同时配置上下限），大于或等于阈值即高价值」）：高价值判定页签。走真实 AdminApi（键名蛇形转换）的用例 stub fetch。
 describe("SettlementConfigPage 高价值判定阈值（第十八批第 24 条）", () => {
@@ -752,6 +811,36 @@ describe("SettlementConfigPage 高价值判定阈值（第十八批第 24 条）
     expect(typeof body.idempotency_key).toBe("string");
     expect(body).not.toHaveProperty("project_id");
     expect(body).not.toHaveProperty("merchant_id");
+  });
+
+  // 第十八批 CB 段第 394 条 394-R2（ENUM:164「调整须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）。
+  it("394-R2：最高权限本人提交高价值判定阈值，确认页写明提交即批准", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok(null));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [HVT_DEFAULT], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")}
+      user={{ id: "usr_master_authority", username: "master-authority", accountType: "master_authority" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.getByTestId("settlement-config-current-high_value_threshold").textContent).toContain("500000"));
+    fireEvent.click(screen.getByTestId("settlement-config-edit-high_value_threshold"));
+    fill("6000", "1000", "20000", "最高权限本人调整");
+    fillEffectiveFrom();
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.getByText("最高权限本人提交即批准，按生效起始日期生效")).toBeInTheDocument());
+    expect(screen.getByTestId("settlement-config-submit").textContent).toContain("提交（最高权限本人提交即批准）");
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))).toBe(true));
+    expect(calls.find((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))!.body)
+      .toMatchObject({ high_value_threshold_cent: 600000, reason: "最高权限本人调整", effective_from: "2026-12-01" });
   });
 
   it("下限大于阈值时停在填写步、不发请求", async () => {

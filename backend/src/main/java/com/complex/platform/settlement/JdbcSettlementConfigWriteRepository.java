@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 结算配置中心批1 写入面仓储(§2/§3/§5):配置类型的落草案(Path 2 并存)+ 复核转正 + 软删 + 待复核草案聚合。
- * 批1 收 8 类;V340(P0-D/CFG-01)追加「卡座提成费率 / 积分累计率」2 类,共 10 类。
+ * 批1 收 8 类;V340(P0-D/CFG-01)追加「卡座提成费率 / 积分累计率」2 类(积分累计率第十八批 CB 段第 397 条已撤下,表留库、无读写)。
  *
  * <p><b>Path 2 落草案</b>:INSERT is_draft=TRUE,ON CONFLICT(scope 表达式, is_draft) WHERE status='active' DO UPDATE ——
  * 命中「同 scope 的草案槽」则覆盖草案,<b>不动生效行</b>(is_draft=FALSE);读侧 finder 仍读生效行 → 编辑期保值。
@@ -38,11 +38,10 @@ public class JdbcSettlementConfigWriteRepository {
         COMBO_DISCOUNT("ticket_combo_discount_configs", "combo_discount", List.of("project_id")),
         // 第十八批第 3 条(V555):渠道费用分通路费/销售渠道费两层,同项目同渠道码两层各一行。
         CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "fee_layer", "channel")),
-        // V340（P0-D/CFG-01）：提成费率按 项目 × 商户 × 角色档；积分累计率按 项目 × 商户。同 Path 2 草案/转正范式。
+        // V340（P0-D/CFG-01）：提成费率按 项目 × 商户 × 角色档。同 Path 2 草案/转正范式。
+        //   第十八批 CB 段第 397 条（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：积分累计率业务不读，已撤下（表与种子留库）。
         COMMISSION_RATE("bar_commission_rate_configs", "commission_rate",
                 List.of("project_id", "merchant_id", "role_type")),
-        POINTS_ACCRUAL_RATE("points_accrual_rate_configs", "points_accrual_rate",
-                List.of("project_id", "merchant_id")),
         // 第十八批第 24 条：全平台统一「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）只一行（项目、商户为空）；
         //   草案经最高权限审批批准后由本通用换行转正（SettlementConfigWriteService.highValueThresholdDecided）。
         HIGH_VALUE_THRESHOLD("high_value_thresholds", "high_value_threshold",
@@ -58,7 +57,11 @@ public class JdbcSettlementConfigWriteRepository {
         // 同 code 旧生效行在转正时软替换 inactive（留库即价格版本史）。转正后的快照传播见
         // SettlementConfigWriteService.activateDraft 专案分支（propagateCatalogPriceToSnapshots）。
         INTERNAL_PRICE_ITEM("internal_price_catalog", "internal_price_item",
-                List.of("item_code"));
+                List.of("item_code")),
+        // 第十八批 CB 段第 398 条 398-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效」；
+        //   「无法判断是否涉及钱的，一律按涉及钱处理。」）：通票分账通告期全平台一行（无范围列）、非积分商户账单异议期按项目。
+        NOTICE_PERIOD("ticket_distribution_notice_period", "distribution_notice_period", List.of()),
+        OBJECTION_PERIOD("settlement_objection_period_policy", "objection_period", List.of("project_id"));
 
         private final String table;
         private final String configType;
@@ -247,25 +250,6 @@ public class JdbcSettlementConfigWriteRepository {
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
                 .addValue("role_type", roleType).addValue("rate_bp", rateBp).addValue("effective_from", effectiveFrom)
-                .addValue("updated_by", updatedBy), String.class);
-    }
-
-    /** V340 积分累计率落草案(项目 × 商户;amount_cent_per_point=每积 1 分所需消费金额,分)。 */
-    public String upsertPointsAccrualRateDraft(String id, String projectId, String merchantId,
-                                               long amountCentPerPoint, String updatedBy) {
-        return jdbcTemplate.queryForObject("""
-                INSERT INTO points_accrual_rate_configs
-                    (id, project_id, merchant_id, amount_cent_per_point, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :merchant_id, :amount_cent_per_point, 'active', TRUE, :updated_by, now())
-                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
-                             is_draft) WHERE status = 'active' DO UPDATE SET
-                    amount_cent_per_point = EXCLUDED.amount_cent_per_point,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = now()
-                RETURNING id
-                """, new MapSqlParameterSource()
-                .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
-                .addValue("amount_cent_per_point", amountCentPerPoint)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -585,7 +569,9 @@ public class JdbcSettlementConfigWriteRepository {
     }
 
     private static String datedColumns(SingleRowConfig cfg) {
-        return "id, project_id, " + (cfg.scopeColumns.contains("merchant_id") ? "merchant_id" : "NULL") + " AS merchant_id, effective_from";
+        // 398-R1：通告期全平台一行，表上没有项目列，取空。
+        return "id, " + (cfg.scopeColumns.contains("project_id") ? "project_id" : "NULL AS project_id") + ", "
+                + (cfg.scopeColumns.contains("merchant_id") ? "merchant_id" : "NULL") + " AS merchant_id, effective_from";
     }
 
     private static final org.springframework.jdbc.core.RowMapper<DatedRow> DATED_ROW_MAPPER = (rs, i) ->
@@ -795,7 +781,7 @@ public class JdbcSettlementConfigWriteRepository {
     }
 
     /**
-     * V340 单行 scope 表软删(仅用于 commission_rate / points_accrual_rate 的<b>商户级特例条目</b>):
+     * V340 单行 scope 表软删(用于 commission_rate 等的<b>商户级特例条目</b>):
      * status→inactive + archive_reason(留库不物理删),使该商户回落到项目/全局默认口径。表名取自白名单枚举。
      * 返回更新行数(0=不存在或已下线)。全局默认种子不该被软删——由服务层守卫拦(见 SettlementConfigWriteService.archive)。
      */
@@ -882,11 +868,19 @@ public class JdbcSettlementConfigWriteRepository {
                            updated_at
                       FROM bar_commission_rate_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
-                    SELECT id, 'points_accrual_rate',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
-                               || ' 每积1分需消费 ' || amount_cent_per_point || '分',
+                    -- 第十八批 CB 段第 398 条 398-R1：通票分账通告期（全平台一行）与非积分商户账单异议期（按项目）草案。
+                    SELECT id, 'distribution_notice_period',
+                           '通告期 ' || period_value || CASE period_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END
+                               || '（下限 ' || min_value || '，上限 ' || max_value || '）'
+                               || ' 生效起=' || effective_from,
                            updated_at
-                      FROM points_accrual_rate_configs WHERE is_draft = TRUE AND status = 'active'
+                      FROM ticket_distribution_notice_period WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    SELECT id, 'objection_period',
+                           'project=' || project_id || ' 异议期 ' || working_days || ' 个工作日（下限 ' || min_days
+                               || '，上限 ' || max_days || '）' || ' 生效起=' || effective_from,
+                           updated_at
+                      FROM settlement_objection_period_policy WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT id, 'high_value_threshold',
                            '高价值判定阈值(最近一次实际到货价) ' || high_value_threshold_cent || ' 分，上下限 '

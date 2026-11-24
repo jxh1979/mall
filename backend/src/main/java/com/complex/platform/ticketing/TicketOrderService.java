@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -74,12 +74,6 @@ public class TicketOrderService {
     // allowedCategories 是否含 ticketing。字段注入免改构造点；单测未注入=null 视为不拦截。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
-
-    // P0-D/CFG-01（V340）：积分累计率改后台可配（消灭「每元 1 分」写死 POINTS_PER_YUAN_CENT=100L）。
-    // 字段注入免改构造点；生产由 Spring 恒注入 JdbcCommissionPointsConfigRepository。
-    // fail-closed：为 null（旧构造/未注入的单测）即拒绝发积分事件，绝不静默回落硬编码常量（见 publishPointsEarnRequested）。
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    PointsAccrualRateConfigPort pointsAccrualRateConfigPort;
 
     // CG-08a（ENUM「全园故障与补偿通票」）：全园故障状态生效期间停售纯游乐门票与含游乐权益的通票。字段注入免改构造点；
     // 旧构造/未注入的单测为 null 视为无全园故障（生产由 Spring 恒注入 amusement 域的 AmusementParkWideFaultSalesGate）。

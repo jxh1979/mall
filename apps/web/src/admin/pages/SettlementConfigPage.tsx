@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -25,7 +25,7 @@ type ConfigItem = { group: string; key: string; label: string; value: string };
 type DraftItem = { id: string; configGroup: string; summary: string };
 type Overview = { platformDefaults: ConfigItem[]; pendingDraftCount: number; pendingDrafts: DraftItem[] };
 
-// 通票分账配置块 + V340 提成/积分 2 类（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
+// 通票分账配置块 + V340 卡座提成（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
 // 第十八批第 2 条：原「排名档位分账梯子」「商户每客单价 / 固定额」两块已合并为通票分账方案（DistributionSchemePanel），引擎不再读旧表。
 type EditKey =
   | "distribution_method"
@@ -35,7 +35,6 @@ type EditKey =
   | "channel_fee"
   | "revenue_stream_attribution"
   | "commission_rate"
-  | "points_accrual_rate"
   | "high_value_threshold";
 
 type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: string; endpoint: string };
@@ -52,19 +51,14 @@ const BLOCKS: BlockDef[] = [
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];
 
-// V340（P0-D）：提成与积分两类原本写死在代码里的口径，收进本页统一维护（「业务策略一律可配、零硬编码全后台可改」）。
+// V340（P0-D）：卡座提成费率原本写死在代码里，收进本页统一维护（「业务策略一律可配、零硬编码全后台可改」）。
+// 第十八批 CB 段第 397 条 397-R2（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：积分累计率业务不读，已撤下。
 const COMMISSION_POINTS_BLOCKS: BlockDef[] = [
   {
     key: "commission_rate",
     title: "卡座销售提成费率",
     endpoint: "commission-rate",
     note: "按「项目 × 商户 × 角色档」配置提成率（万分比）；商户留空 = 该项目通用。出厂默认：销售人员 15%（1500）、非销售人员 10%（1000）。",
-  },
-  {
-    key: "points_accrual_rate",
-    title: "积分累计率",
-    endpoint: "points-accrual-rate",
-    note: "按「项目 × 商户」配置每积 1 分所需的消费金额（分）；商户留空 = 通用。出厂默认 100 = 每消费 1 元积 1 分（会员等级倍率、生日倍率另在会员配置叠加）。",
   },
 ];
 
@@ -149,6 +143,9 @@ const BENEFICIARY_KIND_OPTIONS: [string, string][] = [
 // configGroup → 中文（草案队列展示用；未列出的原样显示）。
 const GROUP_LABELS: Record<string, string> = {
   distribution_method: "分配方式",
+  // 第十八批 CB 段第 398 条 398-R2：通告期、异议期改动落草案，在本队列复核转正。
+  distribution_notice_period: "通票分账通告期",
+  objection_period: "非积分商户账单异议期",
   rank_tiers: "排名档位",
   merchant_rate: "商户每客/固定额",
   comprehensive_service_fee: "综合服务费",
@@ -158,7 +155,6 @@ const GROUP_LABELS: Record<string, string> = {
   revenue_stream_attribution: "收入流归因",
   attribution_rule: "收入归因规则",
   commission_rate: "卡座提成费率",
-  points_accrual_rate: "积分累计率",
   // 第十八批第 24 条：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用一个值，比的是最近一次实际到货价）。
   high_value_threshold: "高价值判定阈值(最近一次实际到货价)",
   // V346（P0-E）：营业额抽成规则在「合同工作台」填写并落草案，在此复核转正后才对结算生效。
@@ -167,7 +163,7 @@ const GROUP_LABELS: Record<string, string> = {
   internal_price_item: "内部结算价目录条目",
 };
 // 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
-// V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
+// V340 卡座提成：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
 // 第十八批第 24 条：高价值判定阈值全平台只一行、只经最高权限审批调整，不可下线。
 // V346 抽成规则：合同终止/换规则时须可下线，下线后该合同不再产生抽成应收。
 // S6 赠送权益预扣：项目/票种特例条目可下线（回落上层默认），全局默认种子由后端守卫拦住。
@@ -175,7 +171,6 @@ const ARCHIVABLE = new Set([
   "merchant_rate",
   "revenue_stream_attribution",
   "commission_rate",
-  "points_accrual_rate",
   "turnover_rent_rule",
   "pass_gift_cost",
   // 批10/E：目录条目草案可直接下线（弃草案）；生效条目的下线归档在「内部结算价目录」页做。
@@ -212,7 +207,6 @@ type Form = {
   beneficiaryKind: string;
   roleType: string;
   rateBp: string;
-  amountCentPerPoint: string;
   // S6 赠送权益预估成本：预扣模式 + 按票计整额（元，提交时换算成分）。
   predeductMode: string;
   ticketGiftAmountYuan: string;
@@ -231,7 +225,7 @@ const EMPTY_FORM: Form = {
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeLayer: "route", channel: "", feeBps: "",
   roundingToleranceYuan: "5", roundingToleranceMinYuan: "", roundingToleranceMaxYuan: "", roundingAllowedEndings: "089", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
-  roleType: "sales", rateBp: "", amountCentPerPoint: "",
+  roleType: "sales", rateBp: "",
   predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "",
   highValueThresholdYuan: "", highValueThresholdMinYuan: "", highValueThresholdMaxYuan: "", reason: "",
   effectiveFrom: "",
@@ -260,7 +254,9 @@ function projectFromSummary(summary: string): string | undefined {
   return m[1];
 }
 
-export function SettlementConfigPage({ api, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+export function SettlementConfigPage({ api, user, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+  // 第十八批 CB 段第 394 条 394-R2（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交高价值判定阈值即批准。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [data, setData] = React.useState<Overview | null>(null);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("settlement_config_draft", data?.pendingDrafts ?? []), [data, reportViewedObjects]);
@@ -406,7 +402,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
     </>
   );
 
-  // 配置块渲染（通票分账 / 提成与积分 两个栏目共用）。
+  // 配置块渲染（通票分账 / 卡座提成 两个栏目共用）。
   const renderBlocks = (blocks: BlockDef[]) => blocks.map((block) => {
     const current = block.defaultKey ? defaultsByKey.get(block.defaultKey) : undefined;
     return (
@@ -493,15 +489,15 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
         通票分账配置：改动一律先落草案，经另一位有权限的同事「复核转正」后才生效（草案不即时生效）。
       </p>
       {renderBlocks(BLOCKS)}
-      <DistributionSchemePanel api={api} effectivePermissions={effectivePermissions} />
+      <DistributionSchemePanel api={api} effectivePermissions={effectivePermissions} onChanged={reload} />
     </div>
   );
 
-  // V340（P0-D）：提成率、积分累计率原写死在代码里，现收进本页；同样走「改→落草案→差人复核转正」。
+  // V340（P0-D）：卡座提成率原写死在代码里，现收进本页；同样走「改→落草案→差人复核转正」（积分累计率第 397 条已撤下）。
   const commissionPointsTab = (
     <div data-testid="settlement-config-commission-points">
       <p className="admin-muted-action">
-        卡座销售提成与会员积分累计的口径，改动一律先落草案，经另一位有权限的同事「复核转正」后才生效。
+        卡座销售提成的口径，改动一律先落草案，经另一位有权限的同事「复核转正」后才生效。
         商户级特例可「下线」，下线后该商户回落到项目 / 全平台默认口径；全平台默认口径不可下线，只能改数值。
       </p>
       {renderBlocks(COMMISSION_POINTS_BLOCKS)}
@@ -532,10 +528,10 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           items={[
             { key: "overview", label: "概览", children: overviewTab },
             { key: "ticket-distribution", label: "通票分账", forceRender: true, children: ticketDistributionTab },
-            { key: "commission-points", label: "提成与积分", forceRender: true, children: commissionPointsTab },
+            { key: "commission-points", label: "卡座提成", forceRender: true, children: commissionPointsTab },
             // FS-021-R3：三个付账日、钱路指派规则与非积分商户账单异议期。
             { key: "internal-pay-days", label: "付账日与钱路指派", forceRender: true,
-              children: <InternalPayDaysPanel api={api} effectivePermissions={effectivePermissions} /> },
+              children: <InternalPayDaysPanel api={api} effectivePermissions={effectivePermissions} onChanged={reload} /> },
             { key: "high-value", label: "高价值判定", forceRender: true, children: highValueTab },
           ]}
         />
@@ -549,13 +545,13 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           title={`修改配置 · ${ALL_BLOCKS.find((b) => b.key === editing)!.title}`}
           testId="settlement-config-guided"
           submitTestId="settlement-config-submit"
-          submitLabel={editing === "high_value_threshold" ? "提交最高权限审批" : "保存草案"}
+          submitLabel={editing === "high_value_threshold" ? (isMaster ? "提交（最高权限本人提交即批准）" : "提交最高权限审批") : "保存草案"}
           submitting={busy === `edit-${editing}`}
           error={formError || undefined}
           onClose={() => setEditing(null)}
           onSubmit={() => void submitEdit()}
           steps={editSteps(editing, form, setField, entities, canEntityView, ticketTypes, canTicketTypeView)}
-          summary={editSummary(editing, form, ticketTypes)}
+          summary={editSummary(editing, form, ticketTypes, isMaster)}
         />
       ) : null}
     </section>
@@ -744,11 +740,6 @@ function editSteps(
         </label>
         <label>提成率万分比（0~10000；1500 = 15%）<input data-testid="settlement-config-field-rateBp" type="number" min={0} max={10000} value={form.rateBp} onChange={setField("rateBp")} /></label></>);
       break;
-    case "points_accrual_rate":
-      content = (<>{projectField}
-        <label>商户编号（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
-        <label>每积 1 分所需消费金额（分，须大于 0；100 = 每 1 元积 1 分）<input data-testid="settlement-config-field-amountCentPerPoint" type="number" min={1} value={form.amountCentPerPoint} onChange={setField("amountCentPerPoint")} /></label></>);
-      break;
     case "high_value_threshold":
       content = (<>
         <label>高价值判定阈值（元；最近一次实际到货价大于或等于此值即高价值）<input data-testid="settlement-config-field-highValueThresholdYuan" type="number" min={0} value={form.highValueThresholdYuan} onChange={setField("highValueThresholdYuan")} /></label>
@@ -766,12 +757,12 @@ function editSteps(
   return [{ title: "配置内容", validate: () => validate(key, form), content }];
 }
 
-function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
-  const items = summaryFields(key, form, ticketTypes);
+function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[], isMaster: boolean): GuidedSummaryItem[] {
+  const items = summaryFields(key, form, ticketTypes, isMaster);
   return DATED_KEYS.has(key) ? [...items, { label: "生效起始日期", value: form.effectiveFrom }] : items;
 }
 
-function summaryFields(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
+function summaryFields(key: EditKey, form: Form, ticketTypes: TicketTypeOption[], isMaster: boolean): GuidedSummaryItem[] {
   const scope: GuidedSummaryItem = { label: "项目", value: form.projectId.trim() || "全平台默认" };
   // 确认页给票名而不是 id —— 复核的人要看得出这条费率影响的是哪个票。
   const ticketTypeLabel = (id: string) => {
@@ -796,10 +787,10 @@ function summaryFields(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]
       ...(form.feeLayer === "sales" ? [{ label: "每张票固定金额（分）", value: form.fixedAmountCent.trim() || "—" }] : [])];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
     case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
-    case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
     case "high_value_threshold": return [{ label: "作用范围", value: "全平台统一" },
       { label: "高价值判定阈值", value: `${form.highValueThresholdYuan} 元（下限 ${form.highValueThresholdMinYuan} 元，上限 ${form.highValueThresholdMaxYuan} 元）` },
-      { label: "调整理由", value: form.reason.trim() }, { label: "生效方式", value: "最高权限审批批准后按生效起始日期生效" }];
+      { label: "调整理由", value: form.reason.trim() },
+      { label: "生效方式", value: isMaster ? "最高权限本人提交即批准，按生效起始日期生效" : "最高权限审批批准后按生效起始日期生效" }];
   }
 }
 
@@ -864,9 +855,6 @@ function validateFields(key: EditKey, form: Form): string | null {
       return orUndef(form.managementEntityId) === undefined ? "收款主体必选。" : null;
     case "commission_rate":
       return isIntInRange(form.rateBp, 0, 10000) ? null : "提成率万分比需为 0~10000 的整数（1500 = 15%）。";
-    case "points_accrual_rate":
-      return isIntInRange(form.amountCentPerPoint, 1, Number.MAX_SAFE_INTEGER)
-        ? null : "每积 1 分所需消费金额需为大于 0 的整数（分）；100 = 每 1 元积 1 分。";
     case "high_value_threshold": {
       const yuan = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
       const value = yuan(form.highValueThresholdYuan);
@@ -937,8 +925,6 @@ function buildFields(key: EditKey, form: Form, idempotencyKey: string): Record<s
       };
     case "commission_rate":
       return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), roleType: form.roleType, rateBp: Number(form.rateBp) };
-    case "points_accrual_rate":
-      return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), amountCentPerPoint: Number(form.amountCentPerPoint) };
     case "high_value_threshold":
       // 全平台一行：不带项目、商户；元→分。
       return {

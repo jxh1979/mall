@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -39,7 +39,9 @@ function ruleText(rule: Rule): string {
   return `${ROUTE_LABELS[rule.route ?? ""] ?? rule.route}：次月 ${rule.statementDay} 日出账，指定第 ${rule.paySlot} 个付账日`;
 }
 
-export function InternalPayDaysPanel({ api, effectivePermissions }: Pick<AdminPageProps, "api" | "effectivePermissions">) {
+// 第十八批 CB 段第 398 条 398-R2（BSM:521「必须填写生效起始日期」）：onChanged＝异议期草案存完通知所在页刷新待复核队列。
+export function InternalPayDaysPanel({ api, effectivePermissions, onChanged }:
+  Pick<AdminPageProps, "api" | "effectivePermissions"> & { onChanged?: () => void }) {
   const [rules, setRules] = React.useState<Rule[]>([]);
   const [kind, setKind] = React.useState("route");
   const [route, setRoute] = React.useState("ticket_distribution");
@@ -48,7 +50,7 @@ export function InternalPayDaysPanel({ api, effectivePermissions }: Pick<AdminPa
   const [effectiveFrom, setEffectiveFrom] = React.useState("");
   const [days, setDays] = React.useState(["", "", ""]);
   const [reason, setReason] = React.useState("");
-  const [policy, setPolicy] = React.useState({ projectId: "", workingDays: "", minDays: "", maxDays: "" });
+  const [policy, setPolicy] = React.useState({ projectId: "", workingDays: "", minDays: "", maxDays: "", effectiveFrom: "" });
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -80,10 +82,14 @@ export function InternalPayDaysPanel({ api, effectivePermissions }: Pick<AdminPa
   }
 
   function savePolicy() {
-    void run(() => api.post(`${BASE}/objection-period`, {
-      projectId: policy.projectId.trim() || undefined, workingDays: Number(policy.workingDays),
-      minDays: Number(policy.minDays), maxDays: Number(policy.maxDays),
-    }));
+    if (policy.effectiveFrom.trim() === "") { setError("生效起始日期必填。"); return; }
+    void run(async () => {
+      await api.post(`${BASE}/objection-period`, {
+        projectId: policy.projectId.trim() || undefined, workingDays: Number(policy.workingDays),
+        minDays: Number(policy.minDays), maxDays: Number(policy.maxDays), effectiveFrom: policy.effectiveFrom,
+      });
+      onChanged?.();
+    });
   }
 
   return (
@@ -133,12 +139,14 @@ export function InternalPayDaysPanel({ api, effectivePermissions }: Pick<AdminPa
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="internal-pay-day-submit" disabled={busy} onClick={submitRule}>提交审批</PermissionButton>
       </div>
       <h4>非积分商户账单异议期（按项目）</h4>
+      <p className="admin-muted-action">改动落草案，在待复核草案里复核转正后按生效起始日期生效。</p>
       <div className="admin-form-row" data-testid="internal-pay-day-objection-form">
         <label>项目<input data-testid="internal-pay-day-objection-project" value={policy.projectId} onChange={(e) => setPolicy({ ...policy, projectId: e.target.value })} placeholder="项目账号可留空＝本项目" /></label>
         <label>工作日数<input data-testid="internal-pay-day-objection-days" type="number" min={0} value={policy.workingDays} onChange={(e) => setPolicy({ ...policy, workingDays: e.target.value })} /></label>
         <label>下限<input data-testid="internal-pay-day-objection-min" type="number" min={0} value={policy.minDays} onChange={(e) => setPolicy({ ...policy, minDays: e.target.value })} /></label>
         <label>上限<input data-testid="internal-pay-day-objection-max" type="number" min={0} value={policy.maxDays} onChange={(e) => setPolicy({ ...policy, maxDays: e.target.value })} /></label>
-        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="internal-pay-day-objection-save" disabled={busy} onClick={savePolicy}>保存异议期</PermissionButton>
+        <label>生效起始日期<input data-testid="internal-pay-day-objection-effective-from" type="date" value={policy.effectiveFrom} onChange={(e) => setPolicy({ ...policy, effectiveFrom: e.target.value })} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="internal-pay-day-objection-save" disabled={busy} onClick={savePolicy}>保存异议期草案</PermissionButton>
       </div>
       {error ? <div className="admin-inline-error" data-testid="internal-pay-day-error">{error}</div> : null}
     </div>

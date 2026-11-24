@@ -1,10 +1,11 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.Hashing;
 import com.complex.platform.common.LocalZone;
@@ -72,12 +73,15 @@ public class DistributionSchemeService {
     private final PassPoolTrialService poolTrials;
     private final JdbcSettlementBillRepository bills;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
+    private final AuthorizationService auth;
+    private final SettlementConfigScheduledActivationService scheduledActivation;
 
     public DistributionSchemeService(NamedParameterJdbcTemplate jdbc, AuditEventService audit,
                                      NotificationService notifications, MerchantFeeNotificationRecipientResolver recipients,
                                      BusinessDayResolver businessDays, MerchantZoneNoticeService zoneNotices,
                                      PassPoolTrialService poolTrials, JdbcSettlementBillRepository bills,
-                                     com.fasterxml.jackson.databind.ObjectMapper json) {
+                                     com.fasterxml.jackson.databind.ObjectMapper json, AuthorizationService auth,
+                                     SettlementConfigScheduledActivationService scheduledActivation) {
         this.jdbc = jdbc;
         this.audit = audit;
         this.notifications = notifications;
@@ -87,6 +91,8 @@ public class DistributionSchemeService {
         this.poolTrials = poolTrials;
         this.bills = bills;
         this.json = json;
+        this.auth = auth;
+        this.scheduledActivation = scheduledActivation;
     }
 
     /** 参与家数档位表一格（万分比）。上下限出厂留空，配置时须同时填写。 */
@@ -195,7 +201,8 @@ public class DistributionSchemeService {
         if (row == null || !STATUS_DRAFT.equals(row.get("status"))) {
             throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "草案不存在或非草案态,无法转正");
         }
-        if (actorId != null && actorId.equals(row.get("drafted_by"))) {
+        // 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人起草的可本人转正。
+        if (actorId != null && actorId.equals(row.get("drafted_by")) && !auth.isMasterAuthority(auth.currentActor())) {
             throw ApiException.forbidden("SELF_ACTIVATION_FORBIDDEN", "不能自行转正/软删自己起草的改动,须另一高权限人复核批准");
         }
         validateTiers(tierRows(versionId), false);
@@ -234,24 +241,38 @@ public class DistributionSchemeService {
         return overview().versions().stream().filter(v -> v.id().equals(versionId)).findFirst().orElseThrow();
     }
 
-    /** 通告期：数值、单位与上下限同时必填，1 ≤ 下限 ≤ 数值 ≤ 上限。 */
+    /**
+     * 通告期：数值、单位与上下限同时必填，1 ≤ 下限 ≤ 数值 ≤ 上限。
+     * 第十八批 CB 段第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批
+     * 通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：改动只落全平台一个草案槽（再存覆盖），生效起始日期必填、
+     * 须晚于平台默认当前营业日；在结算配置中心他人复核转正（config_type＝distribution_notice_period）后待生效，到日由
+     * {@link SettlementConfigScheduledActivationService#activateDue} 转正（原生效行下线留库）。返回现行通告期。
+     */
     public NoticePeriod saveNoticePeriod(NoticePeriodRequest request, String actorId) {
-        requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
+        String idem = requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
         if (request.periodValue() == null || request.minValue() == null || request.maxValue() == null
                 || !Set.of("day", "month").contains(request.periodUnit()) || request.minValue() < 1
                 || request.periodValue() < request.minValue() || request.periodValue() > request.maxValue()) {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "通告期须同时填写数值、单位（天/月）及上下限，下限不小于 1，数值须在上下限内");
         }
-        jdbc.update("""
-                UPDATE ticket_distribution_notice_period
-                   SET period_value = :v, period_unit = :u, min_value = :min, max_value = :max, updated_by = :actor, updated_at = now()
-                 WHERE id = 'default'
-                """, new MapSqlParameterSource().addValue("v", request.periodValue()).addValue("u", request.periodUnit())
-                .addValue("min", request.minValue()).addValue("max", request.maxValue()).addValue("actor", actorId));
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(request.effectiveFrom(), null, null);
+        String draftId = jdbc.queryForObject("""
+                INSERT INTO ticket_distribution_notice_period (id, period_value, period_unit, min_value, max_value, effective_from,
+                    status, is_draft, updated_by, updated_at)
+                VALUES (:id, :v, :u, :min, :max, :effective_from, 'active', TRUE, :actor, now())
+                ON CONFLICT (is_draft) WHERE status = 'active' DO UPDATE SET
+                    period_value = EXCLUDED.period_value, period_unit = EXCLUDED.period_unit, min_value = EXCLUDED.min_value,
+                    max_value = EXCLUDED.max_value, effective_from = EXCLUDED.effective_from, updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id
+                """, new MapSqlParameterSource().addValue("id", "tdnp_d_" + Hashing.idempotencyCode("__DEFAULT__|" + idem))
+                .addValue("v", request.periodValue()).addValue("u", request.periodUnit())
+                .addValue("min", request.minValue()).addValue("max", request.maxValue())
+                .addValue("effective_from", effectiveFrom).addValue("actor", actorId), String.class);
         audit.recordSuccess("settlement.config.distribution_notice_period.updated", PERM, "ticket_distribution_notice_period",
-                "default", null, request.idempotencyKey(), Map.of("period_value", request.periodValue(),
-                        "period_unit", request.periodUnit(), "min_value", request.minValue(), "max_value", request.maxValue()));
+                draftId, null, idem, Map.of("period_value", request.periodValue(), "period_unit", request.periodUnit(),
+                        "min_value", request.minValue(), "max_value", request.maxValue(), "effective_from", effectiveFrom.toString()));
         return noticePeriod();
     }
 
@@ -351,7 +372,8 @@ public class DistributionSchemeService {
             }
             throw ApiException.conflict("INCENTIVE_APPLICATION_NOT_PENDING", "该申请已审批，不能再审");
         }
-        if (actorId != null && actorId.equals(row.get("submitted_by"))) {
+        // 394-R1（BSM:576 同句）：最高权限本人提交的可本人审批。
+        if (actorId != null && actorId.equals(row.get("submitted_by")) && !auth.isMasterAuthority(auth.currentActor())) {
             throw ApiException.forbidden("SELF_ACTIVATION_FORBIDDEN", "不能审批自己提交的短期经营激励申请，须另一位有平台审批权限的人审批");
         }
         Timestamp from = null;
@@ -477,7 +499,8 @@ public class DistributionSchemeService {
 
     private NoticePeriod noticePeriod() {
         return jdbc.queryForObject("""
-                SELECT period_value, period_unit, min_value, max_value FROM ticket_distribution_notice_period WHERE id = 'default'
+                SELECT period_value, period_unit, min_value, max_value FROM ticket_distribution_notice_period
+                 WHERE is_draft = FALSE AND status = 'active'
                 """, new MapSqlParameterSource(), (rs, i) -> new NoticePeriod(rs.getInt("period_value"), rs.getString("period_unit"),
                 (Integer) rs.getObject("min_value"), (Integer) rs.getObject("max_value")));
     }
