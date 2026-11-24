@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import android.app.Activity
 import android.content.Intent
@@ -459,8 +459,8 @@ class MainActivity : Activity() {
 
     fun showResult(r: VerificationResponse) {
       faceCapture = null
-      // 164-R1（PGM:287）：原因显示中文，没有中文原因时不出这一行。
-      status.text = listOf("核销结果：${verifyStatusZh(r.status)}", "核销号：${r.verificationNo}", verificationReasonZh(r.resultReason))
+      // 164-R1（PGM:287）：原因显示中文，没有中文原因时不出这一行。第十八批 BO 段 261-B06-R1（PGM:303）：重复提交返回第一次的结果时先出「已完成」提示。
+      status.text = listOf(workflow.operationKeys.completedNotice.orEmpty(), "核销结果：${verifyStatusZh(r.status)}", "核销号：${r.verificationNo}", verificationReasonZh(r.resultReason))
         .filter { it.isNotEmpty() }.joinToString("\n")
     }
 
@@ -655,19 +655,21 @@ class MainActivity : Activity() {
         if (quantity != null && codes.size != quantity) { status.text = "须逐件扫 $quantity 个物品码"; return@button }
         status.text = "正在提交…"
         runBackground(
-          // 每次新幂等键提交。
-          action = { api.redeemVoucher(VoucherRedeemRequest(java.util.UUID.randomUUID().toString(), c, codes.takeIf { quantity != null })) },
-          onSuccess = { checked = null; showTrace(null); status.text = "${verb}完成" },
+          // 第十八批 BO 段（第 261 条补充②，PGM:303）：按一次操作沿用请求编号（券码与物品码不变即同一次），重复提交返回第一次的结果时先出「已完成」提示。
+          action = { api.redeemVoucherOnce(c, codes.takeIf { quantity != null }, workflow.operationKeys) },
+          onSuccess = { checked = null; showTrace(null); status.text = listOfNotNull(workflow.operationKeys.completedNotice, "${verb}完成").joinToString("\n") },
           onError = { status.text = "${verb}失败：${friendly(it)}" },
         )
       } else {
         val (device, point) = kioskTarget() ?: return@button
         status.text = "正在提交…"
         runBackground(
-          action = { api.verify(kioskEntitlementRequest(c, device, point, java.util.UUID.randomUUID().toString(), store.session?.staffId)) },
+          // 第十八批 BO 段 261-B06-R1（PGM:303）：按一次操作沿用请求编号（码不变即同一次），重复提交返回第一次的结果时先出「已完成」提示。
+          action = { api.claimKioskEntitlement(c, device, point, store.session?.staffId, workflow.operationKeys) },
           onSuccess = { r ->
             checked = null
-            status.text = if (r.status == "success") "领取完成" else "不可领取：${verifyStatusZh(r.status)} ${verificationReasonZh(r.resultReason)}"
+            status.text = listOfNotNull(workflow.operationKeys.completedNotice,
+              if (r.status == "success") "领取完成" else "不可领取：${verifyStatusZh(r.status)} ${verificationReasonZh(r.resultReason)}").joinToString("\n")
           },
           onError = { status.text = "领取失败：${friendly(it)}" },
         )
@@ -1179,7 +1181,10 @@ class MainActivity : Activity() {
         runBackground(
           action = { workflow.amusementVerifyOnline(code) },
           // PGM:287：只显示中文状态与核销号，不显示 result_reason 机器码。
-          onSuccess = { r -> status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}" },
+          // 第十八批 BO 段 261-B06-R1（PGM:303）：重复提交返回第一次的结果时先出「已完成」提示。
+          onSuccess = { r ->
+            status.text = listOfNotNull(workflow.operationKeys.completedNotice, "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}").joinToString("\n")
+          },
           onError = { status.text = "游乐核销失败：${friendly(it)}" },
         )
       }
@@ -1222,7 +1227,11 @@ class MainActivity : Activity() {
             tableId = tableId.text.toString().trim().ifEmpty { null },
           )
         },
-        onSuccess = { o -> showPosCheckout(o) },
+        onSuccess = { o ->
+          // 第十八批 BO 段 261-B06-R1（PGM:303）：重复提交返回第一次的结果时，「已完成」提示用浮层显示（随即换到结账屏）。
+          workflow.operationKeys.completedNotice?.let { android.widget.Toast.makeText(this, it, android.widget.Toast.LENGTH_LONG).show() }
+          showPosCheckout(o)
+        },
         onError = { status.text = "下单失败：${friendly(it)}" },
       )
     }
@@ -2832,6 +2841,8 @@ class MainActivity : Activity() {
       action = { workflow.createBarOrder(barId = bar, items = items, tableId = table?.id) },
       onSuccess = { order ->
         posCart.clear()
+        // 第十八批 BO 段 261-B06-R1（PGM:303）：重复提交返回第一次的结果时，「已完成」提示用浮层显示（随即换到结账屏）。
+        workflow.operationKeys.completedNotice?.let { android.widget.Toast.makeText(this, it, android.widget.Toast.LENGTH_LONG).show() }
         showPosCheckout(order)
       },
       onError = { status.text = "下单失败：${friendly(it)}" },
@@ -2854,9 +2865,11 @@ class MainActivity : Activity() {
     val items = posCartItems()
     status.text = "正在下单…"
     runBackground(
-      action = { api.placeKioskBarOrder(bar, tableId, items) },
+      action = { api.placeKioskBarOrder(bar, tableId, items, workflow.operationKeys) },
       onSuccess = { bill ->
         posCart.clear()
+        // 第十八批 BO 段 261-B06-R1（PGM:303）：下单一步是重复提交时，「已完成」提示用浮层显示（随即换到收款步骤）。
+        workflow.operationKeys.completedNotice?.let { android.widget.Toast.makeText(this, it, android.widget.Toast.LENGTH_LONG).show() }
         kioskPayStep("吧台买酒 账单 ${bill.billNo ?: bill.id}", bill.payableAmountCent - bill.paidAmountCent, KioskPayTarget.BarBill(bill.id), null) {
           setContentView(screen(title = "吧台买酒", children = listOf(statusText("已付款，请到吧台取酒"),
             button("返回一体机首页") { showKioskHome() })))

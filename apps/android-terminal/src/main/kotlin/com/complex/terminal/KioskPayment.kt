@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.UUID
 import kotlinx.serialization.json.Json
@@ -52,12 +52,13 @@ class KioskPaymentKey {
 
   @Synchronized
   internal fun failed(error: Throwable) {
-    if (error is ApiException && error.statusCode in 400..499 && detailCode(error) != "IDEMPOTENCY_IN_PROGRESS") content = null
+    if (error is ApiException && error.statusCode in 400..499 && apiDetailCode(error) != "IDEMPOTENCY_IN_PROGRESS") content = null
   }
-
-  private fun detailCode(error: ApiException): String? =
-    ((runCatching { Json.parseToJsonElement(error.responseBody) }.getOrNull() as? JsonObject)?.get("detail_code") as? JsonPrimitive)?.content
 }
+
+/** 服务端错误响应体里的 detail_code，没有为空（[KioskPaymentKey] 与 [TerminalOperationKeys] 共用；第十八批 BO 段 261-B06-R1 提成顶层函数）。 */
+internal fun apiDetailCode(error: ApiException): String? =
+  ((runCatching { Json.parseToJsonElement(error.responseBody) }.getOrNull() as? JsonObject)?.get("detail_code") as? JsonPrimitive)?.content
 
 /**
  * 261-B09-R1：响应顶层带 replayed=true（本次是重复提交、返回的是第一次的结果）时取服务端的提示 message

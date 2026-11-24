@@ -8,11 +8,11 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-22T02:11:31.034Z",
+  "generated_at": "2026-11-24T07:00:51.685Z",
   "git": {
-    "head": "900a9cbba005889d73a3121920a80e10ad9129f0",
-    "head_short": "900a9cbb",
-    "branch": "feature/business-code-batch94-20261106",
+    "head": "ba8657c6318ab096395e579c36f2b33f7ececff4",
+    "head_short": "ba8657c6",
+    "branch": "feature/business-code-batch87-20261106",
     "worktree_dirty": false,
     "source_fingerprint": "820354c499b7c235d3ae2befed3478bbfe3bc33658c2e283040a5cdf282c50d1",
     "source_fingerprint_file_count": 3671,
@@ -55,7 +55,7 @@
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-22T02:08:15.704Z",
+    "latest_mtime": "2026-11-24T06:45:56.065Z",
     "passed": true
   },
   "web_unit_source": {
@@ -461,13 +461,13 @@
       {
         "path": "apps/web/dist/assets/main-D50ik1D-.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-22T02:08:25.016Z"
+        "mtime": "2026-11-24T06:46:07.725Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-22T02:08:25.019Z"
+      "mtime": "2026-11-24T06:46:07.728Z"
     },
     "no_main_bundle_warning_expected": true
   },
