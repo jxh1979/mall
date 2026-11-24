@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -45,9 +45,11 @@ public class PointsRecoveryWaiverService {
         auth.requirePermission(VIEW);
         List<Line> lines=lines(customerId,false);
         requireScope(lines,VIEW);
+        // 第十八批 CN 段第 372 条第 3 段 372-S3-R5（第十八批裁决 77）：按全部原奖励来源过完项目与商户闸，再只列时段内建立的追回记录与时段内办理的豁免
+        lines=lines.stream().filter(line->com.complex.platform.access.AuditDataWindow.covers(line.createdAt())).toList();
         TicketRewardConfig config=configs.effective("recovery_waiver",null,null,Instant.now());
         return new Detail(customerId,config.id(),config.values().fixedValue(),pending(lines),lines,
-                jdbc.query("SELECT * FROM customer_points_recovery_waivers WHERE customer_id=? ORDER BY created_at DESC,id", (rs,n)->{
+                jdbc.query("SELECT * FROM customer_points_recovery_waivers WHERE customer_id=?"+com.complex.platform.access.AuditDataWindow.andInstant("created_at")+" ORDER BY created_at DESC,id", (rs,n)->{
                     try {
                         List<Line> originalLines=json.readValue(rs.getString("lines"),new TypeReference<List<Line>>(){});
                         requireScope(originalLines,VIEW);

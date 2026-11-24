@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -1383,6 +1383,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         WHERE l.bill_id = b.id) v ON TRUE
                  WHERE (:project_id::text IS NULL OR b.project_id = :project_id)
                    AND (:period_start::date IS NULL OR b.period_start = :period_start)
+                """ + com.complex.platform.access.AuditDataWindow.andPeriod("b.period_start", "b.period_end") // 372-S3-R2：外审数据时段按账期整段
+                + """
                  ORDER BY b.period_start DESC, b.id
                  LIMIT :limit
                 """, new MapSqlParameterSource()

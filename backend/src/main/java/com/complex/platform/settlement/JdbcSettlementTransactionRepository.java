@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.sql.Timestamp;
@@ -523,6 +523,8 @@ public class JdbcSettlementTransactionRepository {
                  WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
                    AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
+                """ + com.complex.platform.access.AuditDataWindow.andInstant("COALESCE(business_at, created_at)") // 372-S3-R2：外审数据时段按核销业务时刻
+                + """
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, i) -> new SettlementTransactionView(
@@ -554,7 +556,7 @@ public class JdbcSettlementTransactionRepository {
                  WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
                    AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
-                """, params, Long.class);
+                """ + com.complex.platform.access.AuditDataWindow.andInstant("COALESCE(business_at, created_at)"), params, Long.class); // 372-S3-R2：与清单同一条件
         return n == null ? 0L : n;
     }
 

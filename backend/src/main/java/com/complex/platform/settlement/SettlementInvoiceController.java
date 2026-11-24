@@ -102,7 +102,7 @@ public class SettlementInvoiceController implements ExportFileService.Source {
                 (String) filters.get("subject_entity_id"), (String) filters.get("status"));
     }
 
-    /** 按筛选分页取全开票清单；导出记录 filters 记筛选参数与范围（全平台）。 */
+    /** 按筛选分页取全开票清单；导出记录 filters 记筛选参数、范围（全平台）与外审数据时段 data_window（372-S3-R3）。 */
     private ExportFileService.Table invoiceTable(String project, LocalDate periodStart, String subject, String state) {
         List<JdbcSettlementInvoiceRepository.SettlementInvoiceItemView> items = new ArrayList<>();
         for (int page = 1; ; page++) {
@@ -118,6 +118,7 @@ public class SettlementInvoiceController implements ExportFileService.Source {
         filters.put("subject_entity_id", subject);
         filters.put("status", state);
         filters.put("scope", "全平台");
+        filters.put("data_window", com.complex.platform.access.AuditDataWindow.current().map(com.complex.platform.access.AuditDataWindow::label).orElse(null));
         String month = periodStart == null ? "全部结算月" : periodStart.toString().substring(0, 7);
         return new ExportFileService.Table("开票清单-" + month, filters, EXPORT_COLUMNS,
                 items.stream().map(SettlementInvoiceController::exportRow).toList());
