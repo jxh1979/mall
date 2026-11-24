@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing.dto;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 
@@ -28,8 +28,22 @@ public record EntitlementTemplateRequest(
         // 批10/E(V380)：内部结算 SKU 目录引用(internal_price_catalog.item_code,可空)。
         //   餐饮/零售等虚拟权益的内部结算价由此取:引用既有条目或先在目录「就地新建」再引用;
         //   条目绑定商户必须 = 本模板提供方商户。
-        String catalogItemCode
+        String catalogItemCode,
+        // 第十八批 CC 段 399-R1（BSM:784「游乐（指定项目/次数/场次）」）：游乐权益指定的游乐项目（amusement_projects.id）；游乐类必填，
+        //   该项目已登记经营商户的，merchant_id 须为该商户。其余类型不填。
+        String amusementProjectId
 ) {
+    // ponytail: 399-R1 前不带指定游乐项目的调用点（既有测试）默认 null。
+    public EntitlementTemplateRequest(
+            String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds, String name,
+            String entitlementType, Integer defaultTotalTimes, Long defaultValueCent, String status,
+            String barItemRef, String merchantId, String venueId, String pointId,
+            Long agreementPriceCent, String exclusiveMerchantId, String catalogItemCode) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, name, entitlementType, defaultTotalTimes,
+                defaultValueCent, status, barItemRef, merchantId, venueId, pointId,
+                agreementPriceCent, exclusiveMerchantId, catalogItemCode, null);
+    }
+
     // ponytail: 批10/E 前带 exclusiveMerchantId 但不带目录引用的调用点(既有测试/前端)默认 null=未挂目录。
     public EntitlementTemplateRequest(
             String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds, String name,

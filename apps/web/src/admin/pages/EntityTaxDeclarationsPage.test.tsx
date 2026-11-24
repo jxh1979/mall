@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -339,6 +339,28 @@ describe("EntityTaxDeclarationsPage 税费申报登记", () => {
 
     await waitFor(() => expect(screen.getByTestId("entity-tax-profit-table").textContent).toContain("游乐域内结算"));
     expect(screen.getByTestId("entity-tax-profit-table").textContent).not.toContain("amusement_domain_settlement");
+  });
+
+  // 第十八批 CC 段第 401 条 401-R2（ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」）：引进参股的游乐项目经营主体按持股分红税前口径，
+  // 口径说明写明，收入行游乐收入显中文。
+  it("主体收入成本利润口径说明含引进参股的游乐项目经营主体，收入行显示「游乐收入」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("entity-tax-filter-entity").textContent).toContain("甲酒吧公司"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/finance/entity-taxes/profits")
+      ? Promise.resolve(text({ revenue_cent: 212000, revenue_items: [{ income_type: "game", amount_cent: 212000 }], cost_cent: 0, cost_items: [],
+        profit_cent: 212000, basis: "dividend" }))
+      : base(input, init));
+    fireEvent.click(screen.getByTestId("entity-tax-tab-profits"));
+    await waitFor(() => expect(screen.getByTestId("entity-tax-profit-entity").textContent).toContain("甲酒吧公司"));
+    fireEvent.change(screen.getByTestId("entity-tax-profit-entity"), { target: { value: "be_1" } });
+    fireEvent.change(screen.getByTestId("entity-tax-profit-start"), { target: { value: "2026-05" } });
+    fireEvent.change(screen.getByTestId("entity-tax-profit-end"), { target: { value: "2026-05" } });
+
+    await waitFor(() => expect(screen.queryByTestId("entity-tax-profit-basis")?.textContent ?? "").toContain("引进参股的游乐项目"));
+    expect(screen.getByTestId("entity-tax-profit-table").textContent).toContain("游乐收入");
+    expect(screen.getByTestId("entity-tax-profit-table").textContent).not.toContain("game");
   });
 
   it("登记弹窗按蛇形键提交（金额元转分，三条线最终审批人）", async () => {

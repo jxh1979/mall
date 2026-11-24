@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.50
+文档版本：V1.51
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3987,6 +3987,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 80 | **自定事项第 49 条复议：有价的餐饮零售权益能不能标成「商户让利」**（题面：「【自定第 49 条·有价的餐饮零售权益能不能标成「商户让利」】前因：第 264 条（你选了「商户在系统里申请确认」）的设计顺带发现：票务策略页配通票时，餐饮、零售的「专属直付」权益就算有价格，出资方下拉也能选「商户让利型」，后端照存；核销时只看「商户让利」不看票面价，结算记 0，商户收不到这项有价权益的直付款。ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；BSM:751「商户让利的零元免费权益不结算」——原句把让利限在零元免费权益。我定的：不登记。理由是第 264 条做完后，要标商户让利必须先有该商户为这张票提交并确认的申请，我判断正常业务碰不到。重新看一遍后：商户仍可能对有价权益提交申请（误点或以为是活动折扣），而原句让利只管零元权益，拦一下成本很小。所以这次我改为推荐「登记并随第 264 条一并拦」。」）—— 操作员选「只零元权益能选让利（推荐）」：登记并随第 264 条（18BV）一并做：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益。（未选：「维持不登记」）（2026-11-21 弹窗；来由：操作员要求复议控制席自定事项。控制席说明：待开发清单第 420 条，随 18BV 第 264 条修复阶段一并做。） | 控制席自定事项（18BV） |
 | 81 | **第 387 条 已存档内容页要不要显示每条记录当初的存档理由**（题面：「【第 387 条】「已存档内容」页要不要显示每条记录当初的存档理由？前因：BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」BSM:576、577 写「存档及删除都需要填写理由」。删除另有 BSM:574「谁在什么时候、以什么理由删了什么，都有记录可查」，存档没有这样一句。现状：各类存档时都必须填理由、也存进了库；但本页 15 个分类只有服务项目、游乐项目权益绑定两类能显示理由，其余只显示存档时间和存档人；空间类型连时间和存档人也没存。设施设备、商户服务工单、员工档案等几类必填的理由在界面上任何地方都看不到。分歧：HTML 没写本页要显示哪些内容，属「属实但无依据」，按 11-19 规矩要问你。」）—— 操作员选「显示存档理由（推荐）」：每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由。（未选：「不显示，维持现状」）（2026-11-21 弹窗；来由：18BY 只读设计第 387 条待裁题。控制席说明：随 18BY 做 387-R1～R3） | 待开发清单第 387 条（18BY） |
 | 82 | **第 395 条 涉钱配置批准追溯适用后范围内已出单据怎么处理**（题面：「【第 395 条】涉钱配置经批准「追溯适用到生效日之前」后，范围内已经出过的单据怎么处理？前因：BSM:521「……确需追溯适用到生效日之前的，属于例外，必须单独申请、说明追溯范围与理由，经最高权限审批后才可执行，追溯的范围与影响金额逐笔留痕。」同句还写「重新月结只重算金额、不改动单据上已锁定的版本」。定了申请、审批、留痕，没写执行时已出单据的钱怎么动。现状：系统没有任何追溯申请入口；各涉钱配置（渠道费、卡座提成、综合服务费、赠送权益预估成本、内部结算价等）只能从今天以后生效；也没有重算已出账单的功能。例：卡座提成比例 15 日才谈定、约定自当月 1 日起执行。分歧：批准后是系统自己改算并多退少补，还是系统只列明细、财务手工调，还是影响金额由申请人填。工作量差一个量级。」）—— 操作员选「系统重算并自动多退少补（推荐）」：申请时系统按新版本逐笔重算、列出逐笔影响金额；最高权限批准后（本人提交不需审批）自动补记调整、多退少补；原单锁定版本不改，另记追溯记录。（未选：「系统列明细、财务手工调」「只做申请审批与留痕」）（2026-11-21 弹窗；来由：18CB 只读设计第 395 条待裁题。控制席说明：随 18CB 做，工作量大、分段） | 待开发清单第 395 条（18CB） |
+| 83 | **第 400 条 游乐票「当天不限次数」与多次票口径**（题面：「【第 400 条】游乐权益要不要开放「当天不限次数」的票？前因：ENUM:144「游乐规则中的「当天」「每天」（含一人多次票当天多次入场、当天不限次数一类表述）一律按营业日计算」；BSM:780「一人多次票/通票按可用次数逐次核销」。现状：核销一侧已有「当天不限次数」处理，但后台建游乐权益一律按次扣。——操作员答：「呃，游乐权益本身就是通票啊。空票的意思就是当天任何时间只要买了当天的这个场次之内都可以认完。任意玩。就是不限制的这个只是进每一个设施的时候需要核销一次，但是还可以重复进入。」追问①（按次数的游乐票还保留吗）操作员答：「这里的多次票和酒吧的多次票是一样的呀是可以入场多个场次，也就多天不同场次入内。」追问②（当天重复进同一设施每次核销要不要跟游乐商户结算）操作员选「每设施当天只结算一次（推荐）」。」）—— 操作员选「（见题面各问所答）」：游乐票的「一次」即一个营业日（场次）：当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕；同一设施当天只按内部结算价跟提供设施的游乐商户结算一次；多次票即可在多天、不同场次各入场一次。（未选：「不做（推荐）」「做，每次入场都结算」（第一问）；「每次入场都结算」（追问②））（2026-11-21 弹窗；来由：18CC 只读设计第 400 条待裁题。控制席说明：随 18CC 按本裁决重做第 400 条设计后实现） | 待开发清单第 400 条（18CC） |
 | 84 | **第 406 条 闭店时段做完的游乐开放前巡检算不算当天**（题面：「【第 406 条】闭店时段（出厂 07:00～10:00）做完的游乐开放前巡检，算不算当天的合格巡检？前因：PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1300「开放前巡检 + 营业中抽检 + 定期检修」；BSM:1682「营业日从当日上午 10:00 起算，至次日上午 10:00 止；其中次日凌晨 07:00 至上午 10:00 为非营业时段（已闭店），该时段内发生的记录仍归属正在进行的这一个营业日」。现状：系统不看日期，只看项目历史上最新一条巡检，合格一次就一直放行（第 406 条要修）。第五轮巡检组已把逐点扫码的「一轮」定为从上一个闭店时点（出厂 07:00）算起。分歧：照 BSM:1682 字面，07:00～10:00 做完的巡检归前一营业日，10:00 开门时就成了「当日无合格巡检」、核销被拦；照「开放前巡检」的用意，开门前做完的应算这一天。每天开门前都会遇到。」）—— 操作员选「从 07:00 闭店起算这一天（推荐）」：从上一个闭店时点（出厂 07:00）起做完并合格的巡检算这一天，与扫码走点「一轮」同一条界线。（未选：「严格按营业日 10:00 起算」）（2026-11-21 弹窗；来由：18CF 只读设计第 406 条待裁题。控制席说明：随 18CF 做） | 待开发清单第 406 条（18CF） |
 | 85 | **第 423 条 商户级卡充值赠送比例由谁设置**（题面：「【第 423 条·商户级卡的充值赠送比例，还由平台运营代为录入并经平台审批吗？】前因：《枚举速查表》第 86 行原句「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台，商户不自行改动。该笔赠送金的资金与成本全部归发卡商户承担」；2026-08-03 配置裁决第 11 条、待裁第 11 条也都答「商户提出、平台运营代录，商户不自行改动」。你刚定的裁决 79 写「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」，并把同一段「扣款顺序……由平台运营代为录入后台」改成了「由发卡商户在商户后台自行设置」；但「赠送比例」这半句当时没列进题面。现状：商户级卡赠送比例只能由平台运营在后台代录，经平台有审批权的人转正后生效；商户账号提交会被拒。分歧：原句和两条旧裁决是「平台代录」，裁决 79 是「充值不经平台」，方向相反。发卡商户做「充多少送多少」是最常见的促销，每次调比例都会碰到。」）—— 操作员选「改成商户自行设置（推荐）」：ENUM:86 该半句改为「赠送比例由发卡商户在商户后台自行设置」，删「商户不自行改动」；平台不再代录、不再审批；照旧先存草案、填生效日、经本商户有审批权的人转正后生效。（未选：「维持平台代录并审批」）（2026-11-21 弹窗；来由：18CL 只读设计第 423 条待裁题。控制席说明：随 18CL 做 423-R3 与 HTML 改句；取代 2026-08-03 配置裁决第 11 条与待裁第 11 条的同一问） | 待开发清单第 423 条（18CL） |
 
@@ -13844,3 +13845,85 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 测试：本组无新测试；verify-full-admin-page-matrix、generate-data-isolation-spec --check、git diff --check 通过。
 - 18CQ 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 7c96e6c7；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.21、决策台账 V1.50，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CQ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 85f42d04 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7476 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 22:21 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CC 落地位置补记（2026-11-20）：第十八批 CC 段（batch101）按 18CC 只读设计实现待开发清单第 399、400、401 条（游乐权益归属与主体税费组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与裁决表第 83 行外，其他历史字节保持。
+
+- 18CC 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CC 段，batch101）实现待开发清单第 399、400、401 条（18CC 只读设计 b101-audit/d6-cc.json、b101-audit/d6-cc400.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 83 定）。控制席判定：照设计做第 401 条（401-R1、401-R2）、第 399 条（399-R1～399-R3）与第 400 条（按第十八批裁决 83 重做设计 b101-audit/d6-cc400.json：400-R1、400-R2），顺序 401-R1、401-R2、399-R1、399-R2、400-R1、400-R2、399-R3。第 400 条原设计判「无依据不做」，操作员 2026-11-21 弹窗答复即第十八批裁决 83（游乐票的「一次」即一个营业日——当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕；同一设施当天只按内部结算价结算一次；多次票就是可以在多天、不同场次各入场一次），裁决表第 83 行已插入本工作树决策台账。按字面或常理定的六点照重做设计 notes 一执行（所有游乐权益按营业日计次、营业日数按人份合计、补偿补发按同一补偿记录号自成一组、当天首次入场照判本场检票、上限取本条权益 total_times、用完沿用 409 ENTITLEMENT_USED）。本段工作树已快进到 18BR、18BP、18CD 合并后的主干 955ea1ba，设计里的行号以现码 grep 为准；第 399 条迁移用 V756（主干已有到 V761，合并前由汇总脚本顺延改号），第 400 条不占迁移号。设计旁见：门票积分按单条权益已用次数去重已登记待开发清单第 460 条，本段不改；客人端「我的票」各设施各一个码的按钮文案无 HTML 依据，不登记不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 955ea1ba 开工（第六轮 13 段并行），变基到 28ec1bcf 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CC 落地位置补记·401-R1（引进参股的游乐项目经营主体，收入取游乐域内结算收入）：
+  改法：EntityIncomeService.bars 的分流条件，由只取酒吧商户改为「酒吧商户，或名下有游乐项目（游乐项目所属商户指向本商户）的游乐商户」，同时带出商户业态。EntityIncomeService.income 逐店处理时，游乐商户不走酒吧取数，改记一项游乐收入（game）。金额取 DividendRepository.sumAmusementDomainSettledCent，营业日落在当月，核销为正、撤销为负，与持股分红正式单的 revenue_amusement 同一口径。EntityIncomeService 构造注入 DividendRepository。EntityProfitService 计算不改：分流放宽后，这类主体走持股分红税前口径（basis 为 dividend，成本取 barCost 的销货成本与费用），只同步类注释与 CostItem、Profit 记录注释。EntityTaxService 不改，增值税、文化事业建设费、附加税的系统计算金额随之取到这项收入。游乐公司为自营项目权益另建的游乐商户档案名下没有游乐项目，不分流，仍按平台口径。
+  依据：ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配“有没有这笔费用 + 收多少”」；BSM:1760「税费金额分三个阶段分别保存、互不覆盖：系统计算金额、实际申报金额、实际缴纳金额；申报差异等于实际申报金额减系统计算金额」；ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；第十八批裁决 60「收入＝按收入归属配置归到该主体的各类收入（含税实收）……酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）」——按常理比照该裁决对酒吧经营主体的处理。
+  契约：getEntityTaxProfit 说明在 233-R6 那句之后补一句：名下有游乐项目的游乐商户（引进参股的游乐项目经营主体）的主体同为 basis=dividend，收入为游乐域内结算收入（game），成本分项同酒吧经营主体（收尾复核补）；x-permission、x-data-scope、x-failure-codes 与 schema 不变，新增 0 个操作。
+  测试：EntityTaxJdbcIntegrationTests 新增 amusementOperatingEntityTaxBaseIsItsAmusementDomainSettlement：引进参股主体登记增值税时，系统计算金额取游乐收入价内拆出的税额；主体收入成本利润 basis 为 dividend，收入只有游乐收入；自营项目权益档案的主体仍为 platform。另做了「去掉名下有游乐项目条件」的变异验证，该用例转红。
+- 18CC 落地位置补记·401-R2（主体收入成本利润页签：口径说明加上游乐项目经营主体）：
+  改法：EntityTaxDeclarationsPage 持股分红口径说明改为「酒吧与引进参股的游乐项目经营主体：沿用持股分红税前口径，利润＝收入−销货成本−费用。」
+  依据：ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」。
+  测试：EntityTaxDeclarationsPage.test.tsx 新增「主体收入成本利润口径说明含引进参股的游乐项目经营主体，收入行显示「游乐收入」」。
+- 18CC 落地位置补记·399-R1（游乐权益模板指定游乐项目，提供方按项目经营商户绑定）：
+  改法：
+  · 本段迁移 V770：权益模板表加指定游乐项目一列（引用游乐项目），研发阶段无存量，不回填。
+  · EntitlementTemplateRequest、EntitlementTemplateRecord 末位加 amusementProjectId，各补一个原签名兼容构造。EntitlementTemplateRecord 新增 withAmusementProject，withArchive、withDelete、withCatalogRef 透传该字段。
+  · JdbcTicketingParameterSource.entitlementTemplateParameters、JdbcTicketingRepository.saveEntitlementTemplate（插入与冲突更新）、findEntitlementTemplateById、listEntitlementTemplates、JdbcTicketingRowMapper.mapEntitlementTemplate 都补这一列。
+  · ticketing 包新类 AmusementTemplateProjectGuard.requireProjectProvider：权益类型以 amusement 开头时，amusement_project_id 必填（缺了 400 VALIDATION_FAILED）；项目不存在 400 AMUSEMENT_PROJECT_NOT_FOUND；项目已登记经营商户而模板提供方不是该商户 400 AMUSEMENT_PROJECT_MERCHANT_MISMATCH；项目没有登记经营商户的（游乐公司自营）沿用所选提供方；非游乐类型不校验。
+  · TicketCatalogService 字段注入该类，createEntitlementTemplate 定好提供方之后调用一次，保存时记下指定项目。
+  · AmusementProjectRecord 去掉项目所属商户的隐藏注解，listAmusementProjects、createAmusementProject 返回 merchant_id。
+  依据：BSM:784「入场、游乐（指定项目/次数/场次）、酒水（赠饮或兑换券）、卡座免通票入场名额、餐饮券、零售券、服务权益、积分兑换虚拟券。」；BSM:1033「通票中的酒水、小食和其他权益必须分别绑定实际提供方；核销一件才结算一件，未核销不结算。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」
+  契约：schema EntitlementTemplateRequest 加 amusement_project_id。createEntitlementTemplate 说明补一句，x-failure-codes 加 AMUSEMENT_PROJECT_NOT_FOUND、AMUSEMENT_PROJECT_MERCHANT_MISMATCH。listAmusementProjects、createAmusementProject 说明补「返回 merchant_id（项目所属游乐商户，空＝游乐公司自营）」。新增 0 个操作；本段迁移 V770。
+  测试：新增 AmusementEntitlementTemplateProjectJdbcIntegrationTests 4 条（amusementTemplateWithoutProjectIsRejected、providerMustBeTheProjectsOperatingMerchant、selfRunProjectKeepsTheChosenProvider、projectListCarriesTheOperatingMerchant）。随行为改写的既有用例：ExclusiveDirectPayDomainShareJdbcIntegrationTests、PassDomainShareInterEntityPostingJdbcTests 的建模板助手，游乐模板改为带本类的游乐项目。
+- 18CC 落地位置补记·399-R2（游乐核销认指定项目）：
+  改法：AmusementEntitlementView 末位加 amusementProjectId，补原签名兼容构造。TicketingAmusementEntitlementGateway.toView 经权益模板号取模板的指定游乐项目。AmusementService.performAmusementVerification 在项目权益类型绑定校验之后、扣次之前加一句：权益指定了游乐项目而不是本次入场项目的，409 ENTITLEMENT_NOT_FOR_PROJECT（沿用文案「该权益未绑定到此游乐项目」），属规则拒绝，落 rejected、不扣次。游乐直连核销与票务核销分流都经此方法。补偿补发、转赠沿用原模板号，自然继承。核销人员的商户范围闸与结算不改。
+  依据：BSM:784「入场、游乐（指定项目/次数/场次）……」；BSM:753「游乐权益核销的收入按具体的游乐项目归属」。
+  契约：createAmusementVerification、createTicketVerification 说明各补一句（指定项目不一致时 409 ENTITLEMENT_NOT_FOR_PROJECT、不扣次），x-failure-codes 不改。
+  测试：新增 AmusementEntitlementProjectBindingJdbcIntegrationTests.entitlementForProjectAIsRejectedAtProjectBWithoutConsuming：同一综合体乙项目核销 409、不扣次、乙项目没有入场；甲项目照常入场、扣一次。
+- 18CC 落地位置补记·399-R3（票务策略页：组合式套票按项目取提供方并带指定项目，通用权益模板表单加指定游乐项目）：
+  改法：
+  · TicketingPoliciesPage 的游乐项目行带出项目所属商户。
+  · 组合式套票提交时，只在「所选项目里有未登记经营商户的，且没选兜底商户」时拦下，提示「所选游乐设施里有未登记经营商户的项目，请选择其提供方商户。」。每个项目的游乐权益模板提供方取项目经营商户，未登记的取兜底所选，请求带 amusement_project_id；跨经营域预判按该提供方取业态。兜底下拉名称改为「未登记经营商户的游乐项目的提供方商户」。
+  · 通用「新建权益模板」选游乐类型时，在类型下拉后显示「指定游乐项目」下拉；选了已登记经营商户的项目即把提供方设为该商户；没选项目时提示「游乐权益须指定游乐项目」；请求带 amusement_project_id。
+  · 页面不新增调用的接口，页面矩阵不动。
+  依据：BSM:783「联合通票里的权益可分属不同商户，各自核销、各自结算。」；BSM:784「入场、游乐（指定项目/次数/场次）……」。
+  测试：TicketingPoliciesPage.combo.test.tsx 新增「组合式套票勾两家游乐商户各自经营的设施、不选兜底商户：各建一条游乐模板，提供方与指定项目各按项目」「通用新建权益模板选游乐类型：不选游乐项目不提交；选了项目提供方带出项目经营商户，并带指定项目提交」；既有「勾了游乐但没选归属商户」改为「勾了未登记经营商户的游乐设施但没选其提供方商户」，并改断言文字。
+- 第十八批 CC 段第 400 条（游乐票「一次」＝一个营业日）落地位置补记：
+  - 400-R1
+    · 改法：新建权益模板时，游乐类（权益类型以 amusement 开头）的消耗窗口落 unlimited_in_day（按营业日计次），其余类型仍 per_use。游乐核销与核销预检在当天首次入场时照判本场检票与一份封顶，当天再入（day_replay）不判、不扣次、不结算。纯游乐票照旧不加闸。
+    · 落地位置：TicketCatalogService.createEntitlementTemplate（消耗窗口实参）；TicketAmusementAdmissionService.consume、TicketAmusementAdmissionService.preview（requireAmusementSessionShare 改为在营业日块之后无条件调用）；TicketVerificationService.recordAmusementAdmission（收尾复核修复：多人纯游乐票首次入场写父票首场次键改取入场营业日，同 238-R1 无场次配置的回退口径，门票转赠场次限制与到期处理据此取该营业日闭店时点；ENUM:48、BSM:809）。契约：createEntitlementTemplate、createAmusementVerification、createTicketVerification、previewTicketVerification 四个操作的说明补句，操作数、x-failure-codes、schema 都不变。
+    · 依据：第十八批裁决 83「游乐票的「一次」即一个营业日（场次）：当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕；同一设施当天只按内部结算价跟提供设施的游乐商户结算一次；多次票即可在多天、不同场次各入场一次。」；BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销」；ENUM:144「游乐规则中的「当天」「每天」（含一人多次票当天多次入场、当天不限次数一类表述）一律按营业日计算，不按自然日」。
+    · 测试：AmusementEntitlementTemplateProjectJdbcIntegrationTests.amusementTemplateCountsByBusinessDayOthersStayPerUse；AmusementVerifyRoutingJdbcIntegrationTests.businessDayAmusementFirstEntryStillNeedsThisSessionsCheckIn；AmusementDomainSettlementJdbcIntegrationTests.businessDayReentryToTheSameRideSettlesOnlyOnce（回归守护：同一设施当天只结算一次）；AmusementVerifyRoutingJdbcIntegrationTests.twoPersonAmusementOnlyTicketKeysItsFirstSessionByTheBusinessDay（收尾复核补：双人纯游乐票首入后父票首场次键为入场营业日，首场次显示该营业日、结束时刻定得出）。
+  - 400-R2
+    · 改法：同一人份（同父票同人份）各游乐设施的权益合计已入场的其他营业日数，达到本条权益次数即用完。原票各设施为一组；同一次补偿补发（同一补偿记录号）另成一组，不占原票营业日。用完时新营业日首入 409 ENTITLEMENT_USED，落 rejected、不扣次；核销预检 allowed 为 false。逐次扣权益不受影响。
+    · 落地位置：TicketAmusementAdmissionService.amusementDaysUsedUp（新增私有方法），由 TicketAmusementAdmissionService.consume（返回 Consumption.UNAVAILABLE，AmusementService 沿用 409 ENTITLEMENT_USED）与 TicketAmusementAdmissionService.preview（返回 false）调用。契约：createAmusementVerification、createTicketVerification、previewTicketVerification 说明补句，错误码不变。
+    · 依据：第十八批裁决 83「游乐票的「一次」即一个营业日（场次）」「多次票即可在多天、不同场次各入场一次」；BSM:780「剩余入场次数跨场次保留至用尽或票面有效期届满」；BSM:800「已经完成检票环节且本场次履约受影响的人份或次份，另补一次完整票面权益」。
+    · 测试：AmusementVerifyRoutingJdbcIntegrationTests.amusementBusinessDaysAreCappedPerPersonAcrossEntitlements（同一项目两条权益）；AmusementVerifyRoutingJdbcIntegrationTests.oneBusinessDayCoversEveryProjectOfThePersonThenCapsTheNextDay（收尾复核补：甲、乙两个项目各一条权益、模板分别指定甲乙，同一营业日先甲后乙都 200，次日乙另一条权益首入 409 ENTITLEMENT_USED；另做了「去掉合计计天里的不含当天」的变异验证，该用例转红）。
+  - 本段增量：新增操作 0，迁移 0（第 400 条不占迁移号），x-failure-codes 不变；前端、页面矩阵、FieldLabels、fieldLabels.ts 不动。
+- 【18CC 契约代理（K-contract）落地位置补记】本段新增操作 0、迁移 0（第 399 条的迁移 V770 属 C1 段）。只改 OpenAPI yaml 与 json，两份同值。
+  - 399-R1 契约：EntitlementTemplateRequest 新增 amusement_project_id（string 或 null，maxLength 64）。游乐权益（entitlement_type 以 amusement 开头）必填，缺了 400 VALIDATION_FAILED；项目不存在 400 AMUSEMENT_PROJECT_NOT_FOUND；项目已登记经营商户而 merchant_id 不是该商户 400 AMUSEMENT_PROJECT_MERCHANT_MISMATCH；没登记经营商户的（游乐公司自营）沿用所选提供方。createEntitlementTemplate 说明补同义一句，x-failure-codes 加 AMUSEMENT_PROJECT_NOT_FOUND、AMUSEMENT_PROJECT_MERCHANT_MISMATCH；listEntitlementTemplates 说明补「每行另带 amusement_project_id」；listAmusementProjects、createAmusementProject 说明补「另带 merchant_id（项目所属游乐商户，空＝游乐公司自营）」。代码依据：AmusementTemplateProjectGuard.requireProjectProvider、TicketCatalogService 的建模板方法、AmusementProjectRecord.merchantId。业务依据：BSM:784「游乐（指定项目/次数/场次）」。
+  - 399-R2 契约：createAmusementVerification、createTicketVerification 说明补一句：游乐权益的模板指定了游乐项目、与本次入场项目不一致的，409 ENTITLEMENT_NOT_FOR_PROJECT，属规则拒绝、不扣次（票务核销入口另落 rejected）；两操作的 x-failure-codes 不变。代码依据：AmusementService 游乐入场核销方法中的指定项目判定；TicketingAmusementEntitlementGateway 经模板取 amusementProjectId。业务依据：BSM:784。
+  - 400-R1 契约：createEntitlementTemplate 说明补：游乐类新建即按营业日计次，其余类型仍逐次扣。createAmusementVerification、createTicketVerification 说明补：当天首次入场扣一次、按入场项目商户结算一次；同一权益当天再入 200、不扣次、不结算（游乐核销入口返回 verification_result=success、failure_reason=day_replay，票务核销入口返回 status=success、result_reason=day_replay）；首入仍判本场检票与一份封顶，当天再入不判；219-R1 的「当天无限窗口照旧」与「多次票每次扣一次」对新建游乐权益不再适用。previewTicketVerification 说明补：当天已入场的直接 allowed=true、不判检票，当天首次入场照判本场检票。代码依据：TicketCatalogService 建模板时游乐类取 unlimited_in_day；TicketAmusementAdmissionService.consume 与 preview；TicketVerificationService.recordAmusementAdmission。依据：第十八批裁决 83「当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕；同一设施当天只按内部结算价跟提供设施的游乐商户结算一次」。
+  - 400-R2 契约：createAmusementVerification、createTicketVerification 说明补：同父票同一人份原票各游乐设施合计已入场的营业日数（不含当天）达到该权益 total_times 后，新营业日首入 409 ENTITLEMENT_USED，属规则拒绝、不扣次（票务核销入口另落 rejected）；同一次补偿补发另按其次数合计，不占原票营业日。previewTicketVerification 说明补：营业日数用完时 data.allowed 为 false。代码依据：TicketAmusementAdmissionService.amusementDaysUsedUp。依据：第十八批裁决 83「多次票即可在多天、不同场次各入场一次」。
+  - 核验：yaml 与 json 深比较一致；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过。
+- 18CC 汇合段（J）：tests/e2e 没有改，也没有重拍视觉基线。
+  本段前端只改了票务策略页 TicketingPoliciesPage（权益模板区新增「指定游乐项目」下拉；组合页的游乐权益提供方改为按项目经营商户取，下拉与报错文案随之改）和税费申报登记页 EntityTaxDeclarationsPage（利润口径说明一句）。在 tests/e2e 五份后台 spec 与 support/mock-api 里逐个核了这两页的选择器、断言与假响应：full-admin-mvp 与 full-admin-ui-hardening 只走新建票种引导流程，full-admin-remaining 只断言 entity-tax-page 与 entity-tax-table 可见，都没碰改动部分；/api/v1/amusement/projects 的假响应不带 merchantId，前端按可选字段处理。视觉基线四张不含这两页。
+  门禁结论：
+  - 后端：删 target 后在新库跑全量，本段迁移 V770 真迁，0 红。北京 23 点后因时段前提跳过的 BarBusinessDayWindowsJdbcIntegrationTests、SettlementConfigEffectiveDateJdbcIntegrationTests、TicketDefaultVisitDateJdbcIntegrationTests 三个类，零点后定向补跑全绿。
+  - 前端与客户端：管理端 typecheck 0 错、vitest 全绿；客人端 customer-app、customer-miniapp、customer-core 三个工作区单测全绿；安卓员工端 gradle test 0 红，android-app 编译通过；chromium 五份后台 spec（full-admin-mvp、full-admin-remaining、full-admin-ui-hardening、full-admin-visual、property-fee-evidence）全过。
+  - 契约与生成物：镜像里重生成 operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 四份生成物，与工作树无差异；verify:p0-contract 整条通过。yaml 与 json 深比较一致，本段新增操作 0 个、删除 0 个；契约只改既有内容：EntitlementTemplateRequest 新增 amusement_project_id 属性，createEntitlementTemplate、createAmusementVerification、createTicketVerification、previewTicketVerification 等既有操作改了说明，createEntitlementTemplate 改了失败码。git diff --check 通过。
+- 18CC 文档组（D-docs）：
+  - 依据：BSM:784「入场、游乐（指定项目/次数/场次）……」；BSM:1033「通票中的酒水、小食和其他权益必须分别绑定实际提供方」；BSM:783「联合通票里的权益可分属不同商户，各自核销、各自结算。」；BSM:753「游乐权益核销的收入按具体的游乐项目归属」；BSM:800；ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」；第十八批裁决 83「游乐票的「一次」即一个营业日（场次）：当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕；同一设施当天只按内部结算价跟提供设施的游乐商户结算一次；多次票即可在多天、不同场次各入场一次。」；第十八批裁决 60「酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）」（401 按常理比照）。
+  - 改法与落地位置：按各段实现与契约代理已写的说明，把下位文档的现状句就地改成现码实情，不新增业务规则；每份文档只升一版，修订表各加一行。
+    · 票务 PRD（ticketing-entitlement-checkin-product-prd-v0.1.md）
+      §5.1a：加 400-R1、400-R2 现状：游乐类模板新建即落 unlimited_in_day；当天首入扣一次、当天再入 day_replay 不扣次不结算；同一人份原票各设施合计营业日数封顶，用完 409 ENTITLEMENT_USED；同一次补偿补发另成一组。
+      §6：加 399-R1、399-R3 现状：createEntitlementTemplate 的 amusement_project_id；失败码 AMUSEMENT_PROJECT_NOT_FOUND、AMUSEMENT_PROJECT_MERCHANT_MISMATCH；listEntitlementTemplates 带 amusement_project_id；票务策略页组合配置按项目取提供方，新建权益模板表单加「指定游乐项目」。
+      §8.3.1 的 219-R1 条：「当天无限不加闸」改为当天首次入场照判本场检票，当天再入不判。
+    · 游乐 PRD（amusement-business-operations-product-prd-v0.1.md）
+      §7.2 第 2 步：加 399-R2 现状：指定项目不一致报 409 ENTITLEMENT_NOT_FOR_PROJECT，不扣次。
+      §7.2 的 219-R1 条按 400-R1 同步改；另加「游乐票按营业日计次」一条（400-R1、400-R2）。
+      §7.2B：当天再入同一设施照常记入场与在玩人数，不扣次、不结算。
+      §9 的 357 条：listAmusementProjects 与 createAmusementProject 另返回 merchant_id。
+    · 财务 PRD（finance-settlement-product-prd-v0.1.md）§6D.8
+      233-R4 收入归集：名下有游乐项目的游乐商户取游乐域内结算收入（game，同 DividendService 分红正式单 revenue_amusement）。
+      233-R6：basis 为 dividend 时含引进参股的游乐项目经营主体；利润沿用持股分红税前口径；写入 401-R2 页签口径说明原文。
+    · 游乐开发设计（amusement-operations-development-design.md）§6.4.2
+      219-R1 条按 400-R1 改；新增 18CC 现状条，写 AmusementTemplateProjectGuard.requireProjectProvider、TicketCatalogService.createEntitlementTemplate、AmusementEntitlementView.amusementProjectId、AmusementService.performAmusementVerification、AmusementProjectRecord.merchantId、TicketAmusementAdmissionService 的同人份营业日数封顶，迁移 V770。
+  - 不改的：页面矩阵（方案定为不动，矩阵各行没有失真句）、生成物、html-prd-coverage.csv 与本台账（收尾统一做）。
+  - 测试：本组只改文档。node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 干净。
+- 18CC 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 65b7a02d；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.22、决策台账 V1.51，Flyway 最新 V770（共 639 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CC 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 2364c49b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7488 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2132；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 23:35 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

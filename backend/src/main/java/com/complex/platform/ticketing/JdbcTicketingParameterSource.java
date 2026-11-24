@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -75,6 +75,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("delete_requested_at", timestampWithTimeZone(template.deleteRequestedAt()))
                 .addValue("delete_reason", template.deleteReason())
                 .addValue("catalog_item_code", template.catalogItemCode())
+                .addValue("amusement_project_id", template.amusementProjectId())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }

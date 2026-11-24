@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.amusement.AmusementBusinessDayService.Window;
 import com.complex.platform.amusement.AmusementEntitlementGateway.Consumption;
@@ -35,9 +35,6 @@ public class TicketAmusementAdmissionService {
         var entitlement=lockEntitlement(entitlementId);
         verifications.getObject().requireAmusementConsumption(entitlement,at);
         requireOriginalTicketComplex(entitlement,window);
-        // 第十八批 AH 段 219-R1（BSM:800 只能在检票场次内核销、后续场次份额不得提前用）：票内游乐须本场已检票、本场按一份封顶，被拒不扣次。
-        if (!"unlimited_in_day".equals(entitlement.consumptionWindow()))
-            verifications.getObject().requireAmusementSessionShare(entitlement,at);
         if ("unlimited_in_day".equals(entitlement.consumptionWindow())) {
             requireMultiPersonWindow(entitlement,window,at);
             // 先沿用实际已激活且尚未结束的原窗口，后来改日切版本不能再次收费。
@@ -47,7 +44,11 @@ public class TicketAmusementAdmissionService {
                        AND business_start_at<=? AND business_end_at>?
                     """,Integer.class,entitlementId,window.complexId(),stamp(at),stamp(at))>0)
                 return Consumption.DAY_REPLAY;
+            if (amusementDaysUsedUp(entitlement,window)) return Consumption.UNAVAILABLE;
         }
+        // 第十八批 AH 段 219-R1（BSM:800 只能在检票场次内核销、后续场次份额不得提前用）：票内游乐须本场已检票、本场按一份封顶，被拒不扣次。
+        // 第十八批 CC 段 400-R1（第十八批裁决 83「当天首次入场扣一次」）：按营业日计次的游乐在当天首次入场时照判，当天再入（上方 DAY_REPLAY）不判。
+        verifications.getObject().requireAmusementSessionShare(entitlement,at);
         var consumed=repository.atomicUseEntitlement(entitlementId,at);
         if(consumed.isEmpty()) return Consumption.UNAVAILABLE;
         verifications.getObject().requireAmusementConsumption(consumed.get(),at);
@@ -69,8 +70,6 @@ public class TicketAmusementAdmissionService {
         var entitlement=repository.findIssuedEntitlementById(entitlementId).orElseThrow();
         verifications.getObject().requireAmusementConsumption(entitlement,at);
         requireOriginalTicketComplex(entitlement,window);
-        if(!"unlimited_in_day".equals(entitlement.consumptionWindow()))
-            verifications.getObject().requireAmusementSessionShare(entitlement,at);
         if("unlimited_in_day".equals(entitlement.consumptionWindow())) {
             requireMultiPersonWindow(entitlement,window,at);
             if(jdbc.queryForObject("""
@@ -78,8 +77,28 @@ public class TicketAmusementAdmissionService {
                  WHERE entitlement_id=? AND complex_id=? AND status='active'
                    AND business_start_at<=? AND business_end_at>?
                 """,Integer.class,entitlementId,window.complexId(),stamp(at),stamp(at))>0) return true;
+            if(amusementDaysUsedUp(entitlement,window)) return false;
         }
+        // 219-R1、400-R1：同 consume，当天首次入场照判本场检票。
+        verifications.getObject().requireAmusementSessionShare(entitlement,at);
         return entitlement.remainingTimes()>0;
+    }
+
+    /**
+     * 第十八批 CC 段 400-R2（第十八批裁决 83「游乐票的「一次」即一个营业日（场次）」「多次票即可在多天、不同场次各入场一次」；BSM:800「已经完成检票环节且本场次
+     * 履约受影响的人份或次份，另补一次完整票面权益」）：同父票同人份各游乐设施的权益（组合页每设施一条）合计已入场的其他营业日数达到本条权益次数即用完。
+     * 原票各设施为一组；同一次补偿补发（同一补偿记录号，AmusementFaultCompensationService.reissueFullTicketFace 按设施各发一行）另成一组，不占原票营业日。无父票不算。
+     */
+    private boolean amusementDaysUsedUp(IssuedEntitlementRecord entitlement,Window window) {
+        if(entitlement.parentTicketId()==null) return false;
+        Integer days=jdbc.queryForObject("""
+            SELECT count(DISTINCT a.business_date) FROM entitlement_business_day_activations a
+              JOIN issued_entitlements e ON e.id=a.entitlement_id
+             WHERE e.parent_ticket_id=? AND e.slot_index=?
+               AND e.compensation_item_id IS NOT DISTINCT FROM CAST(? AS VARCHAR)
+               AND a.status='active' AND a.business_date<>?
+            """,Integer.class,entitlement.parentTicketId(),entitlement.slotIndex(),entitlement.compensationItemId(),window.businessDate());
+        return days!=null && days>=entitlement.totalTimes();
     }
 
     private void requireOriginalTicketComplex(IssuedEntitlementRecord entitlement,Window window) {

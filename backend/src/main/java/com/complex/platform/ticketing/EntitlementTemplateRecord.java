@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 
@@ -44,8 +44,15 @@ public record EntitlementTemplateRecord(
         // 目录价快照(只读,系统在设引用/目录转正时同步);改价一律回目录走草案复核,模板侧无任何改价入口。
         String catalogItemCode,
         // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
-        String archiveReason
+        String archiveReason,
+        // 第十八批 CC 段第 399 条 399-R1（BSM:784「游乐（指定项目/次数/场次）」）：游乐权益指定的游乐项目（V770 amusement_project_id 列），核销只认该项目。
+        String amusementProjectId
 ) implements ArchivableRecord<EntitlementTemplateRecord> {
+    /** 399-R1：指定游乐项目之前的签名，既有构造点零改动，amusementProjectId 取空。 */
+    public EntitlementTemplateRecord(String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status, String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt, String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId, java.time.Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, java.time.Instant deleteRequestedAt, String deleteReason, String catalogItemCode, String archiveReason) {
+        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow, exclusiveMerchantId, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, catalogItemCode, archiveReason, null);
+    }
+
     /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
     public EntitlementTemplateRecord(String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status, String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt, String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId, java.time.Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, java.time.Instant deleteRequestedAt, String deleteReason, String catalogItemCode) {
         this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow, exclusiveMerchantId, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, catalogItemCode, null);
@@ -69,7 +76,7 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode, archivedAt == null ? null : archiveReason);
+                catalogItemCode, archivedAt == null ? null : archiveReason, amusementProjectId);
     }
 
     public EntitlementTemplateRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -78,7 +85,7 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode, archiveReason);
+                catalogItemCode, archiveReason, amusementProjectId);
     }
 
     /**
@@ -90,6 +97,15 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, snapshotPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode, archiveReason);
+                catalogItemCode, archiveReason, amusementProjectId);
+    }
+
+    /** 399-R1：记指定游乐项目（建模板时用）。 */
+    public EntitlementTemplateRecord withAmusementProject(String amusementProjectId) {
+        return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
+                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
+                consumptionWindow, exclusiveMerchantId,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                catalogItemCode, archiveReason, amusementProjectId);
     }
 }

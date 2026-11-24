@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -79,6 +79,8 @@ class PassDomainShareInterEntityPostingJdbcTests {
     private final String bar = "bar_c214_" + suffix;
     private final String restaurant = "rest_c214_" + suffix;
     private final String park = "park_c214_" + suffix;
+    /** 399-R1：游乐权益指定的游乐项目（组合通票游乐行共用一个）。 */
+    private final String amusementProject = "amp_c214_" + suffix;
     private final String admin = "usr_c214_admin_" + suffix;
     private final String staff = "usr_c214_staff_" + suffix;
     private final String barStaff = "usr_c214_bar_" + suffix;
@@ -165,6 +167,7 @@ class PassDomainShareInterEntityPostingJdbcTests {
         for (String id : templateIds) {
             jdbc.update("DELETE FROM entitlement_templates WHERE id = ?", id);
         }
+        jdbc.update("DELETE FROM amusement_projects WHERE id = ?", amusementProject);
         jdbc.update("DELETE FROM internal_price_catalog WHERE item_code = ?", catalogCode);
         jdbc.update("DELETE FROM channel_fee_configs WHERE project_id = ?", project);
         jdbc.update("DELETE FROM ticket_types WHERE id IN (?, ?)", comboType, pureType);
@@ -433,15 +436,24 @@ class PassDomainShareInterEntityPostingJdbcTests {
                 at.plusSeconds(86_400), null, null, null, project, (String) ride.get("parent_ticket_id")));
     }
 
-    /** 按 TicketingPoliciesPage 组合通票行的请求形状建权益模板。 */
+    /**
+     * 按 TicketingPoliciesPage 组合通票行的请求形状建权益模板。第十八批 CC 段 399-R1（BSM:784「游乐（指定项目/次数/场次）」）起游乐权益须指定游乐项目：
+     * 游乐类带本类的游乐项目（未登记经营商户，提供方沿用所选）。
+     */
     private String template(String name, String type, String merchant, String catalog, String exclusive) throws Exception {
+        String ride = null;
+        if (type.startsWith("amusement")) {
+            ride = amusementProject;
+            jdbc.update("INSERT INTO amusement_projects (id, project_name, capacity, open_status, eligibility_rule_json, created_at, updated_at)"
+                    + " VALUES (?, '组合通票游乐项目', 10, 'open', '{}'::jsonb, now(), now()) ON CONFLICT (id) DO NOTHING", ride);
+        }
         String body = mockMvc.perform(post("/api/v1/ticketing/entitlement-templates").with(session(admin, "platform_admin", "org_1", null))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c214-tpl-%s", "name": "%s", "entitlement_type": "%s",
                                  "default_total_times": 1, "default_value_cent": %s, "status": "active", "merchant_id": "%s",
-                                 "catalog_item_code": %s, "exclusive_merchant_id": %s, "bar_item_ref": null}
+                                 "catalog_item_code": %s, "exclusive_merchant_id": %s, "bar_item_ref": null, "amusement_project_id": %s}
                                 """.formatted(UUID.randomUUID(), name, type, catalog == null ? "null" : "0", merchant,
-                                quoted(catalog), quoted(exclusive))))
+                                quoted(catalog), quoted(exclusive), quoted(ride))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String templateId = new ObjectMapper().readTree(body).path("data").path("id").asText();

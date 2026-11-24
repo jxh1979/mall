@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -88,7 +88,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
                 resultSet.getString("catalog_item_code"),
-                resultSet.getString("archive_reason")
+                resultSet.getString("archive_reason"),
+                resultSet.getString("amusement_project_id")
         );
     }
 

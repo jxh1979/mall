@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.dividend.DividendRepository;
@@ -23,12 +23,13 @@ import org.springframework.stereotype.Service;
  * 财税软件回传关键信息，平台据此与自身的内部结算数据合并计算」；第十八批裁决 60「成本＝该主体在平台内作为付款方的内部结算应付（提成拨付、渠道费、赠送权益
  * 兑付等）＋该主体作为发放主体的工资单税前应发；利润＝收入−成本……酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）」。
  *
- * <p>收入取 233-R4 各月合计（{@link EntityIncomeService}，数据未定照样 409）；口径分流同 233-R4（名下有酒吧商户的按持股分红口径）。平台主体的成本中
+ * <p>收入取 233-R4 各月合计（{@link EntityIncomeService}，数据未定照样 409）；口径分流同 233-R4（名下有酒吧商户或名下有游乐项目的游乐商户的按持股分红
+ * 口径，后者为第十八批 CC 段 401-R1 引进参股的游乐项目经营主体）。平台主体的成本中
  * 与收入同源的项取同一批已确认或已结清的月度分账单（台账 accounting_period 是付账日所在月，会和收入错开一个月）：池内分配付方取同单酒吧份额行的归属主体、
  * 专属直付按内部结算价应直付额与渠道费（通路费与销售渠道费，BSM:749）计份额行归属主体、赠送权益兑付实付计单头赠送权益收款主体；另取游乐故障补偿履约
  * （承担主体）、提成与报酬拨付冲回（平台主体付款的应收）、传媒演出门票分成（付方）、积分发行费（合同销售方自身成本，BSM:749）与发放的工资单税前应发。
- * 代收后转付的域间份额、到期未核销归属、单店直付及其追收与外部采购不计。酒吧经营主体逐店取销货成本（扣坏账订单出库成本）、费用台账六类与单一酒吧门票综合服务费
- * （同 DividendService.computeStatement），不扣税费。</p>
+ * 代收后转付的域间份额、到期未核销归属、单店直付及其追收与外部采购不计。酒吧经营主体与名下有游乐项目的游乐商户的经营主体逐店取销货成本（扣坏账订单出库成本）、
+ * 费用台账六类与单一酒吧门票综合服务费（同 DividendService.computeStatement），不扣税费。</p>
  */
 @Service
 public class EntityProfitService {
@@ -37,11 +38,11 @@ public class EntityProfitService {
     public record RevenueItem(String incomeType, long amountCent) {
     }
 
-    /** 成本分项：costType 平台主体为下列各项，酒吧经营主体同持股分红明细行类型（cost_inventory、expense_*）。 */
+    /** 成本分项：costType 平台主体为下列各项，酒吧与引进参股的游乐项目经营主体同持股分红明细行类型（cost_inventory、expense_*）。 */
     public record CostItem(String costType, long amountCent) {
     }
 
-    /** basis：platform 平台主体口径，dividend 酒吧经营主体持股分红税前口径。金额为 0 的分项不列。 */
+    /** basis：platform 平台主体口径，dividend 酒吧与引进参股的游乐项目经营主体（401-R1）持股分红税前口径。金额为 0 的分项不列。 */
     public record Profit(long revenueCent, List<RevenueItem> revenueItems, long costCent, List<CostItem> costItems, long profitCent, String basis) {
     }
 

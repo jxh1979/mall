@@ -1,10 +1,11 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.bar.BarRevenueSourceService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.dividend.DividendRepository;
 import com.complex.platform.settlement.JdbcSettlementTransactionRepository;
 import com.complex.platform.settlement.RevenueStreamAttributionRepository;
 import com.complex.platform.settlement.SingleBarServiceFeeService;
@@ -30,9 +31,11 @@ import org.springframework.stereotype.Service;
  * <p>数据已定才算：该月没有已确认或已结清的月度分账单一律 409 TICKET_SETTLEMENT_PENDING（谓词同 JdbcDividendRepository
  * .listUnconfirmedTicketSettlementMonths）；酒吧收入来源未定 409 BAR_REVENUE_PENDING（同分红正式单）。</p>
  *
- * <p>口径分流按主体名下有无酒吧商户（经营主体同 210-R1：生效绑定的运营主体，否则商户档案上的经营主体），不按主体角色（V410 后酒吧公司也是
- * management_company）。有酒吧的按持股分红口径逐店取：商品收入减已退成商品分项（catering）、月结定格的服务费扣留（nonstd_service，BSM:1719）、
- * 已确认月度分账单本店专属直付（ticket）与其余分账（spv_service）。其余主体按平台口径取归到本主体的部分：组合通票业态份额（扣出归娱乐平台公司的
+ * <p>口径分流按主体名下有无酒吧商户或名下有游乐项目的游乐商户（经营主体同 210-R1：生效绑定的运营主体，否则商户档案上的经营主体），不按主体角色
+ * （V410 后酒吧公司也是 management_company）。有的按持股分红口径逐店取：酒吧取商品收入减已退成商品分项（catering）、月结定格的服务费扣留
+ * （nonstd_service，BSM:1719）、已确认月度分账单本店专属直付（ticket）与其余分账（spv_service）；第十八批 CC 段 401-R1（ENUM:297「引进参股的游乐项目
+ * 的参股方为引进该项目的域主管公司」；BSM:753「与实际提供服务的游乐商户结算」；按常理比照第十八批裁决 60 对酒吧经营主体的处理）起，名下有游乐项目的
+ * 游乐商户（引进参股的游乐项目经营主体）取游乐域内结算收入（game，同持股分红正式单 revenue_amusement）。其余主体按平台口径取归到本主体的部分：组合通票业态份额（扣出归娱乐平台公司的
  * 门票综合服务费与赠送权益预估成本）、门票综合服务费与赠送权益预估成本收款主体快照、到期未核销票款（BSM:1713）、单一酒吧门票综合服务费、
  * 传媒演出结算（BSM:1721、1145）、场地租金（venue_rent 收入归属）、停车费（BSM:1723）、门店要货货款（supply_goods 收入归属）。跨月撤销的核销与跨月调整的
  * 演出结算在当期冲正（BSM:1760「已封账历史账单不回改，跨月退款和调整在当期生成冲正」）。</p>
@@ -56,10 +59,11 @@ public class EntityIncomeService {
     private final JdbcSettlementTransactionRepository transactions;
     private final SingleBarServiceFeeService singleBarFees;
     private final TicketDistributionSettlementService ticketSettlement;
+    private final DividendRepository dividends;
 
     public EntityIncomeService(JdbcTemplate jdbc, BarRevenueSourceService barSources, BusinessDayResolver businessDays,
             RevenueStreamAttributionRepository attribution, JdbcSettlementTransactionRepository transactions,
-            SingleBarServiceFeeService singleBarFees, TicketDistributionSettlementService ticketSettlement) {
+            SingleBarServiceFeeService singleBarFees, TicketDistributionSettlementService ticketSettlement, DividendRepository dividends) {
         this.jdbc = jdbc;
         this.barSources = barSources;
         this.businessDays = businessDays;
@@ -67,6 +71,7 @@ public class EntityIncomeService {
         this.transactions = transactions;
         this.singleBarFees = singleBarFees;
         this.ticketSettlement = ticketSettlement;
+        this.dividends = dividends;
     }
 
     /** 该主体该月的各项收入（金额为 0 的不列）。 */
@@ -81,15 +86,27 @@ public class EntityIncomeService {
             platform(entityId, month, items);
         } else {
             for (Map<String, Object> bar : bars) {
-                bar((String) bar.get("id"), (String) bar.get("merchant_name"), month, items);
+                String merchantId = (String) bar.get("id");
+                String name = (String) bar.get("merchant_name");
+                if ("amusement".equals(bar.get("merchant_type"))) {
+                    // 401-R1：同持股分红正式单 revenue_amusement（DividendService.computeStatement）取数，营业日落在本月。
+                    items.add(new IncomeItem("game", dividends.sumAmusementDomainSettledCent(merchantId, month.atDay(1), month.atEndOfMonth()),
+                            name + "：游乐域内结算收入（游乐公司按内部结算价结算，本月核销为正、本月撤销为负）"));
+                } else {
+                    bar(merchantId, name, month, items);
+                }
             }
         }
         return items.stream().filter(item -> item.amountCent() != 0).toList();
     }
 
-    /** 主体名下酒吧商户（id、merchant_name）：经营主体为生效绑定的运营主体，否则商户档案上的经营主体（同 210-R1）；233-R6 同口径分流。 */
+    /**
+     * 主体名下酒吧商户或名下有游乐项目的游乐商户（id、merchant_name、merchant_type）：经营主体为生效绑定的运营主体，否则商户档案上的经营主体（同 210-R1）；
+     * 233-R6 同口径分流。401-R1：游乐商户只收名下有游乐项目的（项目所属商户为空即游乐公司自营，游乐公司为自营项目权益另建的游乐商户档案不算）。
+     */
     List<Map<String, Object>> bars(String entityId) {
-        return jdbc.queryForList("SELECT m.id, m.merchant_name FROM merchants m WHERE m.merchant_type = 'bar'"
+        return jdbc.queryForList("SELECT m.id, m.merchant_name, m.merchant_type FROM merchants m WHERE (m.merchant_type = 'bar'"
+                + " OR (m.merchant_type = 'amusement' AND EXISTS (SELECT 1 FROM amusement_projects p WHERE p.merchant_id = m.id)))"
                 + " AND COALESCE((SELECT b.operation_entity_id FROM business_entity_bindings b WHERE b.merchant_id = m.id AND b.status = 'active'"
                 + " ORDER BY b.created_at DESC, b.id LIMIT 1), m.business_entity_id) = ? ORDER BY m.id", entityId);
     }

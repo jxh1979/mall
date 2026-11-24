@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -957,9 +957,9 @@ public class TicketVerificationService {
             markTicketInstanceFirstUse(consumed,now);
         } else if(consumed.parentTicketId()!=null) {
             var parent=repository.findTicketInstanceById(consumed.parentTicketId()).orElseThrow();
-            // 已有大楼检票场次不被场内游乐改写；纯游乐首入场使用真实营业日锚点。
-            String key=parent.firstSessionKey()!=null?parent.firstSessionKey():
-                    "amusement:"+window.complexId()+":"+window.businessDate();
+            // 已有大楼检票场次不被场内游乐改写；纯游乐首入场以入场营业日为键（第十八批 CC 段 400-R1 复核修复：同 sessionKeyFor 无场次配置的 238-R1 回退口径，
+            // 门票转赠场次限制与到期处理据此取该营业日闭店时点，ENUM:48、BSM:809）。
+            String key=parent.firstSessionKey()!=null?parent.firstSessionKey():window.businessDate().toString();
             if(repository.markTicketInstanceFirstUse(parent.id(),key,now)==0)
                 throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN","多人票不允许跨场次使用");
         }
