@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * CG-06a 储值本金 / 赠送金两段记账（ENUM「储值卡类型与收款主体」：「每笔充值拆为本金与赠送金两段分别记账，赠送比例可配……
  * 消费扣款顺序写死为先扣本金、后扣赠送金……仅商户级卡例外……退卡只退未消费的本金，赠送金不退现……销户时……再退剩余本金，赠送金清零」；
  * BSM「我的余额」：「含本金与赠送金分列……每笔充值……本金与赠送金拆分……每笔扣款……扣减的本金与赠送金各多少」；
- * BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台」）。
+ * BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由发卡商户在商户后台自行设置」）。
  *
  * <p>第十八批第 11 条：赠送比例取 ticket_reward_config_versions 中已审批、已生效的版本（通用卡 stored_value_bonus 按项目，
  * 商户级卡 merchant_card_bonus 按发卡商户；ENUM L86、BSM L521），充值流水记下所用版本 bonus_config_version_id。

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -134,14 +134,16 @@ class MerchantCardExitNoticeJdbcIntegrationTests {
 
     // ---------- helpers ----------
 
+    /** 第十八批裁决 79（ENUM:86 改句「由发卡商户在商户后台自行设置」）：商户卡发卡与资金模式由发卡商户本商户员工设置。 */
     private ResultActions cardConfig(String fundOwnership) throws Exception {
+        RequestPostProcessor shop = staffs.staff("usr_mcen_cc_" + f.suffix, "staff", f.projectId, shopId, "customer.stored_value.refund");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "mcen-card-" + UUID.randomUUID());
         body.put("merchant_id", shopId);
         body.put("card_issuance_enabled", true);
         body.put("fund_ownership", fundOwnership);
         body.put("consume_order", "principal_first");
-        return mockMvc.perform(post("/api/v1/loyalty/stored-value/merchant-card-config").with(platform)
+        return mockMvc.perform(post("/api/v1/loyalty/stored-value/merchant-card-config").with(shop)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
     }
 

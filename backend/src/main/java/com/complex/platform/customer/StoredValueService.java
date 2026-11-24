@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -102,9 +102,10 @@ public class StoredValueService {
     // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.gate.SensitiveLocationGuard locationGuard;
-    // 18AZ 收尾复核：不带项目的商户卡按发卡商户经营项目判退款范围（StoredValueRefundLookupService.requireRefundScope）；字段注入免改构造点，单测未注入即不判。
+    // 第十八批 CL 段 422-R1（第十八批裁决 79，BSM:833「平台方……按工商登记合计持股过半的商户，不得发行商户级卡」）：发卡与客人充值前的持股闸；
+    // 字段注入免改构造点，单测未注入即不判。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private com.complex.platform.finance.FinanceRepository financeRepository;
+    private MerchantCardIssuanceEligibility merchantCardIssuance;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -153,7 +154,7 @@ public class StoredValueService {
         }
         requireClientIdempotencyKey(idempotencyKey);
         requireCustomer(customerId);
-        // 发卡资格门控（AUD-061）：商户卡充值前须平台已给该商户开通「发卡资格」，默认关→拒。通用卡不受限。
+        // 发卡资格门控（AUD-061）：商户卡充值前须发卡商户已开通「发卡资格」、且平台方合计持股不过半（422-R1），默认关→拒。通用卡不受限。
         requireCardIssuanceEnabled(merchantId);
         // 提前建账户（active），充值入账时复用（开卡即从商户配置定格资金模式）。
         var card = loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
@@ -490,7 +491,7 @@ public class StoredValueService {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "储值余额不足");
         }
         // CG-06a（ENUM「储值卡类型与收款主体」/ BSM「支付方式」）：通用卡写死先扣本金、后扣赠送金；
-        // 商户级卡按发卡商户自定、平台运营代录的扣款顺序（stored_value_merchant_refund_rules.consume_order）。
+        // 商户级卡按发卡商户在商户后台自行设置的扣款顺序（stored_value_merchant_refund_rules.consume_order）。
         long[] parts = splitDeduction(account, amountCent, bonusFirstForCard(account));
         long principalAfter = account.principalCent() - parts[0];
         long bonusAfter = account.bonusCent() - parts[1];
@@ -860,8 +861,7 @@ public class StoredValueService {
                     .filter(card -> card.id().equals(existing.accountId())).findFirst()
                     .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
             // 第十八批 AZ 段 278-R1：商户与项目两维改由 requireRefundScope 一并核（与首次提交同一口径），不挂商户的项目侧账号可办本项目通用卡。
-            StoredValueRefundLookupService.requireRefundScope(authorizationService, firstCard,
-                    financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.refund");
+            StoredValueRefundLookupService.requireRefundScope(authorizationService, firstCard, "customer.stored_value.refund");
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,
@@ -875,8 +875,7 @@ public class StoredValueService {
         }
         // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；PGM:528「④看不到别的商户和别的项目的数据」）：
         // 首次提交同核商户与项目——商户账号只办本商户卡，卡带项目的只办本人项目（柜台退款原先只比商户）。
-        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.refund");
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account, "customer.stored_value.refund");
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -1146,13 +1145,14 @@ public class StoredValueService {
         // phase4 卡范围隔离：商户范围员工只能配置本商户的退款规则。
         requireMerchantScopeForMerchant(merchantId.trim());
         Instant now = now();
-        // 保留平台侧配置（发卡资格/资金模式）：商户改退款规则不得清掉平台开通的发卡资格与定格的资金模式。
+        // 保留同一行的发卡资格、资金模式与扣款顺序：改退款规则不得清掉已开通的发卡资格、定格的资金模式与发卡商户自行设置的扣款顺序
+        // （第十八批 CL 段 423-R1：原 7 参构造把扣款顺序重置为先本金后赠送金）。
         StoredValueMerchantRefundRuleRecord existing = repository.findStoredValueMerchantRefundRule(merchantId.trim())
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId.trim()));
         return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
                 merchantId.trim(), refundAllowed, refundRatioBps,
                 existing.cardIssuanceEnabled(), existing.fundOwnership(),
-                existing.createdAt() == null ? now : existing.createdAt(), now));
+                existing.createdAt() == null ? now : existing.createdAt(), now, existing.consumeOrder()));
     }
 
     @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
@@ -1165,9 +1165,9 @@ public class StoredValueService {
     }
 
     /**
-     * 商户卡平台配置（AUD-061）：开通/关闭发卡资格 + 设资金模式（只可商户预收，见下）。仅平台可改
-     * （requirePlatformScope 拒 merchant-scoped 调用方）；资金模式只影响之后新开的卡（开卡时定格），已发卡不变。
-     * 发卡资格/资金模式与商户自设的退款规则并存于同一行，读改存互不覆盖。
+     * 商户卡发卡设置（AUD-061）：开通/关闭发卡资格 + 设资金模式（只可商户预收，见下）。第十八批 CL 段 423-R1（第十八批裁决 79，BSM:833「商户级卡的发行、
+     * 充值、余额与退款完全由发卡商户自行办理，不经平台」）：只由发卡商户本商户账号设置（{@link #requireMerchantScopeForMerchant}）；
+     * 资金模式只影响之后新开的卡（开卡时定格），已发卡不变。发卡资格/资金模式/扣款顺序与退款规则并存于同一行，读改存互不覆盖。
      */
     @Transactional
     @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
@@ -1177,8 +1177,8 @@ public class StoredValueService {
     }
 
     /**
-     * CG-06a（BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台」）：
-     * consumeOrder=principal_first / bonus_first；为空保留现值（缺省先本金后赠送金）。
+     * CG-06a（BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由发卡商户在商户后台自行设置」，第十八批裁决 79 改句）：
+     * consumeOrder=principal_first / bonus_first；为空保留现值（缺省先本金后赠送金）。打开发卡时先过持股闸（422-R1）。
      */
     @Transactional
     @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
@@ -1199,9 +1199,10 @@ public class StoredValueService {
         if (!FUND_MERCHANT_PREPAID.equals(mode)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "商户级卡充值资金归发卡商户预收，平台不代收");
         }
-        // 仅平台可改：fail-closed 拒商户/外包 scope 调用方（authorizationService 为 null=旧构造/单测不强制）。
-        if (authorizationService != null) {
-            authorizationService.requirePlatformScope();
+        // 423-R1：只由发卡商户本商户账号设置（authorizationService 为 null=旧构造/单测不强制）。
+        requireMerchantScopeForMerchant(merchantId.trim());
+        if (cardIssuanceEnabled && merchantCardIssuance != null) {
+            merchantCardIssuance.requireIssuable(merchantId.trim());
         }
         Instant now = now();
         StoredValueMerchantRefundRuleRecord existing = repository.findStoredValueMerchantRefundRule(merchantId.trim())
@@ -1216,7 +1217,7 @@ public class StoredValueService {
     /**
      * ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：客人充值前读的规则。
      * merchantId 为空＝综合体通用卡：赠送比例按项目、扣款顺序写死先本金后赠送金（同句「不可配置」）；非空＝该商户的商户级卡：扣款顺序与退款
-     * 比例按平台代录的商户卡规则（无配置按缺省），赠送比例按发卡商户。赠送比例取此刻生效的版本（无＝0）。客人会话由控制器校验。
+     * 比例按发卡商户在商户后台自行设置的商户卡规则（无配置按缺省），赠送比例按发卡商户。赠送比例取此刻生效的版本（无＝0）。客人会话由控制器校验。
      */
     public CustomerStoredValueTopupRulesResponse topupRules(String projectId, String merchantId) {
         String merchant = trimToNull(merchantId);
@@ -1246,16 +1247,19 @@ public class StoredValueService {
                 : repository.findEffectiveStoredValueBonus(TicketRewardConfigService.MERCHANT_CARD_BONUS, null, merchantId, at);
     }
 
-    /** 发卡资格门控：商户卡（merchantId 非空）充值前须平台已开通发卡资格，默认关→拒。通用卡不受限。 */
+    /** 发卡资格门控：商户卡（merchantId 非空）充值前须平台方合计持股不过半（422-R1）且发卡商户已开通发卡资格，默认关→拒。通用卡不受限。 */
     private void requireCardIssuanceEnabled(String merchantId) {
         if (merchantId == null) {
             return;
+        }
+        if (merchantCardIssuance != null) {
+            merchantCardIssuance.requireIssuable(merchantId);
         }
         StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(merchantId)
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
         if (!rule.cardIssuanceEnabled()) {
             throw ApiException.conflict("STORED_VALUE_CARD_ISSUANCE_DISABLED",
-                    "平台未对该商户开通商户卡发卡");
+                    "该商户未开通商户卡发卡");
         }
     }
 
@@ -1287,9 +1291,8 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
-        // 冻结、解冻与退卡同一范围口径——最高权限放行；商户账号只办本商户卡；卡带项目的按冻结码可触及的项目办（376-R1：含可跨项目角色勾选的项目）。
-        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.freeze");
+        // 冻结、解冻与退卡同一范围口径——商户账号只办本商户卡、不挂商户的账号只办通用卡（421-R1）；卡带项目的按冻结码可触及的项目办（376-R1：含可跨项目角色勾选的项目）。
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account, "customer.stored_value.freeze");
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -1309,8 +1312,7 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 第十八批 BC 段 365-R1：同冻结（requireRefundScope）
-        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.freeze");
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account, "customer.stored_value.freeze");
         if (!"frozen".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "储值账户不在冻结状态");
         }
@@ -1592,16 +1594,23 @@ public class StoredValueService {
         });
     }
 
+    /**
+     * 第十八批 CL 段 423-R1（第十八批裁决 79：ENUM:86、ENUM:107、BSM:1066「由发卡商户在商户后台自行设置」；BSM:833「商户级卡是否可退、退多少比例由发卡商户
+     * 自设规则」「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」）：商户卡发卡、扣款顺序与退款规则只由发卡商户本商户账号设置、查看——
+     * 不挂商户的账号（平台管理员、最高权限、项目侧）403 MERCHANT_SCOPE_REQUIRED，别家商户 403 CROSS_MERCHANT_FORBIDDEN。authorizationService 为 null 不强制。
+     */
     private void requireMerchantScopeForMerchant(String merchantId) {
         if (authorizationService == null) {
             return;
         }
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
-            if (!scope.equals(merchantId)) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "该商户退款规则不在当前商户权限范围内");
-            }
-        });
+        String own = authorizationService.currentMerchantIdQuietly().orElse(null);
+        if (own == null) {
+            throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "商户级卡由发卡商户在商户后台自行设置");
+        }
+        if (!own.equals(merchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "该商户退款规则不在当前商户权限范围内");
+        }
     }
 
     private CustomerStoredValueAccountRecord requireAccountForUpdate(String customerId, String projectId, String merchantId) {
@@ -1646,7 +1655,7 @@ public class StoredValueService {
         return bonusFirst ? new long[] {takeSecond, takeFirst} : new long[] {takeFirst, takeSecond};
     }
 
-    /** 通用卡写死先本金后赠送金；商户级卡读发卡商户自定（平台代录）的顺序。 */
+    /** 通用卡写死先本金后赠送金；商户级卡读发卡商户在商户后台自行设置的顺序。 */
     private boolean bonusFirstForCard(CustomerStoredValueAccountRecord account) {
         if (account.merchantId() == null) {
             return false;

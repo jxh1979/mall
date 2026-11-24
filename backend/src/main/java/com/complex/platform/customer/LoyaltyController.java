@@ -199,7 +199,7 @@ public class LoyaltyController {
         return ApiResponse.ok(storedValueService.getMerchantRefundRule(merchantId));
     }
 
-    // ---- AUD-061：商户卡平台配置（仅平台可改）：发卡资格 + 资金模式（预收/代收）----
+    // ---- AUD-061：商户卡发卡设置：发卡资格 + 资金模式（只可商户预收）+ 消费扣款顺序；第十八批 CL 段 423-R1（第十八批裁决 79）只由发卡商户在商户后台自行设置 ----
 
     @PostMapping("/stored-value/merchant-card-config")
     public ApiResponse<StoredValueMerchantRefundRuleRecord> configureMerchantCard(

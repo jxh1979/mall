@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.19
+# 全链路操作留痕与终端开关 PRD V0.20
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -150,7 +150,7 @@
   - 实现现状（第十八批 O 段第 127 条 127-R1）：统一留痕入口（`AuditEventService`）给每条带员工登录会话的留痕在 `audit_events.metadata` 补记该次登录会话 `login_session_id`（`auth_sessions.id`）与执行设备 `operator_device_id`（员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号，第十八批裁决 6）；成功、失败与闸口留痕都记，客人会话与没有请求的后台作业不记；`GET /api/v1/audit/operation-events` 随 metadata 原样返回。
 - **长短款补足、小费归属、提成归属等责任认定按动作发生时的会话记录判定，不因账号同时在别处登录而转移。**
 
-> 实现现状（2026-11-19 第十八批 BA 段第 324 条 324-R1、324-R2；PGM:899；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：操作留痕查询与导出（`GET /api/v1/audit/operation-events`、`GET /api/v1/audit/operation-events/export`）与审计事件页证据事件列表（`GET /api/v1/evidence/events`）的读范围——最高权限与平台管理员看全部；商户账号看本商户；不挂商户的其余账号（审计岗等）按入口权限码（`audit.operation_log.view`、`audit.operation_log.export`、`evidence.event.view`）可触及的项目看：操作留痕取操作人或其商户归属这些项目的，证据事件取这些项目内商户登记的（商户归属项目＝主项目加已批准的经营项目 `merchant_projects`，与 `listMerchantOperatingProjectIds` 同一口径；PGM:659）；没有项目归属 403 `PROJECT_SCOPE_REQUIRED`（`AuditEventService.ReadScope`）。导出记录的筛选另记所按的项目集合。不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）与不带商户的证据事件，启用中的综合体（项目状态 `active`）都在可触及范围内时一并可见（当前单综合体即本综合体稽核可见），否则不出现；已停用项目的员工所做操作仍归该项目（第十八批 BT 段第 370 条 370-R1；PGM:682；PGM:413；`JdbcAuditEventRepository.searchOperationEvents`、`JdbcEvidenceEventRepository.listPage`）。
+> 实现现状（2026-11-19 第十八批 BA 段第 324 条 324-R1、324-R2；PGM:899；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：操作留痕查询与导出（`GET /api/v1/audit/operation-events`、`GET /api/v1/audit/operation-events/export`）与审计事件页证据事件列表（`GET /api/v1/evidence/events`）的读范围——最高权限与平台管理员看全部；商户账号看本商户；不挂商户的其余账号（审计岗等）按入口权限码（`audit.operation_log.view`、`audit.operation_log.export`、`evidence.event.view`）可触及的项目看：操作留痕取操作人或其商户归属这些项目的，证据事件取这些项目内商户登记的（商户归属项目＝主项目加已批准的经营项目 `merchant_projects`，与 `listMerchantOperatingProjectIds` 同一口径；PGM:659）；没有项目归属 403 `PROJECT_SCOPE_REQUIRED`（`AuditEventService.ReadScope`）。导出记录的筛选另记所按的项目集合。不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）与不带商户的证据事件，启用中的综合体（项目状态 `active`）都在可触及范围内时一并可见（当前单综合体即本综合体稽核可见），否则不出现；已停用项目的员工所做操作仍归该项目（第十八批 BT 段第 370 条 370-R1；PGM:682；PGM:413；`JdbcAuditEventRepository.searchOperationEvents`、`JdbcEvidenceEventRepository.listPage`）。第十八批 CL 段第 421 条 421-R4（2026-11-21；BSM:833、第十八批裁决 79）起，操作留痕查询与导出对不挂商户的读者（最高权限、平台管理员与按项目看的账号）不列以商户级卡账户或商户级卡充值意向为对象的事件，也不列商户账号在储值冻结、解冻、退卡写口失败的留痕（以客人为对象；`JdbcAuditEventRepository.searchOperationEvents`），商户账号照旧看本商户的；商户级卡不属于平台的数据与业务，见 `docs/member-loyalty-and-stored-value-product-prd-v0.1.md` §4.9。
 
 ### 2.3 必须留痕的业务过程清单
 
@@ -868,6 +868,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-21 | 改 | 版本、§2.2 | V0.20：第十八批 CL 段第 421 条 421-R4——操作留痕查询与导出对不挂商户的读者（最高权限、平台管理员与按项目看的账号）不列以商户级卡账户或商户级卡充值意向为对象的事件，商户账号照旧看本商户的；无迁移、契约只补说明 | BSM:833；第十八批裁决 79；待开发清单第 421 条 |
 | 2026-11-20 | 改 | 版本、§4.2 | V0.19：第十八批 CH 段——第 411 条 411-R1：审计事件页、准入审计页的导出登记（`POST /api/v1/evidence/events`）按登记人取商户归属，平台管理员、最高权限与不挂商户的稽核、治理账号记空商户，不再 403 `MERCHANT_SCOPE_REQUIRED`；第 412 条 412-R1（含控制席并入的未登录请求）：操作留痕的操作人类型按发起方记——没有登录主体的定时作业记 `system`「系统作业」，开放平台第三方读取与回调记 `third_party`「第三方系统」，客人端未登录接口记 `customer`，柜机上报记 `device`「设备」，其余未登录请求记 `anonymous`「匿名访问」，员工登录、续期成功与 U 盘破窗登录成功按该账号记 | PGM:683；BSM:576；PGM:899；待开发清单第 411、412 条 |
 | 2026-11-20 | 改 | 版本、§2.2 | V0.18：第十八批 BT 段第 370 条 370-R1——§2.2 实现现状末句改为现状：操作留痕查询与导出、审计事件页证据事件列表在项目口径下，不带商户、操作人也不属于任何项目的留痕与不带商户的证据事件，启用中的综合体都在可触及范围内时一并可见，否则不出现；已停用项目的员工所做操作仍归该项目 | PGM:682；PGM:413；PGM:899；待开发清单第 370 条 |
 | 2026-11-21 | 改 | 版本、§5.6 | V0.17：第十八批 CK 段第 418 条 418-R1——终端总开关闸的非终端通道豁免另含统一 Webhook 与机器人上报两个第三方回调（按整串路径豁免，后台集成管理写请求照旧过闸） | BSM:1511；待开发清单第 418 条 |

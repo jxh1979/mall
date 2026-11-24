@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -277,9 +277,10 @@ class FinanceRefundLifecycleTests {
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_PROJECT_FORBIDDEN");
     }
 
+    // 第十八批 CL 段 421-R3（第十八批裁决 79）：平台侧不再触及商户级卡待退事项，本例改用综合体通用卡（merchant 为空）的储值退款
     @Test
     void storedValuePayoutCannotBeAutomaticallyRetriedWithoutRechargeRoutes() {
-        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored", false);
+        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", null, "project", "stored", false);
         assertThat(refunds.get(id).sourceType()).isEqualTo("stored_value_account");
         assertThat(refunds.get(id).projectId()).isEqualTo("project");
         assertThatThrownBy(() -> service.retryFinanceRefund(id, operation("retry-stored")))
@@ -402,6 +403,8 @@ class FinanceRefundLifecycleTests {
         FinanceRefundRecord refund = refunds.get(id);
         assertThat(refund.projectId()).isEqualTo("project");
         assertThat(refund.targetId()).isEqualTo("card-without-project");
+        // 第十八批 CL 段 421-R3（第十八批裁决 79「商户级卡的……退款完全由发卡商户自行办理，不经平台」）：执行与核实改由发卡商户本商户账号办理
+        when(authorization.currentMerchantScope()).thenReturn(Optional.of("merchant"));
         useActualEvidenceValidator(refund, "uploaded", "finance_refund", "same", "merchant");
         service.recordFinanceRefundExecution(id, execution("merchant-execution"));
         actor("reviewer");
@@ -423,13 +426,14 @@ class FinanceRefundLifecycleTests {
             String id = service.recordStoredValuePayoutRefund("card-" + key, 3000, "退卡", "merchant", null, key, false);
             assertThat(refunds.get(id).projectId()).isNull();
             assertThat(refunds.get(id).status()).isEqualTo("requested");
+            // 第十八批 CL 段 421-R3（第十八批裁决 79「平台各岗位（含最高权限）一律看不到商户级卡的……退款流水」）：不挂商户的账号按查无此单
             assertThatThrownBy(() -> service.recordFinanceRefundExecution(id, execution(key + "-execute")))
-                    .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_PROJECT_UNRESOLVED");
+                    .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_NOT_FOUND");
             assertThatThrownBy(() -> service.confirmFinanceRefundResult(id, confirmation(key + "-confirm", "finance")))
-                    .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_PROJECT_UNRESOLVED");
+                    .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_NOT_FOUND");
             when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("project-one"));
             assertThatThrownBy(() -> service.getFinanceRefund(id)).isInstanceOf(ApiException.class)
-                    .extracting("code").isEqualTo("CROSS_PROJECT_FORBIDDEN");
+                    .extracting("code").isEqualTo("REFUND_NOT_FOUND");
             when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         }
         verifyNoInteractions(gateway);
@@ -440,8 +444,9 @@ class FinanceRefundLifecycleTests {
         String id = service.recordStoredValuePayoutRefund("card", 3000, "退卡", "merchant", "card-project", "card-project", false);
         verify(repository, never()).listMerchantOperatingProjectIds(anyString());
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("other-project"));
+        // 第十八批 CL 段 421-R3（第十八批裁决 79）：不挂商户的项目侧账号碰商户级卡待退事项按查无此单
         assertThatThrownBy(() -> service.recordFinanceRefundExecution(id, execution("cross-project")))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_PROJECT_FORBIDDEN");
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_NOT_FOUND");
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         when(authorization.currentMerchantScope()).thenReturn(Optional.of("other-merchant"));
         assertThatThrownBy(() -> service.recordStoredValuePayoutRefund("card", 3000, "退卡", "merchant",

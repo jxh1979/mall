@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -10,8 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
+import com.complex.platform.customer.CustomerRecord;
+import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +45,7 @@ class AuditOperationEventsScopeJdbcIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private CustomerRepository customers;
 
     private final String s = String.valueOf(System.nanoTime());
     private final String p1 = "aud_p1_" + s;
@@ -177,7 +181,61 @@ class AuditOperationEventsScopeJdbcIntegrationTests {
         assertThat(ownIds).doesNotContain(noMerchant);
     }
 
+    /**
+     * 第十八批裁决 79（BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：平台管理员与最高权限查操作留痕，
+     * 以商户级卡为对象（customer_stored_value）或以商户级卡充值意向为对象（payment_intent）的储值事件都不列，通用卡的照列；商户账号照旧看本商户的（修复前平台侧都列）。
+     * 18CL 收尾复核：商户员工在冻结、解冻、线上与柜台退卡写口失败的留痕以客人编号为对象，平台侧同样不列（修复前列出、可认出持卡人）；
+     * 商户员工的成功留痕以账户为对象（如酒吧结账扣通用卡），通用卡的照列。
+     */
+    @Test
+    void platformSideDoesNotSeeMerchantCardStoredValueEvents() throws Exception {
+        String customer = "cus_aud_" + s;
+        String phone = "139" + s.substring(s.length() - 8);
+        customers.saveCustomer(new CustomerRecord(customer, phone, "139****" + phone.substring(7), "active", null, null, Instant.now(), Instant.now()));
+        String generalCard = "svacc_aud_g_" + s;
+        String merchantCard = "svacc_aud_m_" + s;
+        jdbc.update("INSERT INTO customer_stored_value_accounts (id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, NULL, 0, 'active', now(), now())", generalCard, customer, p1);
+        jdbc.update("INSERT INTO customer_stored_value_accounts (id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at) "
+                + "VALUES (?, ?, NULL, ?, 0, 'active', now(), now())", merchantCard, customer, m1);
+        String generalIntent = "pi_aud_g_" + s;
+        String merchantIntent = "pi_aud_m_" + s;
+        jdbc.update("INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at) VALUES (?, ?, ?, NULL, now())",
+                generalIntent, customer, p1);
+        jdbc.update("INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at) VALUES (?, ?, NULL, ?, now())",
+                merchantIntent, customer, m1);
+        storedValueEvent("customer_stored_value", generalCard, null, "success");
+        storedValueEvent("customer_stored_value", merchantCard, m1, "success");
+        storedValueEvent("payment_intent", generalIntent, null, "success");
+        storedValueEvent("payment_intent", merchantIntent, m1, "success");
+        String generalAtBar = "svacc_aud_gb_" + s;
+        jdbc.update("INSERT INTO customer_stored_value_accounts (id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, NULL, 0, 'active', now(), now())", generalAtBar, customer, p2);
+        storedValueEvent("customer_stored_value", customer, m1, "failure");
+        storedValueEvent("customer_stored_value", generalAtBar, m1, "success");
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("usr_aud_pf_" + s, "platform_admin", null, null, "audit.operation_log.view");
+        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("usr_aud_sh_" + s, "staff", p1, m1, "audit.operation_log.view");
+
+        for (RequestPostProcessor platformSide : List.of(admin, master())) {
+            assertThat(businessIds(platformSide)).contains(generalCard, generalIntent, generalAtBar).doesNotContain(merchantCard, merchantIntent, customer);
+        }
+        assertThat(businessIds(shop)).containsExactlyInAnyOrder(merchantCard, merchantIntent, customer, generalAtBar);
+    }
+
     // ---------- helpers ----------
+
+    private List<String> businessIds(RequestPostProcessor who) throws Exception {
+        String body = mockMvc.perform(get("/api/v1/audit/operation-events").param("event_name", eventName + ".stored_value").with(who))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data[*].business_id");
+    }
+
+    private void storedValueEvent(String businessType, String businessId, String merchantId, String result) {
+        jdbc.update("INSERT INTO audit_events (id, occurred_at, event_name, event_result, actor_type, actor_id, business_type, business_id, merchant_id) "
+                + "VALUES (?, now(), ?, ?, 'customer', 'cus_aud', ?, ?, ?)", UUID.randomUUID(), eventName + ".stored_value", result, businessType, businessId,
+                merchantId);
+    }
 
     private List<String> actorIds(RequestPostProcessor who) throws Exception {
         String body = mockMvc.perform(get("/api/v1/audit/operation-events").param("event_name", eventName).with(who))

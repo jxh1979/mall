@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -106,9 +106,12 @@ class StoredValueFreezeScopeJdbcIntegrationTests {
         assertThat(cardStatus(generalB)).isEqualTo("active");
     }
 
-    /** ③ 商户 1 账号冻结本商户卡 200，冻结商户 2 的卡 403 CROSS_MERCHANT_FORBIDDEN；④ 最高权限冻结 B 的通用卡 200。 */
+    /**
+     * ③ 商户 1 账号冻结本商户卡 200，冻结商户 2 的卡 403 CROSS_MERCHANT_FORBIDDEN；④ 最高权限冻结 B 的通用卡 200；⑤ 第十八批裁决 79（BSM:833
+     * 「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」）：最高权限冻结商户 1 的卡 403 CROSS_MERCHANT_FORBIDDEN，卡仍有效（修复前 200）。
+     */
     @Test
-    void merchantStaffFreezesOwnCardsAndMasterFreezesAnyCard() throws Exception {
+    void merchantStaffFreezesOwnCardsAndMasterFreezesOnlyGeneralCards() throws Exception {
         post(master(), "freeze", projectB, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("frozen"));
         assertThat(cardStatus(generalB)).isEqualTo("frozen");
 
@@ -117,6 +120,9 @@ class StoredValueFreezeScopeJdbcIntegrationTests {
         post(staff1, "freeze", projectA, merchant2).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
         assertThat(cardStatus(card2)).isEqualTo("active");
+        post(master(), "unfreeze", projectA, merchant1).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(cardStatus(card1)).isEqualTo("frozen");
     }
 
     /** ⑤ 只持冻结码的项目 A 账号查卡 200、列出本项目通用卡；两个码都不持的 403 PERMISSION_DENIED。 */

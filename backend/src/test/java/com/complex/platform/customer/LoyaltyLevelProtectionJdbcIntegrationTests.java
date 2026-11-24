@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -306,14 +306,20 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT read_at FROM customer_level_notices WHERE id=?", Timestamp.class, others)).isNull();
     }
 
-    /** 第 11 条（ENUM L86「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台，商户不自行改动」；BSM L521 涉钱配置版本化、
-     *  值与上下限同配、经审批按指定日期生效；cg-pending-decisions 第 11、13 条）：前端真实请求形状（蛇形键）由平台代录，进审批、批准后版本落库。 */
+    /** 第十八批裁决 85（ENUM:86 改句「赠送比例由发卡商户在商户后台自行设置」，删「商户不自行改动」；「平台不再代录、不再审批；照旧先存草案、填生效日、
+     *  经本商户有审批权的人转正后生效」；BSM:521 涉钱配置版本化、值与上下限同配、经审批按指定日期生效）：发卡商户本商户账号按前端真实请求形状（蛇形键）
+     *  提交，进审批、本商户审批人批准后版本落库；最终审批人须是本商户的人；平台账号 403 MERCHANT_SCOPE_REQUIRED，别家商户 403 CROSS_MERCHANT_FORBIDDEN
+     *  （修复前商户账号 403、平台代录 200）。 */
     @Test
-    void merchantCardBonusEnteredByPlatformGoesThroughApproval() throws Exception {
+    void merchantCardBonusSetByIssuingMerchantGoesThroughApproval() throws Exception {
         String platform = entity("platform");
-        String requester = actor(platform, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW));
-        String approver = approver(platform, requester);
-        RequestPostProcessor who = staff(requester, platform);
+        String requester = merchantActor(platform, merchant, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW));
+        String approver = merchantActor(platform, merchant, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW,
+                "ticket.reward.rule.approve", "governance.supervisor_review.approve"));
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", requester, approver);
+        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id,assigned_by,assigned_at) VALUES(?,'lvl_m1_lower',?,'fixture-hr-approved',now())",
+                approver, platform);
+        RequestPostProcessor who = merchantStaff(requester, platform, merchant);
         Instant effective = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
         String scope = "\"merchant_id\":\"" + merchant + "\",";
         String values = "{\"fixed_value\":1000,\"minimum_value\":0,\"maximum_value\":2000}";
@@ -322,18 +328,31 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("pending_review"))
                 .andExpect(jsonPath("$.data.merchant_id").value(merchant))
                 .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(get("/api/v1/loyalty/ticket-reward-configs").header("X-Terminal-Type", "web").with(who))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].id").value(org.hamcrest.Matchers.contains((String) JsonPath.read(created, "$.data.id"))));
+        approveAsMerchant(approver, platform, merchant, JsonPath.read(created, "$.data.review_id"));
+        assertThat(jdbc.queryForMap("SELECT status, merchant_id, (payload->>'fixedValue')::int AS bps FROM ticket_reward_config_versions WHERE id=?",
+                (String) JsonPath.read(created, "$.data.id")))
+                .containsEntry("status", "approved").containsEntry("merchant_id", merchant).containsEntry("bps", 1000);
+
         bonus(who, "2", "merchant_card_bonus", "", values, effective.plusSeconds(60), approver).andExpect(status().isBadRequest());
         bonus(who, "3", "merchant_card_bonus", scope + "\"project_id\":\"p_" + key + "\",", values, effective.plusSeconds(120), approver)
                 .andExpect(status().isBadRequest());
         bonus(who, "4", "merchant_card_bonus", scope, "{\"fixed_value\":3000,\"minimum_value\":0,\"maximum_value\":2000}", effective.plusSeconds(180), approver)
                 .andExpect(status().isBadRequest());
-        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("u_shop_" + key, "staff", "p_" + key, merchant, TicketRewardConfigService.MANAGE);
-        bonus(shop, "5", "merchant_card_bonus", scope, values, effective.plusSeconds(240), approver).andExpect(status().isForbidden());
-
-        approve(approver, platform, JsonPath.read(created, "$.data.review_id"));
-        assertThat(jdbc.queryForMap("SELECT status, merchant_id, (payload->>'fixedValue')::int AS bps FROM ticket_reward_config_versions WHERE id=?",
-                (String) JsonPath.read(created, "$.data.id")))
-                .containsEntry("status", "approved").containsEntry("merchant_id", merchant).containsEntry("bps", 1000);
+        String platformApprover = approver(platform, actor(platform, List.of(TicketRewardConfigService.VIEW)));
+        bonus(who, "5", "merchant_card_bonus", scope, values, effective.plusSeconds(240), platformApprover).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        String platformRequester = actor(platform, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW));
+        bonus(staff(platformRequester, platform), "6", "merchant_card_bonus", scope, values, effective.plusSeconds(300), approver)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("MERCHANT_SCOPE_REQUIRED"));
+        String other = "m_other_" + key;
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,status,created_at,updated_at) VALUES(?,'等级测试别家酒吧','bar',?,'active',now(),now())",
+                other, platform);
+        RequestPostProcessor otherShop = merchantStaff(merchantActor(platform, other, List.of(TicketRewardConfigService.MANAGE)), platform, other);
+        bonus(otherShop, "7", "merchant_card_bonus", scope, values, effective.plusSeconds(360), approver)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
     }
 
     /** 第 11 条（ENUM L86 通用卡「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；cg-pending-decisions 第 13 条「赠送比例及其上下限均遵守既有涉钱配置审批与版本规则」）：
@@ -536,6 +555,31 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
         for (String permission : permissions) jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,?)", role, permission);
         jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", user, role);
         return user;
+    }
+
+    /** 发卡商户本商户员工账号（所属公司 company、商户 merchantId）。 */
+    private String merchantActor(String company, String merchantId, List<String> permissions) {
+        String user = "u_" + UUID.randomUUID().toString().replace("-", "");
+        String role = "r_" + user;
+        jdbc.update("INSERT INTO access_users(id,username,account_type,organization_id,merchant_id,status,created_at) VALUES(?,?,'staff',?,?,'active',now())",
+                user, user, company, merchantId);
+        jdbc.update("INSERT INTO roles(id,role_name,created_at) VALUES(?,?,now())", role, "商户赠送比例回归角色" + System.nanoTime());
+        for (String permission : permissions) jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,?)", role, permission);
+        jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", user, role);
+        return user;
+    }
+
+    private static RequestPostProcessor merchantStaff(String user, String company, String merchantId) {
+        return authentication(new UsernamePasswordAuthenticationToken(new AccessActor(user, user, "staff", company, merchantId, "active"), null,
+                List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+    }
+
+    private void approveAsMerchant(String approver, String company, String merchantId, String reviewId) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(approver, approver, "staff", company, merchantId, "active"), null, List.of()));
+        assertThat(reviews.approve(reviewId, new SupervisorReviewApprovalRequest("approve-" + UUID.randomUUID(), "核实",
+                List.of(), null, "approved", "通过")).reviewStatus()).isEqualTo("approved");
+        SecurityContextHolder.clearContext();
     }
 
     private static RequestPostProcessor staff(String user, String company) {

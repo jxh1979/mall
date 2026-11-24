@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.60
+// 文件版本：V0.61
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -3138,6 +3138,11 @@ public class FinanceService implements TerminationSettlementPort {
         boolean merchantAccount = !reach.platformAdmin() && trimToNull(actor.merchantId()) != null;
         if (merchantAccount && !actor.merchantId().equals(refund.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
+        }
+        // 第十八批 CL 段 421-R3（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：
+        // 商户级卡待退本金事项对不挂商户的账号按查无此单处理（详情、查询、重试、付款确认发起、执行登记、结果确认共用）。
+        if (!merchantAccount && "stored_value_account".equals(refund.sourceType()) && trimToNull(refund.merchantId()) != null) {
+            throw ApiException.notFound("REFUND_NOT_FOUND", "退款记录不存在");
         }
         // 第十八批 E 段 20-R3：商户账号查看退款详情（不取锁、finance.ar_ap.view）只按商户；取锁回写状态的查询结果与执行照旧只到本人项目
         boolean merchantRead = merchantAccount && !lock && "finance.ar_ap.view".equals(permission);

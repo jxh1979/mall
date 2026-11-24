@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -21,8 +21,10 @@ import org.springframework.stereotype.Service;
  * 第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；
  * ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」
  * 「商户账号持有这类角色也不能跨项目」）：储值台账查询——按客人（完整手机号）、商户（发卡或扣款）、期间（北京时间日期，含首尾）查逐笔明细，
- * 每笔给本金、赠送金变动及变动后的本金、赠送金与余额。范围：平台管理员与最高权限不限；商户账号只到本商户发的卡（卡带项目的只到本人项目）；
- * 其余按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目），不带项目的商户卡按发卡商户的经营项目判。
+ * 每笔给本金、赠送金变动及变动后的本金、赠送金与余额。范围：商户账号只到本商户发的卡（卡带项目的只到本人项目）；不挂商户的读者
+ * （平台管理员、最高权限、项目侧与可跨项目角色）只列综合体通用卡（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、
+ * 持卡人、余额与充值、退款流水」，第 421 条 421-R2），平台管理员与最高权限不限项目，其余按 customer.stored_value.view 可触及的项目
+ * （本人项目与可跨项目角色勾选的项目）。
  * 手机号走请求体；查询不扣单次授权、不记审计事件，查了谁由外壳敏感页登记（PGM:878，同退卡查卡）。
  */
 @Service
@@ -73,19 +75,19 @@ public class StoredValueLedgerService {
             params.addValue("customer", customer.id());
         }
         AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), VIEW);
-        if (!reach.platformAdmin()) {
-            String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
-            if (merchant != null) {
-                accountWhere.add("a.merchant_id = :own_merchant AND (a.project_id IS NULL OR a.project_id = :own_project)");
-                params.addValue("own_merchant", merchant).addValue("own_project", reach.ownProject());
-            } else {
+        String merchant = reach.platformAdmin() ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
+        if (merchant != null) {
+            accountWhere.add("a.merchant_id = :own_merchant AND (a.project_id IS NULL OR a.project_id = :own_project)");
+            params.addValue("own_merchant", merchant).addValue("own_project", reach.ownProject());
+        } else {
+            // 第十八批裁决 79：不挂商户的读者只列综合体通用卡。
+            accountWhere.add("a.merchant_id IS NULL");
+            if (!reach.platformAdmin()) {
                 Set<String> projects = reach.organizationIds();
                 if (projects.isEmpty()) {
                     return empty;
                 }
-                accountWhere.add("(a.project_id IN (:projects) OR (a.project_id IS NULL AND a.merchant_id IN ("
-                        + "SELECT id FROM merchants WHERE project_id IN (:projects)"
-                        + " UNION SELECT merchant_id FROM merchant_projects WHERE project_id IN (:projects))))");
+                accountWhere.add("a.project_id IN (:projects)");
                 params.addValue("projects", projects);
             }
         }

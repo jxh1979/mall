@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.17
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.18
 
 ## 1. 文档定位
 
@@ -3673,7 +3673,7 @@
 | CUS-客人端 | `configureCustomerChurnAlertSetting` | `PUT` | `/api/v1/customer-churn-alert-setting` | 配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配） | `customer.account.manage` | `customer.churn_alert_setting.configured` / `customer.churn_alert_setting.config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureCustomerFrequentEntryAlertSetting` | `PUT` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | 配置本项目高频出入场预警阈值（一晚、连续两日各与上下限同配） | `customer.account.manage` | `customer.frequent_entry_alert_setting.configured` / `customer.frequent_entry_alert_setting.config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureCustomerRestrictionSetting` | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | 配置本项目会员受限时长（天数与上下限同配） | `customer.account.manage` | `customer.restriction_setting.configured` / `customer.restriction_setting.config_failed` | web | operation 级补充 |
-| CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
+| CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 发卡商户设置本商户储值卡：发卡开关、资金模式（只可商户预收）、消费扣款顺序 | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `confirmCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments/{payment_intent_id}/confirm` | 客人回前台确认定金在线付款（查单） | `not_applicable` | `customer.payment_confirmed` / `customer.payment_confirm_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | 客人停车缴费确认 | `not_applicable` | `parking.payment_paid` / `parking.payment_confirm_failed` | app, miniapp | operation 级补充 |
