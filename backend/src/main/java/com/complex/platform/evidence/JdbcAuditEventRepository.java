@@ -10,6 +10,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcAuditEventRepository implements AuditEventRepository {
 
+    /**
+     * 第十八批 BT 段第 370 条 370-R1：启用中的综合体全部落在 :project_scope 内（启用口径同 BusinessDayResolver.soleProject：status = 'active'）。
+     * 归不到任何项目的留痕与不带商户的证据事件只对这样的读者出现，JdbcEvidenceEventRepository.listPage 共用。
+     * ponytail: 启用综合体不止一个时，这几类只对能看全部启用综合体的账号出现；多综合体启用前给两表加所属综合体列，客人操作可取 TerminalSwitchGuard.checkAtProject 已判出的综合体。
+     */
+    static final String ALL_ACTIVE_PROJECTS_IN_SCOPE =
+            "NOT EXISTS (SELECT 1 FROM projects WHERE status = 'active' AND id NOT IN (:project_scope))";
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -92,10 +100,15 @@ class JdbcAuditEventRepository implements AuditEventRepository {
         if (merchantScope != null) { sql.append(" AND merchant_id = :merchant_scope"); params.addValue("merchant_scope", merchantScope); }
         // 第十八批 BA 段第 324 条 324-R1：audit_events 没有项目列、merchant_id 取自操作人（V045）——按操作人或其商户所属项目归到综合体。
         // 18BA 收尾复核修正：商户所属项目＝主项目 UNION 已批准的经营项目（merchant_projects），与 listMerchantOperatingProjectIds 同一口径。
+        // 第十八批 BT 段第 370 条 370-R1：不带商户、操作人也不是任何项目员工账号的留痕（客人、系统作业、平台管理员与最高权限等）归不到项目，
+        // 启用中的综合体都可触及时一并可见；已停用项目的员工所做操作仍归该项目（JOIN projects 不看状态）。
         if (projectScope != null) {
             sql.append(" AND (merchant_id IN (SELECT id FROM merchants WHERE project_id IN (:project_scope)"
                     + " UNION SELECT merchant_id FROM merchant_projects WHERE project_id IN (:project_scope))"
-                    + " OR actor_id IN (SELECT id FROM access_users WHERE organization_id IN (:project_scope)))");
+                    + " OR actor_id IN (SELECT id FROM access_users WHERE organization_id IN (:project_scope))"
+                    + " OR (merchant_id IS NULL AND (actor_id IS NULL OR actor_id NOT IN"
+                    + " (SELECT u.id FROM access_users u JOIN projects p ON p.id = u.organization_id))"
+                    + " AND " + ALL_ACTIVE_PROJECTS_IN_SCOPE + "))");
             params.addValue("project_scope", projectScope);
         }
         sql.append(" ORDER BY occurred_at DESC, id LIMIT :limit");
