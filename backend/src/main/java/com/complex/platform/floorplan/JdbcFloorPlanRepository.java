@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -187,13 +187,14 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
 
     @Override
     public List<FloorPlanImportTaskRecord> findImportTasksByFloorPlanId(String floorPlanId) {
+        // 第十八批 CQ 段第 372 条第 6 段 372-S6-R3（第十八批裁决 77）：外审数据时段按导入任务建立时刻 created_at。
         return jdbcTemplate.query("""
                 SELECT id, floor_plan_id, source_format, source_name, source_hash, source_payload,
                        status, candidate_count, error_count, operator_note, created_at, updated_at
                   FROM floor_plan_import_tasks
-                 WHERE floor_plan_id = :floor_plan_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("floor_plan_id", floorPlanId), this::mapImportTask);
+                 WHERE floor_plan_id = :floor_plan_id"""
+                + com.complex.platform.access.AuditDataWindow.andInstant("created_at") + " ORDER BY created_at DESC, id",
+                Map.of("floor_plan_id", floorPlanId), this::mapImportTask);
     }
 
     @Override

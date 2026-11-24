@@ -1,11 +1,12 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.EmployeeNoticeRecord;
 import com.complex.platform.access.staff.JdbcStaffRepository;
@@ -386,6 +387,7 @@ public class InventoryTransferFlowService {
             if (isBorrow(o)) {
                 // FS-019：借用单按行的归还事实、归还登记与无法归还处置，借出方与借入方都可查看。
                 requireParty(o, VIEW);
+                AuditDataWindow.requireCovers(o.createdAt()); // 372-S6-R2：过完当事方闸再按所属单建单时刻判。
                 result.put("return_due_at", o.returnDueAt());
                 result.put("lines", lendingLineFacts(o));
                 result.put("returns", jdbc.queryForList("SELECT * FROM inventory_transfer_returns WHERE transfer_order_id=? ORDER BY received_at,id", o.id())
@@ -395,6 +397,7 @@ public class InventoryTransferFlowService {
                     throw ApiException.badRequest("TRANSFER_NOT_REQUISITION", "只有门店要货（平台供货调拨）单走此流程");
                 }
                 requireStoreSide(o, VIEW);
+                AuditDataWindow.requireCovers(o.createdAt()); // 372-S6-R2：过完门店侧闸再按所属单建单时刻判。
                 result.put("payable_item_id", currentPayableId(o.id()));
                 result.put("lines", lineFacts(o.id()));
             }

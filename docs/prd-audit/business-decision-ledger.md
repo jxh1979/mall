@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.49
+文档版本：V1.50
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13739,3 +13739,107 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本组增量：新增操作 0；迁移 0（预留 V808～V811 未用）。
 - 18CP 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main f447ef87；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.20、决策台账 V1.49，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CP 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 ea4bb4c8 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7465 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 18:34 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CQ 落地位置补记（2026-11-20）：第十八批 CQ 段（batch115）按 18CQ 只读设计实现待开发清单第 372 条（外审数据时段第 6 段（库存、商户账单与服务、合规、平面图））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CQ 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CQ 段，batch115）实现待开发清单第 372 条（18CQ 只读设计 b115-audit/d7-cq.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 372-S6-R1、R2、R3、R5（同批做、共用一个测试类）与 R4 收口最后做，一个 PR、不拆段。控制席补定（自定 83）：R5 库存盘点单清单与详情（d-aud-b 段6 清单漏列，外审已可达本人项目全部盘点单，按盘点营业日 business_date）做，与自定 82 同口径（第 372 条本身、有发生日期、外审进得去即承载）。第 372 条按第十八批裁决 77 分段，第 1～3 段已合入主干，本段工作树开工前已快进到 18CN 合并后的主干，AuditDataWindow 照现码调用、不再改。按字面或常理定的五点照设计 notes 执行。段 4（酒吧，18CO 实现中）、段 5（游乐，18CP）与本段并行，撞 auditDataWindowRule 已承载清单、platform-governance-prd §4 审计人员条与修订表、data-isolation 规格审计人员行、覆盖表 PGM-0095 行、台账文末五处文本：各段只在已承载清单末尾与「其余业务域分段承载中」之前追加本段一句，后合入的接在先合入那句之后；覆盖表「其余业务域（……）」只删本段的域名。设计旁见（内部稽核读库存台账、合规、商户账单 403）已登记待开发清单第 463 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2927434e 开工（第七轮），变基到 28ec1bcf 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CQ 落地位置补记（第 372 条第 6 段：库存、商户账单与服务、合规、平面图；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增操作 0 个，迁移 0 个（预留 V812～V815 未用），改 9 个既有操作描述 listInventoryQuarantine、listQuarantineDispositions、listTransferOrders、getTransferOrder、getTransferOrderFulfillment、listInventoryStocktakes、getInventoryStocktake、listFloorPlanImports、getFloorPlanImportDetails（getTransferOrder、getTransferOrderFulfillment 失败码各加 OUT_OF_AUDIT_DATA_WINDOW，getFloorPlanImportDetails、getInventoryStocktake 新增失败码 OUT_OF_AUDIT_DATA_WINDOW），改 1 条契约规则 auditDataWindowRule 的已承载清单）
+    372-S6-R1 库存隔离：隔离实物清单与隔离处置记录按时段承载
+    - 改法：
+      - inventory 包 InventoryQuarantineService.list 在仓库与商户条件后拼 AuditDataWindow.andInstant("q.received_at")。发生时间取转入隔离时刻（inventory_quarantine_lots 没有 created_at 列，按表实况取 received_at），返回清单与留痕条数同口径。requireWarehouseScope 照旧在前，仓库不可触及仍 403 CROSS_PROJECT_FORBIDDEN。
+      - InventoryQuarantineService.dispositions 在 lot_id 条件后拼 AuditDataWindow.andInstant("requested_at")，按处置方案自身的提出时刻筛，不另判所属隔离实物：所属实物在时段外照常 200，只列时段内提出的处置。scopedLot 照旧在前。
+      - InventoryQuarantineService.visibleWarehouses（listQuarantineWarehouses，仓库选项，没有发生日期）不改，照常显示。propose、complete 等写入口不改。
+    - 依据：
+      - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+      - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」
+    - 测试：AuditDataWindowInventoryFloorPlanJdbcIntegrationTests.quarantineLotsListOnlyThoseReceivedInsideWindow、quarantineDispositionsFollowTheirOwnRequestedAtWhileLotOutsideWindowStillOpens、quarantineWarehouseOptionsShownAsUsual。
+    372-S6-R2 跨主体调拨与借调：清单、单据详情、签收与差异处理按建单时刻承载
+    - 改法：
+      - JdbcInventoryRepository.listTransferOrders 只有 InventoryService.listTransferOrders 调用。改为「WHERE TRUE」后拼 AuditDataWindow.andInstant("created_at")，按建单时刻筛。InventoryService.listTransferOrders 照旧在内存按 InventoryTransferFlowService.visibleTo 过滤，total 取过滤后条数，行与 total 同口径。
+      - InventoryService.getTransferOrder 在所属项目与当事商户判定（visibleTo）之后加 AuditDataWindow.requireCovers(建单时刻)，时段外 403 OUT_OF_AUDIT_DATA_WINDOW。跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN。
+      - InventoryTransferFlowService.fulfillment 借用分支在 requireParty 之后、门店要货分支在 requireStoreSide 之后，各加 AuditDataWindow.requireCovers(所属单建单时刻)。失败走原 catch，留痕 inventory.transfer_fulfillment_view_failed 记 OUT_OF_AUDIT_DATA_WINDOW。
+      - 逐行签收结果、归还登记、差异处理登记随该单列出，不另筛，照段 1 InternalPayableExecutionService.execution 与段 3 FinancePayrollService 只判父记录的先例。
+      - 各写入口不改。
+    - 依据：PGM:682（同上）；第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录」。
+    - 测试：AuditDataWindowInventoryFloorPlanJdbcIntegrationTests.transferOrdersListByCreatedAtWithTotalOnSameBasis、transferOrderDetailOutsideWindowForbiddenAfterProjectGate、transferFulfillmentOutsideWindowForbiddenWhileInsideListsItsLines。
+    372-S6-R3 平面图导入：导入任务清单按建立时刻承载，导入候选明细按任务建立时刻判
+    - 改法：
+      - floorplan 包 JdbcFloorPlanRepository.findImportTasksByFloorPlanId 只有 FloorPlanService.listImportTasks 调用。在平面图条件后拼 AuditDataWindow.andInstant("created_at")，按导入任务自身的建立时刻筛，PageResponse 的 total 取筛后条数。
+      - FloorPlanService.getImportDetails 在 ensureImportTaskBelongsToFloorPlan（平面图项目闸、商户闸、任务归属核对）之后加 AuditDataWindow.requireCovers(任务建立时刻)，时段外 403 OUT_OF_AUDIT_DATA_WINDOW。候选与错误明细随该任务列出。
+      - listFloorPlans、listShapes 不改，平面图与形状照常显示。导入、发布等写入口不改。
+    - 依据：PGM:682（同上）；第十八批裁决 77 所选选项原文「外审账号在各清单、明细和导出里只看得到这段时间内发生的记录；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」。
+    - 测试：AuditDataWindowInventoryFloorPlanJdbcIntegrationTests.floorPlanImportTasksListByCreatedAtWithTotalOnSameBasis、floorPlanImportCandidatesOutsideWindowForbidden、floorPlansAndShapesBuiltBeforeWindowShownAsUsual。
+    372-S6-R5 库存盘点单：盘点单清单按盘点营业日承载，盘点单详情按营业日判
+    - 背景：d-aud-b 段6 清单漏列，外审已可达，按第十八批裁决 77 一并承载（控制席自定 83）。inventory.stocktake.view 按 V180 通用选码规则在外部审计模板内；18BK 之后，外审可看本人项目全部盘点单。
+    - 改法：
+      - JdbcInventoryRepository.listStocktakes 只有 InventoryProjectScope.visibleStocktakes 调用。改为「WHERE TRUE」后拼 AuditDataWindow.andDate("business_date")，按盘点营业日筛。外审账号落在 visibleStocktakes 按综合体内存过滤的分支，readPage 的 total 取过滤后条数，行与 total 同口径。visibleStocktakes、listStocktakesByMerchant 不改。
+      - InventoryService.getStocktake 在 loadStocktakeScoped（InventoryProjectScope.requireStocktake，库房商户与综合体闸）之后加 AuditDataWindow.requireCovers(盘点营业日)，时段外 403 OUT_OF_AUDIT_DATA_WINDOW。失败走原 catch，留痕 inventory.stocktake.detail_view_failed 记该码。差异明细随该盘点单列出。
+      - 时段判定不放进 InventoryProjectScope.requireStocktake：它还被登记差异、复核、结束盘点、差异过账与证据登记共用。写入口不改。
+    - 依据：PGM:682（同上）；第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」。
+    - 测试：AuditDataWindowInventoryFloorPlanJdbcIntegrationTests.stocktakesListByBusinessDateWithTotalOnSameBasis、stocktakeDetailOutsideWindowForbiddenAfterProjectGate。
+    372-S6-R4 段 6 收口
+    - 改法：
+      - 本段代码只调用主干已有的 AuditDataWindow.andInstant、andDate、requireCovers，不改 AuditDataWindow。无迁移、无新权限码、无新字段键与事件、无前端改动。
+      - 契约规则 auditDataWindowRule 的已承载清单补「库存隔离实物与处置记录、跨主体调拨与借调单（含详情与签收差异处理）、库存盘点单（含差异明细）、平面图导入任务（含候选明细）」，接在先合入各段那句之后。
+      - platform-governance-prd §4「审计人员」实现现状条、data-isolation 规格审计人员行、覆盖表 PGM-0095 行同步补本段一句。本段是第 372 条六段里最后合入的一段，合并时覆盖表「其余业务域（……）」一句改为「外审数据时段第 372 条按第十八批裁决 77 分 6 段已全部承载」，该行状态仍为 PARTIAL（同句「内部稽核读其余业务数据未逐入口重核」未变）。
+    - 不承载的入口与理由（逐入口在现主干核过）：
+      - 外审本就 403、不承载的 22 个：
+        - 采购 listPurchaseRequests、getPurchaseWorkflowDetail、getPurchaseWorkbenchOptions：PurchaseWorkflowService.merchantScope 对外部人员账号 403 PURCHASE_INTERNAL_ACCOUNT_REQUIRED。
+        - 库存 listInventoryRiskAlerts、listInventoryStockBatches、listInventoryTraceCodes、getInventoryTraceCode、listInventoryCostLedger：取 AuthorizationService.currentMerchantScope，403 MERCHANT_SCOPE_REQUIRED。
+        - 库存 listStockMovements、listBarConsumptionStats、getInventoryCostSummary：取 currentMerchantReadScope，同样 403。
+        - 库存资料 listInventoryItems、listStockBalances、listInventorySuppliers：对外审本就 403。
+        - listMerchantBills：MerchantBillingService.listBills 取 currentMerchantScope。
+        - listMerchantServiceWorkOrders：MerchantServiceService.listWorkOrders 转 staffReach，先 requirePlatformScope，403 PLATFORM_SCOPE_REQUIRED。
+        - getMerchantPortalFeeStatement、getMerchantPortalUnreadBills：商户专区，只对商户账号。
+        - listContractKeyDates、listComplianceReminders、listComplianceExpiryItems：ComplianceService 取 currentMerchantScope。
+        - listWecomRiskHits：ComplianceController 先 requirePlatformComplianceScope，403 PLATFORM_COMPLIANCE_SCOPE_REQUIRED。
+      - 外审进得去、但没有发生日期、照常显示的 6 个：listQuarantineWarehouses、listSupplyEntities、listMerchantServiceWorkOrderCloseMethods、listComplianceItemTypeConfigs、listFloorPlans、listFloorPlanShapes。
+    - 依据：第十八批裁决 77「十二个业务域上百个读取入口逐个加，分几轮做完」；PGM:682（同上）。
+    - 测试：同上 11 个用例。后端全量 --fresh 0 失败 0 错误（在 2927434e 基线上实跑）。
+- 契约（OpenAPI yaml 与 json 同改，本段新增 0 个操作）：
+  - 372-S6-R1 库存隔离：
+    - listInventoryQuarantine 描述补：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内转入隔离的实物，发生时间取转入隔离时刻 received_at；warehouse_id 与时段同时生效，仓库选项 listQuarantineWarehouses 照常列出。
+    - listQuarantineDispositions 描述补：只列时段内提出的处置方案，发生时间取提出时刻 requested_at，按处置记录自身时刻判，不另判所属隔离实物。
+    - 两个操作都不加失败码。
+    - 依据：第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」；PGM:682「外部审计/监管只能查看划定的范围与时间段」。
+    - 代码：InventoryQuarantineService.list、dispositions。
+  - 372-S6-R2 跨主体调拨与借调：
+    - listTransferOrders 描述补：只列时段内建立的调拨与借调单，发生时间取建单时刻 created_at，items 与 total 同一条件。
+    - getTransferOrder 描述补：建单时刻 created_at 不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在所属项目与当事商户判定之后判；x-failure-codes 加 OUT_OF_AUDIT_DATA_WINDOW。
+    - getTransferOrderFulfillment 描述补：所属调拨单建单时刻不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW，在所属项目与当事方判定之后判；签收结果、归还登记与差异处理随该单列出。x-failure-codes 加 OUT_OF_AUDIT_DATA_WINDOW；失败留痕仍为 inventory.transfer_fulfillment_view_failed，记该码。
+    - 依据同上。
+    - 代码：JdbcInventoryRepository.listTransferOrders、InventoryService.getTransferOrder、InventoryTransferFlowService.fulfillment。
+  - 372-S6-R3 平面图导入：
+    - listFloorPlanImports 描述补：只列时段内建立的导入任务，发生时间取建立时刻 created_at，items 与 total 同一条件；平面图与形状照常显示。
+    - getFloorPlanImportDetails 描述补：导入任务建立时刻不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW，在平面图项目与商户判定、任务归属核对之后判；候选与错误明细随该任务列出。原来没有 x-failure-codes，新增一项 OUT_OF_AUDIT_DATA_WINDOW。
+    - 依据同上。
+    - 代码：JdbcFloorPlanRepository.findImportTasksByFloorPlanId、FloorPlanService.getImportDetails。
+  - 372-S6-R5 库存盘点单（d-aud-b 段6 清单漏列、外审已可达、按第十八批裁决 77 一并承载）：
+    - listInventoryStocktakes 描述补：只列盘点营业日 business_date 在时段内的盘点单，items 与 total 同一条件。
+    - getInventoryStocktake 描述补：盘点营业日不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW，在库房商户与综合体判定之后判；差异明细随该盘点单列出。原来没有 x-failure-codes，新增一项 OUT_OF_AUDIT_DATA_WINDOW；失败留痕仍为 inventory.stocktake.detail_view_failed，记该码。
+    - 依据同上。
+    - 代码：JdbcInventoryRepository.listStocktakes、InventoryService.getStocktake。
+  - 372-S6-R4 契约总则：x-contract-rules.auditDataWindowRule 的已承载清单在 18CP 的「游乐设备分级申请与历史」之后补「库存隔离实物与处置记录、跨主体调拨与借调单（含详情与签收差异处理）、库存盘点单（含差异明细）、平面图导入任务（含候选明细）」。
+  本段增量：改 9 个既有操作描述；getTransferOrder、getTransferOrderFulfillment 各加 1 个失败码；getInventoryStocktake、getFloorPlanImportDetails 各新增失败码 OUT_OF_AUDIT_DATA_WINDOW；改 1 条契约规则。新增 0 个操作、0 个 schema、0 个权限码。
+- 18CQ 汇合段：
+  - 本段新增操作 0 个，迁移 0 个（预留 V812～V815 不用）。
+  - tests/e2e 不改：各段没改页面与接口返回形状。mock-api.ts 里调拨单清单与详情的假响应、full-admin-remaining.spec.ts 的库存盘点页断言照旧适用，视觉基线也不重拍。
+  - 契约改动为 9 个既有操作的描述：listInventoryQuarantine、listQuarantineDispositions、listTransferOrders、getTransferOrder、getTransferOrderFulfillment、listInventoryStocktakes、getInventoryStocktake、listFloorPlanImports、getFloorPlanImportDetails。
+  - 其中 getTransferOrder、getTransferOrderFulfillment、getFloorPlanImportDetails、getInventoryStocktake 四个补 OUT_OF_AUDIT_DATA_WINDOW 失败码；x-contract-rules.auditDataWindowRule 已承载清单补一句。
+  - 门禁结论：后端全量（删 target 后 --fresh）7441 测，0 失败 0 错误（在 2927434e 基线上实跑）；之后总流程由控制席停掉，前端全量、客人三个工作区、安卓、chromium 五份后台 spec、verify:p0-contract、yaml 与 json 深比较、git diff --check 由本段收尾全量验证一并补齐。
+- 372-S6-R4（文档组，第十八批 CQ 段第 372 条第 6 段）
+  - 改法与落地位置：
+    - 平台治理层 PRD（platform-governance-prd）§4「角色与使用场景」审计人员条的实现现状句：在 18CP 游乐那句「……权益会话对外审账号本就 403，不另承载；」之后补一句，并因本段是第 372 条六段里最后合入的一段，把原来的「其余业务域分段承载中（待开发清单第 372 条）」改为「第 372 条按第十八批裁决 77 分 6 段已全部承载」；补的一句写明库存、商户账单与服务、合规、平面图已逐入口核过（372-S6-R1～R3、R5）：
+      - 按时段筛的清单：库存隔离实物按转入隔离时刻；隔离处置记录按提出时刻，不另判所属实物；跨主体调拨与借调单清单按建单时刻；库存盘点单清单按盘点营业日；平面图导入任务按建立时刻。
+      - 时段外 403 的明细：调拨与借调单详情、签收与差异处理按建单时刻判；盘点单详情按盘点营业日判；导入候选明细按任务建立时刻判。
+      - 照常显示：隔离仓库选项、供货主体、工单关闭方式、证照类型配置、平面图与形状。
+      - 对外审账号本就 403、不另承载：库存流水、批次、溯源码、风险预警、成本台账与汇总、吧台消耗统计、采购、商户账单、商户服务工单、合规关键日期与提醒、证照台账、企微风险命中。
+    - 同一 PRD 变更日志加一行，放在 18CP 那行之上。
+    - 多租户数据隔离规格（data-isolation-and-tenant-scope-security-spec）§10 审计人员行「落地承接」：在「……、游乐」之后补「、库存隔离、跨主体调拨与盘点、平面图导入」，再接原有的「已按时段过滤」，并去掉原有的「、其余业务域分段承载中」（第 372 条六段已全部承载）。
+  - 对应代码：InventoryQuarantineService.list、dispositions；JdbcInventoryRepository.listTransferOrders、listStocktakes；InventoryService.getTransferOrder、getStocktake；InventoryTransferFlowService.fulfillment；JdbcFloorPlanRepository.findImportTasksByFloorPlanId；FloorPlanService.getImportDetails。用的都是 AuditDataWindow 已有的 andInstant、andDate、requireCovers。
+  - 对应契约：listInventoryQuarantine、listQuarantineDispositions、listTransferOrders、getTransferOrder、getTransferOrderFulfillment、listInventoryStocktakes、getInventoryStocktake、listFloorPlanImports、getFloorPlanImportDetails，以及 x-contract-rules 的 auditDataWindowRule。
+  - 依据：PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」。
+  - 本组增量：新增 0 个操作、0 个迁移；两份文档各升一次版。
+  - 没改的：供应链与平面图的领域文档没有外审或时段的现状句或「未实现」句，照段 1～3 先例不改。
+  - 测试：本组无新测试；verify-full-admin-page-matrix、generate-data-isolation-spec --check、git diff --check 通过。
+- 18CQ 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 7c96e6c7；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.21、决策台账 V1.50，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

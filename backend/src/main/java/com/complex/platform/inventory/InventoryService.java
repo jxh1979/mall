@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -2555,6 +2555,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         String id = requireText(stocktakeId, "stocktake_id");
         try {
             StocktakeRecord stocktake = loadStocktakeScoped(id, "inventory.stocktake.view");
+            com.complex.platform.access.AuditDataWindow.requireCovers(stocktake.businessDate()); // 372-S6-R5：过完库房商户与综合体闸再按盘点营业日判。
             List<InventoryVarianceRecord> variances = repository.listInventoryVariancesByStocktake(id);
             auditEventService.recordSuccess(
                     "inventory.stocktake.detail_viewed", "inventory.stocktake.view", "stocktake",
@@ -3754,6 +3755,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     ? ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只能查看本商户为出让方或接收方的调拨单")
                     : ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
         }
+        com.complex.platform.access.AuditDataWindow.requireCovers(o.createdAt()); // 372-S6-R2：过完所属项目与当事商户闸再按建单时刻判。
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
                 o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), o.projectId(), repository.listTransferLinesByOrder(o.id()));
