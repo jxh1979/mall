@@ -23,8 +23,8 @@ import static com.complex.platform.common.Strings.requireText;
 /**
  * R5 T6 结构化库房服务。
  *
- * <p>职责：库房 CRUD（建/列），六类 {@code warehouse_type} CHECK 卡控；按 {@code currentMerchantScope}
- * 隔离。库存挂 {@code warehouse_id} 能力由 {@link InventoryService} 出入库/余额承载，本服务负责库房主数据。
+ * <p>职责：库房 CRUD（建/列），六类 {@code warehouse_type} CHECK 卡控；商户账号按本商户隔离，不挂商户的账号按库房管理码
+ * 可触及的项目（第十八批 BZ 段第 391 条）。库存挂 {@code warehouse_id} 能力由 {@link InventoryService} 出入库/余额承载，本服务负责库房主数据。
  */
 @Service
 public class WarehouseService {
@@ -60,9 +60,16 @@ public class WarehouseService {
                 "inventory.warehouse.manage",
                 "warehouse",
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantReadScope();
-                    return scope.map(repository::listWarehousesByMerchant)
-                                .orElseGet(repository::listWarehouses);
+                    // 第十八批 BZ 段第 391 条（控制席判定：管库房的人看得到自己管的库房，BSM:1162「管理库房和库位……」）：商户账号只看本商户；
+                    // 不挂商户的账号按 inventory.warehouse.manage 可触及的项目列（平台管理员、最高权限为全部）。余额、流水、物料等读仍照控制席 82b-R6。
+                    Optional<String> merchant = authorizationService.currentMerchantIdQuietly();
+                    if (merchant.isPresent()) {
+                        return repository.listWarehousesByMerchant(merchant.get());
+                    }
+                    AuthorizationService.ProjectReach reach =
+                            authorizationService.projectReach(authorizationService.currentActor(), "inventory.warehouse.manage");
+                    // ponytail: 库房是主数据、量小，全表取出再按可触及项目筛；多到成负担时改成按项目集合查询
+                    return repository.listWarehouses().stream().filter(warehouse -> reach.covers(warehouse.projectId())).toList();
                 }
         );
     }
@@ -70,6 +77,7 @@ public class WarehouseService {
     @GuardedAction(capability = "inventory.warehouse.manage")
     @Transactional
     public WarehouseRecord createWarehouse(WarehouseCreateRequest request) {
+        Optional<String> merchant = authorizationService.currentMerchantIdQuietly();
         return executeWrite(
                 "createWarehouse",
                 request == null ? null : request.idempotencyKey(),
@@ -80,13 +88,22 @@ public class WarehouseService {
                 "inventory.warehouse.manage",
                 "warehouse",
                 () -> {
+                    // 第十八批 BZ 段第 391 条 391-R1（BSM:1162；PGM:659「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录……」；第十八批裁决 71）：
+                    // 不挂商户的账号按库房管理码可触及的项目建（平台管理员、最高权限为全部项目），不可触及 403 CROSS_PROJECT_FORBIDDEN；
+                    // 商户账号（含恰好派驻一家酒吧的）不加闸。闸在幂等之前，同号重放也先过它。
+                    if (request != null && merchant.isEmpty()) {
+                        authorizationService.requireReachableProject(request.projectId(), "inventory.warehouse.manage",
+                                AuthorizationService.PROJECT_OUT_OF_REACH);
+                    }
+                },
+                () -> {
                     WarehouseCreateRequest actual = requireRequest(request);
                     String type = normalizeAllowed(actual.warehouseType(), WAREHOUSE_TYPES, "warehouse_type");
                     String status = normalizeAllowedOrDefault(actual.status(), WAREHOUSE_STATUSES, "active", "status");
                     String projectId = requireText(actual.projectId(), "project_id");
                     String name = requireText(actual.name(), "name");
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    String merchantId = scope.orElseGet(() -> trimToNull(actual.merchantId()));
+                    // 商户账号强制本商户；不挂商户的取请求里的归属，为空即平台库房（同平台管理员原做法）
+                    String merchantId = merchant.orElseGet(() -> trimToNull(actual.merchantId()));
                     Instant now = Instant.now();
                     return repository.saveWarehouse(new WarehouseRecord(
                             "warehouse_" + slug(actual.idempotencyKey()),
@@ -193,7 +210,25 @@ public class WarehouseService {
             String businessType,
             Supplier<T> action
     ) {
+        return executeWrite(operationId, idempotencyKey, request, responseType, successEvent, failureEvent, permissionCode,
+                businessType, () -> { }, action);
+    }
+
+    /** 第十八批 BZ 段 391-R1（范围闸在幂等之前，同 InventoryService 写法）：gate 在幂等之前跑，同号重放也先过它；失败照常留痕。 */
+    private <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Runnable gate,
+            Supplier<T> action
+    ) {
         try {
+            gate.run();
             return idempotencyService.execute(
                     operationId,
                     idempotencyKey,

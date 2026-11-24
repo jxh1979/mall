@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.37
+文档版本：V1.38
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12568,3 +12568,46 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   本段增量：新增 0 个操作，无迁移。
 - 18CE 合并前变基（2026-11-24）：本段自 7a19a646 变基到 origin/main e936ab4a；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.08、决策台账 V1.37，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CE 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 891e085c 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7331 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 11:15 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BZ 落地位置补记（2026-11-20）：第十八批 BZ 段（batch98）按 18BZ 只读设计实现待开发清单第 391 条（平台库房写入口组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BZ 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BZ 段，batch98）实现待开发清单第 391 条（18BZ 只读设计 b98-audit/d6-bz.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 391-R1、391-R2（建库房对不挂商户的平台库管按可触及项目放开，最高权限可建）。控制席补定：建库房放开后，持 inventory.warehouse.manage 的账号在其可触及项目内能看到库房列表并补库位（按 BSM:1162「管理库房和库位，包括总库……」，管库房的人看得到自己管的库房；只放开库房列表这一项，余额、流水、成本汇总与物料列表仍照控制席 82b-R6 不放开），回归按 18BK 设计 384-R4 写过的口径（库房列表按 inventory.warehouse.manage 可触及项目过滤）。设计旁见（登记库存移动填了入库位置也不加库存；第 351 条现状一句写错）已由控制席登记为待核实新条目（第 431 条），本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2bd98895 开工（第六轮 13 段并行），变基到 6068f50e 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BZ 落地位置补记·第 391 条 391-R1、391-R2（不挂商户的账号按库房管理码可触及的项目新建库房；控制席补定库房列表按同一权限码可触及的项目列出）：
+  391-R1　不挂商户的账号（含最高权限）按 inventory.warehouse.manage 可触及的项目新建库房。
+  - 改法：WarehouseService.createWarehouse 先取 AuthorizationService.currentMerchantIdQuietly。
+    - 商户账号（含恰好派驻一家酒吧的）照旧强制落本商户，不加闸。
+    - 不挂商户的账号经 WarehouseService 新增的带 gate 的 executeWrite 重载（同 InventoryService 写法，范围闸在幂等之前，同一幂等键重放也先过闸，失败照常记 inventory.warehouse.create_failed），调 AuthorizationService.requireReachableProject（权限码 inventory.warehouse.manage，提示 AuthorizationService.PROJECT_OUT_OF_REACH），所选项目不可触及 403 CROSS_PROJECT_FORBIDDEN。平台管理员与最高权限按全部项目。归属取请求 merchant_id，为空即平台库房（同平台管理员原做法）。
+    - 控制席补定（管库房的人看得到自己管的库房）：WarehouseService.listWarehouses 有商户号的照旧只列本商户；不挂商户的按 AuthorizationService.projectReach（inventory.warehouse.manage）可触及的项目列出，平台管理员、最高权限看全部。可在其下补库位（WarehouseService.createLocation 本来不看商户范围，未改）。余额、流水、成本汇总、物料列表仍照控制席 82b-R6 不放开。
+  - 落地位置：WarehouseService.createWarehouse、listWarehouses、executeWrite（新增带 gate 的重载）。operationId createWarehouse、listWarehouses。
+  - 依据：BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录、把员工改挂过去。」；第十八批裁决 71（操作员追加原话「既然是最高权限，不应该什么都能看到吗？」，18BC 363-R1 落地：项目闸对最高权限按全部项目）；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；控制席 2026-11-20 判定（建库房放开后，持 inventory.warehouse.manage 的账号在其可触及项目内能看到库房列表并补库位，只放开库房列表这一项）。
+  - 测试：WarehouseCreateJdbcIntegrationTests 新增 4 条。
+    - 修复前红（建库房 403 MERCHANT_SCOPE_REQUIRED）：unmerchantedStorekeeperCreatesListsAndLocatesWarehousesOnlyInReachableProjects、crossProjectHolderCreatesInTickedProjectAndReplayIsGatedBeforeIdempotency、masterCreatesPlatformWarehouseInAnyProjectAndSeesIt。
+    - 守护、修复前后都绿：merchantAccountStillCreatesForItsOwnMerchant。
+    - SupplyChainT6ServiceTests 的替身改按 currentMerchantIdQuietly 与 projectReach 取值。
+  391-R2　契约与文档同步（由契约代理与文档组统一改）：
+  - createWarehouse 补范围口径说明和 403 响应，merchant_id 说明补不挂商户账号取值口径；listWarehouses 说明补不挂商户账号按可触及项目列出。
+  - PRD §6 库房管理行、覆盖表 BSM-0205 行补现状。
+  - 本段新增 0 个操作，无迁移，无新权限码、错误码、字段键，不改页面矩阵与前端。
+  不做：
+  - 建物料、登记库存移动：按钮在库存台账页报错块内，物料、余额、流水读对不挂商户员工 403（82b-R6）。
+  - 手工入库、库存调整、调拨、按类型移动：各端没有调用方，入库、调拨、报损、报溢另经采购验收、要货供货、隔离实物处置、盘点办。
+  - setPourDevice 与修改安全库存等同页其他写入口：不在第 391 条范围。
+  - 设计旁见已由控制席登记为待核实新条目：登记库存移动填了入库位置也不加库存，以及第 351 条现状一句写错（第 431 条）；空台账建不了第一个商品规格（第 451 条）；日常报损没有直接入口（第 452 条）。
+- 391-R2（契约）：createWarehouse 加 description，写明范围口径，依据 BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」、PGM:659「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录、把员工改挂过去。」与第十八批裁决 71。口径如下：商户账号（含恰好派驻一家酒吧的）落本商户，请求 merchant_id 不生效；不挂商户的账号按 inventory.warehouse.manage 可触及的项目建库房，可跨项目角色按所勾项目；归属取请求 merchant_id，为空即平台库房；平台管理员与最高权限按全部项目；所选项目不可触及 403 CROSS_PROJECT_FORBIDDEN，没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED；范围闸在幂等之前。其余改动：responses 补 403（#/components/responses/Error）；请求体 merchant_id 的说明改为商户账号强制本商户、不挂商户的取此值、为空即平台库房。listWarehouses 的 description 追加控制席判定（BSM:1162）：商户账号只列本商户；不挂商户的账号按 inventory.warehouse.manage 可触及的项目列；平台管理员与最高权限看全部；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。对应实现：WarehouseService.createWarehouse（gate 调 AuthorizationService.requireReachableProject，经私有 executeWrite 带 gate 的重载）、WarehouseService.listWarehouses（AuthorizationService.projectReach(...).covers）。测试名见 391-R1，在 WarehouseCreateJdbcIntegrationTests。本段新增 0 个操作、0 个 schema，无迁移。
+- 18BZ 汇合段：tests/e2e 不用改。本段只改后端 WarehouseService.createWarehouse、WarehouseService.listWarehouses 和契约 createWarehouse、listWarehouses 的说明与 403 响应，前端页面、请求形状和 e2e 的 mock 都没变，所以没重拍视觉基线。门禁结论：后端全量 --fresh（本段无迁移）0 红；根 typecheck 与 apps/web vitest 全绿；客人三个工作区单测全绿；安卓员工端 gradle test 与 android-app 编译通过；chromium 五份后台 spec 全过。四份生成物重生成后不变，verify:p0-contract 全绿。yaml 与 json 深比较一致，本段新增操作 0 个，只改 createWarehouse、listWarehouses 两个既有操作的说明与结构，没有本段迁移号。
+- 391-R2（文档组）：
+  - 改法与落地位置①：docs/supply-chain-inventory-product-prd-v0.1.md §6「库房管理」行补现状句。
+    - 建库房（operationId createWarehouse，WarehouseService.createWarehouse）：商户账号（含恰好派驻一家酒吧的）照旧落本商户，请求里的归属不生效；不挂商户的账号按 inventory.warehouse.manage 可触及的项目建库房（平台管理员与最高权限为全部项目，可跨项目角色按所勾项目），归属取所选、为空即平台库房；项目不可触及 403 CROSS_PROJECT_FORBIDDEN，没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED，范围闸（AuthorizationService.requireReachableProject）在幂等之前。
+    - 库房列表（operationId listWarehouses，WarehouseService.listWarehouses）：商户账号只列本商户的库房；不挂商户的账号按同一权限码可触及的项目列出（AuthorizationService.projectReach），可在列出的库房下补库位。
+    - 这两项不再走 currentMerchantScope／currentMerchantReadScope。库存余额、流水、出库成本汇总与物料列表照控制席 82b-R6 不放开。
+    - 修订表加一行，版本 +0.01。
+  - 改法与落地位置②：docs/platform-governance-prd-v0.1.md §7.8.1 的最高权限实现现状句（363-R1）补例外：建库房与库房列表不在「写入口不落没有商户归属的单据／库房读取按 currentMerchantReadScope」之列，最高权限可在全部项目建库房（归属为空即平台库房）、看全部库房。修订表加一行，版本 +0.01。
+  - 依据：
+    - BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」
+    - PGM:659「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录、把员工改挂过去。」
+    - 第十八批裁决 71。
+    - 18BZ 控制席判定：库房列表按 inventory.warehouse.manage 可触及项目过滤，余额、流水、成本汇总与物料列表仍照控制席 82b-R6。
+  - 校验：node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。本组没有新增测试。
+  - 本段增量：新增 0 个操作、0 个 schema，无迁移。
+- 18BZ 合并前变基（2026-11-24）：本段自 6068f50e 变基到 origin/main 85ae6705；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.09、决策台账 V1.38，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BZ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 33a533b2 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7335 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 11:43 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

@@ -13,7 +13,7 @@
 
 ## 2. 结论
 
-截至 `2026-11-24T11:14:07.881Z`，当前代码实现、接口契约、UI 自动化、真实后端 UI 和 Semgrep 扫描的证据状态见第 3、4 节；完整生产闭环仍未达成。阻断原因不是业务代码继续扩写，而是外部生产实施证据尚未提交：生产证据提交看板共有 **15** 个预期提交项，其中 **13** 个为 P0，当前 **15** 个仍为 `awaiting_submission`，有效提交为 **0**。
+截至 `2026-11-24T11:42:15.670Z`，当前代码实现、接口契约、UI 自动化、真实后端 UI 和 Semgrep 扫描的证据状态见第 3、4 节；完整生产闭环仍未达成。阻断原因不是业务代码继续扩写，而是外部生产实施证据尚未提交：生产证据提交看板共有 **15** 个预期提交项，其中 **13** 个为 P0，当前 **15** 个仍为 `awaiting_submission`，有效提交为 **0**。
 
 本文用于给总控、实施负责人和各责任组看“还差什么才能把生产闭环真正关上”。本文不关闭任何阻断项；关闭必须通过对应 manifest、来源台账、findings register、NAS 当前状态和交付闸口复核。
 
@@ -38,7 +38,7 @@
 | --- | --- | --- |
 | 运行态支持联调/业务验收 | 否 | docs/runtime-acceptance-evidence-latest.json |
 | 可以宣称生产上线就绪 | 否 | docs/closed-loop-current-state-snapshot-latest.json |
-| 后端测试 | 7331 | backend/target/surefire-reports |
+| 后端测试 | 7335 | backend/target/surefire-reports |
 | Web 单元测试 | 2087 | docs/runtime-acceptance-evidence-latest.json |
 | Playwright UI | 47 | playwright-report/index.html |
 | 真实后端 UI | 3（报告缺失，未跑） | playwright-report-real-backend/index.html |

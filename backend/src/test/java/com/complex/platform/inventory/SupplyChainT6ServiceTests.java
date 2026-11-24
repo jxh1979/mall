@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,6 +57,9 @@ class SupplyChainT6ServiceTests {
         // 第十八批 BC 段 362-R1：读取改取 currentMerchantReadScope（非最高权限与 currentMerchantScope 同值），替身按真实实现委托
         when(authorizationService.currentMerchantReadScope()).thenAnswer(call -> authorizationService.currentMerchantScope());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
+        // 第十八批 BZ 段第 391 条：库房建与列改取 currentMerchantIdQuietly（替身默认空）；不挂商户的按库房管理码可触及项目，平台管理员为全部
+        when(authorizationService.projectReach(ADMIN_ACTOR, "inventory.warehouse.manage"))
+                .thenReturn(new AuthorizationService.ProjectReach(true, true, null, true, null));
         IdempotencyService idem =
                 new IdempotencyService(new InMemoryIdem(), new ObjectMapper());
         auditRepo = new InMemoryAudit();
@@ -95,12 +98,12 @@ class SupplyChainT6ServiceTests {
 
     @Test
     void warehouseMerchantScopeIsolated() {
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_a"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
         warehouseService.createWarehouse(new WarehouseCreateRequest(
                 "wk-iso-a", "proj_1", null, "main", "A仓", null));
 
-        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
         assertThat(warehouseService.listWarehouses().items()).isEmpty();
     }
@@ -214,6 +217,7 @@ class SupplyChainT6ServiceTests {
     @Test
     void listFailuresRecordOpenApiDeclaredFailureEvents() {
         when(authorizationService.currentMerchantScope()).thenThrow(ApiException.forbidden("X", "x"));
+        when(authorizationService.projectReach(ADMIN_ACTOR, "inventory.warehouse.manage")).thenThrow(ApiException.forbidden("X", "x"));
         assertThatThrownBy(() -> warehouseService.listWarehouses()).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> qualificationService.listQualifications(null)).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> qualificationService.listSettlementMethods(null)).isInstanceOf(ApiException.class);

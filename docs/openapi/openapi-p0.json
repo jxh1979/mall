@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.08",
+    "version": "V1.09",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -23796,6 +23796,7 @@
         ],
         "operationId": "createWarehouse",
         "summary": "创建结构化库房(六类)",
+        "description": "第十八批 BZ 段第 391 条 391-R1：商户账号（含恰好派驻一家酒吧的）落本商户，请求 merchant_id 不生效；不挂商户的账号按 inventory.warehouse.manage 可触及的项目建库房（可跨项目角色按所勾项目，PGM:659），归属取请求 merchant_id、为空即平台库房；平台管理员与最高权限（第十八批裁决 71）按全部项目；所选项目不可触及 403 CROSS_PROJECT_FORBIDDEN，没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED（范围闸在幂等之前，同一幂等键重放也先过闸）。",
         "x-permission": "inventory.warehouse.manage",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -23832,7 +23833,7 @@
                   },
                   "merchant_id": {
                     "type": "string",
-                    "description": "商户 id；商户上下文强制本商户",
+                    "description": "商户 id；商户账号强制本商户；不挂商户的账号取此值，为空即平台库房",
                     "maxLength": 64
                   },
                   "warehouse_type": {
@@ -23872,6 +23873,9 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "500": {
             "$ref": "#/components/responses/Error"
           }
@@ -23884,7 +23888,7 @@
         ],
         "operationId": "listWarehouses",
         "summary": "查询库房列表",
-        "description": "第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
+        "description": "第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。第十八批 BZ 段第 391 条（控制席判定）：商户账号只列本商户的库房；不挂商户的账号按 inventory.warehouse.manage 可触及的项目列出（可跨项目角色按所勾项目）；平台管理员与最高权限看全部。没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。",
         "x-auth-context": "staff-token",
         "x-permission": "inventory.warehouse.manage",
         "x-data-scope": "warehouse",
