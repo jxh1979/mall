@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.03
+  version: V1.04
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -22530,14 +22530,18 @@ paths:
         - finance
       operationId: postInventoryVariance
       summary: 库存差异复核入账为 AR/AP
+      description: 第十八批 BK 段第 384 条 384-R2（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；BSM:1687「核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。」；PGM:959「保证所有对象带综合体项目归属」）：按差异所属盘点单过范围闸——最高权限与平台管理员不限；商户账号只过本商户的差异，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP）须以 finance.inventory_variance.post 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN；范围闸在幂等之前（同号重放也先过闸）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。生成的应收应付台账行带盘点库房所在综合体（project_id），商户取盘点单商户（平台库房为空）。
       x-auth-context: staff-token
       x-permission: finance.inventory_variance.post
-      x-data-scope: platform
+      x-data-scope: project-merchant
       x-terminal-allowed:
         - web
       x-idempotency-required: true
       x-audit-event-success: finance.inventory_variance.posted
       x-audit-event-failure: finance.inventory_variance.post_failed
+      x-failure-codes:
+        - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
       requestBody:
         required: true
         content:
@@ -22568,6 +22572,8 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -27715,6 +27721,7 @@ paths:
         - inventory
       operationId: listInventoryStocktakes
       summary: 查询库存盘点单列表
+      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：最高权限与平台管理员看全部盘点单；商户账号只看本商户库房的盘点单；不挂商户的账号（财务 BP、平台库管）看以 inventory.stocktake.view 可触及综合体内库房的盘点单（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。平台侧账号给酒吧库房建的盘点单带该酒吧商户，酒吧账号看得到。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。
       x-permission: inventory.stocktake.view
       x-data-scope: project
       x-terminal-allowed:
@@ -27736,6 +27743,7 @@ paths:
         - inventory
       operationId: createInventoryStocktake
       summary: 建库存盘点单
+      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）（另 PGM:948「库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。」）：盘点单商户取盘点库房的商户（平台库房为空），不取操作人商户；库房不存在 404 WAREHOUSE_NOT_FOUND；最高权限与平台管理员不限；商户账号只能给本商户库房建单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号须以 inventory.stocktake.create 可触及库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）；范围闸在幂等之前（同号重放也先过闸）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。第十八批 BK 段修复项 F01：建单后该库房出入库等库存变动冻结（409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED），直到结束盘点（closeInventoryStocktake）。
       x-permission: inventory.stocktake.create
       x-data-scope: project
       x-terminal-allowed:
@@ -27766,6 +27774,7 @@ paths:
         - inventory
       operationId: getInventoryStocktake
       summary: 查询库存盘点单详情（含差异明细）
+      description: 第十八批 BK 段第 384 条 384-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；第十八批裁决 71）：盘点单不存在 404 STOCKTAKE_NOT_FOUND；最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.view 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235；BSM:588）：差异行另带 has_variance_amount（差异金额不为 0 即 true，不含价格）；不持 inventory.cost.view 的读者 variance_amount_cent 为空（null），持的照常返回金额；估算、复核、纠账与过账仍按真实金额。
       x-permission: inventory.stocktake.view
       x-data-scope: project
       x-terminal-allowed:
@@ -27792,7 +27801,7 @@ paths:
         - inventory
       operationId: recordInventoryStocktakeVariance
       summary: 录入库存盘点差异行
-      description: 第十八批第 24 条 24-R4（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；18D 裁决补充第 14 条「只高价值的要」）：高价值物品（最近一次实际到货价大于或等于阈值、手工标记或阈值未配置）差异不为 0 时 photo_attachment_ids 与 video_attachment_ids 必填且须为真实上传的照片、视频（缺 400 HIGH_VALUE_EVIDENCE_REQUIRED，附件不存在或类型不符 400）；低价值不要求。差异须经他人复核才纠账。
+      description: 第十八批第 24 条 24-R4（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；18D 裁决补充第 14 条「只高价值的要」）：高价值物品（最近一次实际到货价大于或等于阈值、手工标记或阈值未配置）差异不为 0 时 photo_attachment_ids 与 video_attachment_ids 必填且须为真实上传的照片、视频（缺 400 HIGH_VALUE_EVIDENCE_REQUIRED，附件不存在或类型不符 400）；低价值不要求。差异须经他人复核才纠账。 第十八批 BK 段修复项 F02（BSM:1165「商品成本按「当前平均进货价」算」）：variance_amount_cent 与 unit_cost_cents 都不传时，按该物料当前平均进货价（成本台账有成本基础时）估算，即 variance_qty×平均进货价；没有成本基础记 0。盘点单已结束（closed）的不能再登记差异（409 STOCKTAKE_NOT_OPEN）。第十八批 BK 段第 384 条 384-R1：盘点单不存在 404 STOCKTAKE_NOT_FOUND；最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.variance_record 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）；范围闸在幂等之前（同号重放也先过闸）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235；BSM:588）：差异行另带 has_variance_amount（差异金额不为 0 即 true，不含价格）；不持 inventory.cost.view 的读者 variance_amount_cent 为空（null），持的照常返回金额；估算、复核、纠账与过账仍按真实金额。
       x-permission: inventory.stocktake.variance_record
       x-data-scope: project
       x-terminal-allowed:
@@ -27825,7 +27834,7 @@ paths:
         - inventory
       operationId: reviewInventoryStocktakeVariance
       summary: 复核库存盘点差异（approved/rejected）
-      description: 第十八批第 24 条：录入该差异的人不得复核（409 INVENTORY_VARIANCE_SELF_REVIEW，PGM:529）；带照片与视频的（高价值）差异批准前复核证据文件仍真实存在且类型对得上。
+      description: 第十八批第 24 条：录入该差异的人不得复核（409 INVENTORY_VARIANCE_SELF_REVIEW，PGM:529）；带照片与视频的（高价值）差异批准前复核证据文件仍真实存在且类型对得上。 第十八批 BK 段第 384 条 384-R1：盘点单不存在 404 STOCKTAKE_NOT_FOUND；最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.variance_review 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）；范围闸在幂等之前（同号重放也先过闸）；不再按复核人商户比差异商户（差异已核属于该盘点单，盘点单已过闸）。不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235；BSM:588）：差异行另带 has_variance_amount（差异金额不为 0 即 true，不含价格）；不持 inventory.cost.view 的读者 variance_amount_cent 为空（null），持的照常返回金额；估算、复核、纠账与过账仍按真实金额。
       x-permission: inventory.stocktake.variance_review
       x-data-scope: project
       x-terminal-allowed:
@@ -27841,6 +27850,39 @@ paths:
           description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/ReviewVarianceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/stocktakes/{id}/close:
+    post:
+      tags:
+        - inventory
+      operationId: closeInventoryStocktake
+      summary: 结束库存盘点
+      description: 第十八批 BK 段修复项 F01（BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」）：把盘点单置已结束（status=closed）。建盘点单后该库房出入库等库存变动被冻结（409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED），结束盘点后恢复。请求体只带 idempotency_key（必填，缺 400 VALIDATION_FAILED）。盘点单不存在 404 STOCKTAKE_NOT_FOUND；已结束的不能再结束（409 STOCKTAKE_NOT_OPEN）；还有待复核（pending）的差异时不许结束（409 STOCKTAKE_HAS_PENDING_VARIANCE）；同一 idempotency_key 换了内容 409 IDEMPOTENCY_CONFLICT。已结束的盘点单不能再登记差异（recordInventoryStocktakeVariance 409 STOCKTAKE_NOT_OPEN）；差异复核与过账不依赖盘点单状态。范围（第十八批 BK 段第 384 条 384-R1）：最高权限与平台管理员不限；商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（财务 BP、平台库管）须以 inventory.stocktake.create 可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）；范围闸在幂等之前（同号重放也先过闸）。响应 data 同建单返回：id、stocktake_no、warehouse_id、business_date、status（closed）、remark、created_at、updated_at。
+      x-permission: inventory.stocktake.create
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.stocktake.closed
+      x-audit-event-failure: inventory.stocktake.close_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/CloseStocktakeRequest"
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -50987,7 +51029,7 @@ paths:
         evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。
         dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源见下文第十八批 AV 段 316-R1。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。
         本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。
-        18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18Y：business_type=finance_reconciliation_difference（渠道对账单原件，ENUM:202「上传渠道提供的对账单原件」）照片、视频之外另收 pdf、xlsx、csv，这三种另要求客户端报的内容类型与扩展名一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；平台侧不带商户归属的员工也可上传。 第十八批 AL 段 253-R1（第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）」）：business_type=finance_locked_backfill（锁账补录原始凭证，上传时不带业务编号）同 finance_reconciliation_difference——收照片 jpg、jpeg、png、webp、heic，视频 mp4、mov、webm，另收 pdf、xlsx、csv（同样要求内容类型与扩展名一致），只能上传真实文件；不带商户归属的员工也可上传，merchant_id 记空。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。 第十八批 AV 段 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：business_type=manual_backfill 的人工补录凭证，不带商户编号的账号也可上传，merchant_id 记空；商户账号照旧记本商户。第十八批 AV 段 316-R1（BSM:806「原路退回结果」；BSM:1673「所有数据默认按项目隔离」）：business_type=finance_refund 时，经销退款（dealer_order_refund）以外的全部来源（ar_ap_payment、stored_value_account、ticket_payment_rejection、channel_ticket_rejection、bar_deposit_rejection、bar_scan_order_rejection）按退款所属项目与商户办理——须持 finance.refund.create 并可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；商户账号只限本商户的退款，否则 403 CROSS_MERCHANT_FORBIDDEN（通用卡储值本金退款不挂商户，商户账号一律 403）。
+        18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18Y：business_type=finance_reconciliation_difference（渠道对账单原件，ENUM:202「上传渠道提供的对账单原件」）照片、视频之外另收 pdf、xlsx、csv，这三种另要求客户端报的内容类型与扩展名一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；平台侧不带商户归属的员工也可上传。 第十八批 AL 段 253-R1（第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）」）：business_type=finance_locked_backfill（锁账补录原始凭证，上传时不带业务编号）同 finance_reconciliation_difference——收照片 jpg、jpeg、png、webp、heic，视频 mp4、mov、webm，另收 pdf、xlsx、csv（同样要求内容类型与扩展名一致），只能上传真实文件；不带商户归属的员工也可上传，merchant_id 记空。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。 第十八批 AV 段 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：business_type=manual_backfill 的人工补录凭证，不带商户编号的账号也可上传，merchant_id 记空；商户账号照旧记本商户。第十八批 AV 段 316-R1（BSM:806「原路退回结果」；BSM:1673「所有数据默认按项目隔离」）：business_type=finance_refund 时，经销退款（dealer_order_refund）以外的全部来源（ar_ap_payment、stored_value_account、ticket_payment_rejection、channel_ticket_rejection、bar_deposit_rejection、bar_scan_order_rejection）按退款所属项目与商户办理——须持 finance.refund.create 并可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；商户账号只限本商户的退款，否则 403 CROSS_MERCHANT_FORBIDDEN（通用卡储值本金退款不挂商户，商户账号一律 403）。 第十八批 BK 段第 384 条 384-R3（BSM:1183「高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。」）：business_type=inventory_variance 且带 business_id（盘点单编号）时，须同时持 inventory.stocktake.variance_record 与 evidence.attachment.create（缺码 403 PERMISSION_DENIED），并按两码过盘点单范围闸——商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号须以两码可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN；盘点单不存在 404 STOCKTAKE_NOT_FOUND；附件 merchant_id 记上传人商户（不挂商户的记空）。不带 business_id 的照旧按商户判。
       x-permission: evidence.attachment.create
       x-data-scope: merchant
       x-terminal-allowed:
@@ -51043,7 +51085,7 @@ paths:
       operationId: readEvidenceAttachmentFile
       summary: 回读证据文件
       description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。18Y：business_type=finance_reconciliation_difference 的渠道对账单原件（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的对账差异判——本人是其中一笔当前关闭复核单链上的审批人或被转发人，或持 finance.reconciliation.view 且可触及其所属批次，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AL 段 253-R1（BSM:1642「补录必须附原始记录凭证……并经审核」）：business_type=finance_locked_backfill 的锁账补录原始凭证（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的锁账补录判——本人是其中一笔复核单链上任一节点的审批人或被转发人，或以 finance.daily_close.manage 可触及该补录所属日结，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AV 段 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：business_type=manual_backfill 的人工补录凭证（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的补录单判——本人是其中一笔补录复核单链上任一节点的审批人或被转发人，或可查看该补录对象（按各补录对象的查看范围闸），即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AV 段 316-R1（BSM:806「原路退回结果」）：business_type=finance_refund 的退款凭证，经销退款（dealer_order_refund）以外的全部来源回读须持 finance.ar_ap.view；商户账号只按本商户判（否则 403 CROSS_MERCHANT_FORBIDDEN），不带商户编号的账号须可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-        dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）：按商户范围判的业务类型（上述单列口径与经销准入、经销多付款以外，如酒吧账单、存酒的证据）回读时，最高权限不按商户范围；上传、绑定照旧。
+        dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）：按商户范围判的业务类型（上述单列口径与经销准入、经销多付款以外，如酒吧账单、存酒的证据）回读时，最高权限不按商户范围；上传、绑定照旧。 第十八批 BK 段第 384 条 384-R3：business_type=inventory_variance 且附件带业务编号（盘点单编号）时，须同时持 inventory.stocktake.view 与 evidence.timeline.view（缺码 403 PERMISSION_DENIED），并按两码过盘点单范围闸——商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号须以两码可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN；盘点单不存在 404 STOCKTAKE_NOT_FOUND；不再比附件商户（平台侧账号上传的附件不挂商户，酒吧主管复核时也能看）。不带业务编号的照旧按商户判。
       x-permission: evidence.timeline.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -66386,6 +66428,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ReviewVarianceRequest"
+    CloseStocktakeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CloseStocktakeRequest"
     ConfigureOverCapacityPolicyRequest:
       required: true
       content:
@@ -75170,7 +75218,7 @@ components:
           maxLength: 128
     CreateStocktakeRequest:
       type: object
-      description: 请求载荷 `CreateStocktakeRequest`（V108 盘点单建单）；建盘点单 status=counting，merchant_id 强制取自认证上下文不由请求体传入。
+      description: 请求载荷 `CreateStocktakeRequest`（V108 盘点单建单）；建盘点单 status=counting，merchant_id 取盘点库房的商户（平台库房为空；第十八批 BK 段第 384 条 384-R1），不由请求体传入。
       additionalProperties: false
       required:
         - warehouse_id
@@ -75195,7 +75243,7 @@ components:
       type: object
       description: 请求载荷 `RecordVarianceRequest`（V108
         库存差异明细）；variance_qty=counted_qty−账面数（带符号；账面取系统库存值，请求不传），review_status=pending。variance_amount_cent 显式传入优先，否则按
-        variance_qty×unit_cost_cents 成本估算。
+        variance_qty×unit_cost_cents 成本估算。 第十八批 BK 段修复项 F02：variance_amount_cent 与 unit_cost_cents 都不传时，按该物料当前平均进货价（成本台账有成本基础时）估算，即 variance_qty×平均进货价；没有成本基础记 0。
       additionalProperties: false
       required:
         - item_id
@@ -75235,7 +75283,7 @@ components:
         unit_cost_cents:
           type: integer
           format: int64
-          description: 成本单价（分，非负）；未显式传 variance_amount_cent 时按 variance_qty×unit_cost_cents 估算。
+          description: 成本单价（分，非负，可选覆盖）；未显式传 variance_amount_cent 时按 variance_qty×unit_cost_cents 估算；不传时取该物料当前平均进货价（成本台账有成本基础时）。
           minimum: 0
         photo_attachment_ids:
           type: array
@@ -75269,6 +75317,17 @@ components:
           enum:
             - approved
             - rejected
+    CloseStocktakeRequest:
+      type: object
+      description: 请求载荷 `CloseStocktakeRequest`（第十八批 BK 段修复项 F01 结束盘点）；只带幂等键，盘点单编号在路径上。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键（必填）；重复提交必须返回同一处理结果，避免重复结束盘点。
+          maxLength: 128
     ConfigureOverCapacityPolicyRequest:
       type: object
       description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等

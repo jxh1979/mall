@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -87,6 +87,9 @@ public class EvidenceEventService {
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.finance.FinanceService> lockedBackfills;
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<ManualBackfillService> manualBackfills;
+    // 第十八批 BK 段第 384 条 384-R3：盘点差异证据按盘点单范围闸（不挂商户的财务 BP、平台库管也能传、能看）。
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.inventory.InventoryProjectScope> stocktakeScopes;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -644,6 +647,16 @@ public class EvidenceEventService {
         if ("manual_backfill".equals(type) && (!reading || (authorizationService.currentMerchantIdQuietly().isEmpty()
                 && manualBackfills.getObject().canViewEvidence(businessId)))) {
             return authorizationService.currentMerchantIdQuietly();
+        }
+        // 第十八批 BK 段第 384 条 384-R3（BSM:1183「高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。」；BSM:1687；
+        //   PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：盘点差异证据带盘点单编号时，先核盘点码与附件码，再按两码可触及
+        //   盘点库房所在综合体过盘点单范围闸（商户账号只限本商户的）；上传记上传人商户（不挂商户的记空），回读不再比附件商户
+        //   （平台侧账号传的附件不挂商户，酒吧主管复核时要能看）。不带盘点单编号的照旧走下方商户分支。
+        if ("inventory_variance".equals(type) && trimToNull(businessId) != null) {
+            String stocktakePermission = reading ? "inventory.stocktake.view" : "inventory.stocktake.variance_record";
+            authorizationService.requirePermissions(stocktakePermission, evidencePermission);
+            stocktakeScopes.getObject().requireStocktake(businessId, stocktakePermission, evidencePermission);
+            return reading ? Optional.empty() : authorizationService.currentMerchantIdQuietly();
         }
         if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {
             // 第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：回读附件与证据时间线时最高权限不按商户；上传、绑定等写入照旧。

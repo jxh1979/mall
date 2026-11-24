@@ -1,7 +1,8 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
 import { ApiError } from "../../shared/apiError";
@@ -13,6 +14,13 @@ import type { AdminPageProps } from "../types";
 //   GET/POST /api/v1/inventory/stocktakes、GET /api/v1/inventory/stocktakes/{id}、
 //   POST /api/v1/inventory/stocktakes/{id}/variances、POST /api/v1/inventory/stocktakes/{id}/variances/{vid}/review、
 //   POST /api/v1/finance/inventory-variances/post。
+// 第十八批 BK 段修复项 F01：建盘点单后该库房的入库等库存变动被冻结（接口报「仓库正在盘点中，盘点结束前库存变动已冻结」），
+// 盘点中的单加「结束盘点」（POST /api/v1/inventory/stocktakes/{id}/close，建单权限，高危确认）；还有待复核的差异时接口不许结束。
+// 第十八批 BK 段修复项 F02（BSM:1165「商品成本按「当前平均进货价」算」）：单位成本可不填，接口按该物料当前平均进货价估算差异金额；
+// F03：复核、过账请求只带接口会读的字段（复核结论；差异编号与往来单位），不设「复核意见」「过账说明」输入框；
+// F04：库存按整瓶记、复核纠账按整数，实盘数量只收不小于 0 的整数。
+// 复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」）：不持 inventory.cost.view 的读者接口隐去差异金额
+// （显示「—」），「过账」按接口给的 has_variance_amount（差异金额不为 0，不含价格）出现。
 // 账面数量由系统按该库房现有库存取，不由页面填。复核与过账首次提交可能被准入闸拦下送主管复核（ADMISSION_BLOCKED），
 // 主管批准后按原内容再提交才生效，所以被拦下时不清空已填内容。
 const CREATE = "inventory.stocktake.create";
@@ -24,7 +32,7 @@ const BASE = "/api/v1/inventory/stocktakes";
 type Stocktake = { id: string; stocktakeNo: string; warehouseId: string; businessDate?: string | null; status: string; remark?: string | null; createdAt?: string | null };
 type Variance = {
   id: string; itemId: string; batchNo?: string | null; bookQty?: number | null; countedQty?: number | null; varianceQty?: number | null;
-  varianceAmountCent?: number | null; reason: string; supplierId?: string | null; reviewStatus: string; reviewedBy?: string | null;
+  varianceAmountCent?: number | null; hasVarianceAmount?: boolean | null; reason: string; supplierId?: string | null; reviewStatus: string; reviewedBy?: string | null;
   reviewedAt?: string | null; postedArApItemId?: string | null; recordedBy?: string | null;
   photoAttachmentIds?: string[] | null; videoAttachmentIds?: string[] | null;
 };
@@ -36,6 +44,8 @@ const STATUS_LABELS: Record<string, string> = { counting: "盘点中", reviewing
 const REVIEW_LABELS: Record<string, string> = { pending: "待复核", approved: "已通过", rejected: "已驳回" };
 export const VARIANCE_REASON_LABELS: Record<string, string> = { damage: "报损", shortage: "盘亏", overage: "盘盈", supplier_fault: "供应商责任" };
 const BLOCKED_NOTE = "已提交主管审批：主管在「主管复核」页批准后，请保持所填内容不变，原样再点一次。";
+const CLOSE_IMPACT = "结束后该库房恢复入库、出库、调拨等库存变动；已关闭的盘点单不能再登记差异。";
+const isOpen = (status: string) => status === "counting" || status === "reviewing";
 
 const yuan = (cent: number | null | undefined) => (cent == null ? "—" : (cent / 100).toFixed(2));
 const qty = (value: number | null | undefined) => (value == null ? "—" : String(value));
@@ -63,8 +73,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
   const [varianceForm, setVarianceForm] = React.useState({ itemId: "", batchNo: "", countedQty: "", reason: "", supplierId: "", unitCostYuan: "" });
   const [evidence, setEvidence] = React.useState<EvidenceFile[]>([]);
   const [uploading, setUploading] = React.useState(false);
-  const [reviewReason, setReviewReason] = React.useState("");
-  const [postForm, setPostForm] = React.useState({ counterpartyId: "", operatorNote: "" });
+  const [postCounterpartyId, setPostCounterpartyId] = React.useState("");
 
   const selected = stocktakes.find((row) => row.id === selectedId) ?? null;
   const warehouseName = (id: string) => warehouses.find((row) => row.id === id)?.name ?? id;
@@ -141,6 +150,11 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
     }
   }
 
+  async function closeStocktake(row: Stocktake) {
+    const ok = await submit("盘点已结束", `${BASE}/${encodeURIComponent(row.id)}/close`, {}, { 盘点单号: row.stocktakeNo, 库房: warehouseName(row.warehouseId) });
+    if (ok) await loadList();
+  }
+
   /** 现场拍的照片、视频直接上传，取回真实附件编号。 */
   async function uploadEvidence(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -152,6 +166,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
         const form = new FormData();
         form.append("file", file);
         form.append("business_type", "inventory_variance");
+        form.append("business_id", selectedId); // 第 384 条 384-R3：带所选盘点单编号，后端按盘点单范围判
         form.append("attachment_role", file.type.startsWith("video") ? "video" : "photo");
         if (!api.postForm) throw new Error("当前客户端不支持文件上传。");
         const saved = await api.postForm<{ id: string; fileName?: string }>("/api/v1/evidence/attachments/upload", form);
@@ -171,6 +186,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
     const counted = Number(varianceForm.countedQty);
     if (!itemId) { setFormError("请选择盘点的物料。"); return; }
     if (varianceForm.countedQty.trim() === "" || !Number.isFinite(counted) || counted < 0) { setFormError("请填写实盘数量（不小于 0）。"); return; }
+    if (!Number.isInteger(counted)) { setFormError("实盘数量须为整数。"); return; }
     if (!varianceForm.reason) { setFormError("请选择差异原因。"); return; }
     const unitCost = varianceForm.unitCostYuan.trim() === "" ? undefined : Math.round(Number(varianceForm.unitCostYuan) * 100);
     if (unitCost !== undefined && (!Number.isFinite(unitCost) || unitCost < 0)) { setFormError("单位成本填写不正确。"); return; }
@@ -197,22 +213,19 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
     if (!selected) return;
     const ok = await submit(decision === "approved" ? "盘点差异已复核通过" : "盘点差异已驳回",
       `${BASE}/${encodeURIComponent(selected.id)}/variances/${encodeURIComponent(row.id)}/review`,
-      { decision, reason: reviewReason.trim() || undefined }, { 盘点单号: selected.stocktakeNo, 物料: itemName(row.itemId) });
-    if (ok) {
-      setReviewReason("");
-      await loadDetail(selected.id);
-    }
+      { decision }, { 盘点单号: selected.stocktakeNo, 物料: itemName(row.itemId) });
+    if (ok) await loadDetail(selected.id);
   }
 
   async function postVariance(row: Variance) {
     if (!selected) return;
-    const counterpartyId = postForm.counterpartyId.trim() || (row.reason === "supplier_fault" ? row.supplierId ?? "" : "");
+    const counterpartyId = postCounterpartyId.trim() || (row.reason === "supplier_fault" ? row.supplierId ?? "" : "");
     if (!counterpartyId) { setFormError("过账须填写往来单位编号（供应商责任的差异不填时取登记的责任供应商）。"); return; }
     const ok = await submit("盘点差异已过账", "/api/v1/finance/inventory-variances/post",
-      { inventoryVarianceId: row.id, counterpartyId, operatorNote: postForm.operatorNote.trim() || undefined },
+      { inventoryVarianceId: row.id, counterpartyId },
       { 盘点单号: selected.stocktakeNo, 物料: itemName(row.itemId), 往来单位: counterpartyId });
     if (ok) {
-      setPostForm({ counterpartyId: "", operatorNote: "" });
+      setPostCounterpartyId("");
       await loadDetail(selected.id);
     }
   }
@@ -228,7 +241,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
         </>
       );
     }
-    if (row.reviewStatus === "approved" && !row.postedArApItemId && (row.varianceAmountCent ?? 0) !== 0) {
+    if (row.reviewStatus === "approved" && !row.postedArApItemId && row.hasVarianceAmount) {
       return (
         <PermissionButton permissionsState={effectivePermissions} permissions={[POST]} disabled={busy}
           data-testid={`stocktake-variance-post-${row.id}`} onClick={() => void postVariance(row)}>过账</PermissionButton>
@@ -237,7 +250,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
     return row.postedArApItemId ? "已过账" : "—";
   }
 
-  const open = selected != null && (selected.status === "counting" || selected.status === "reviewing");
+  const open = selected != null && isOpen(selected.status);
 
   return (
     <section data-testid="inventory-stocktake-page">
@@ -281,7 +294,14 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
                   <td>{STATUS_LABELS[row.status] ?? row.status}</td>
                   <td>{row.remark ?? "—"}</td>
                   <td>{cnDate(row.createdAt ?? null)}</td>
-                  <td><button type="button" data-testid={`stocktake-select-${row.id}`} onClick={() => selectStocktake(row.id)}>查看差异</button></td>
+                  <td style={{ display: "flex", gap: 8 }}>
+                    <button type="button" data-testid={`stocktake-select-${row.id}`} onClick={() => selectStocktake(row.id)}>查看差异</button>
+                    {isOpen(row.status) ? (
+                      <HighRiskConfirm label="结束盘点" impact={CLOSE_IMPACT} irreversible={false} disabled={busy}
+                        permissionsState={effectivePermissions} permissions={[CREATE]}
+                        data-testid={`stocktake-close-${row.id}`} onConfirm={() => void closeStocktake(row)} />
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -308,7 +328,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
                 <input data-testid="stocktake-variance-batch" value={varianceForm.batchNo} onChange={(event) => setVarianceForm({ ...varianceForm, batchNo: event.target.value })} />
               </label>
               <label>实盘数量
-                <input data-testid="stocktake-variance-counted" inputMode="decimal" value={varianceForm.countedQty} onChange={(event) => setVarianceForm({ ...varianceForm, countedQty: event.target.value })} />
+                <input data-testid="stocktake-variance-counted" inputMode="numeric" value={varianceForm.countedQty} onChange={(event) => setVarianceForm({ ...varianceForm, countedQty: event.target.value })} />
               </label>
               <label>差异原因
                 <select data-testid="stocktake-variance-reason" value={varianceForm.reason} onChange={(event) => setVarianceForm({ ...varianceForm, reason: event.target.value })}>
@@ -321,7 +341,7 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
                   <input data-testid="stocktake-variance-supplier" value={varianceForm.supplierId} onChange={(event) => setVarianceForm({ ...varianceForm, supplierId: event.target.value })} />
                 </label>
               ) : null}
-              <label>单位成本（元，用来估算差异金额）
+              <label>单位成本（元，不填按当前平均进货价估算）
                 <input data-testid="stocktake-variance-unit-cost" inputMode="decimal" value={varianceForm.unitCostYuan} onChange={(event) => setVarianceForm({ ...varianceForm, unitCostYuan: event.target.value })} />
               </label>
               <label>照片、视频（高价值物品必传）
@@ -333,14 +353,8 @@ export function InventoryStocktakePage({ api, setActionResult, setGlobalError, e
           ) : <p data-testid="stocktake-closed-hint">该盘点单已关闭，不能再登记差异。</p>}
 
           <div className="admin-form-grid">
-            <label>复核意见（可选）
-              <input data-testid="stocktake-review-reason" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} />
-            </label>
             <label>过账往来单位编号
-              <input data-testid="stocktake-post-counterparty" value={postForm.counterpartyId} onChange={(event) => setPostForm({ ...postForm, counterpartyId: event.target.value })} />
-            </label>
-            <label>过账说明（可选）
-              <input data-testid="stocktake-post-note" value={postForm.operatorNote} onChange={(event) => setPostForm({ ...postForm, operatorNote: event.target.value })} />
+              <input data-testid="stocktake-post-counterparty" value={postCounterpartyId} onChange={(event) => setPostCounterpartyId(event.target.value)} />
             </label>
           </div>
 
