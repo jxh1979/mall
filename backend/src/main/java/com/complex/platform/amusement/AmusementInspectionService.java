@@ -436,8 +436,10 @@ final class AmusementInspectionService {
                 existing.abnormalFound(),
                 existing.abnormalNote()
         ));
-        // F-OPS-04：批准恢复营业即巡检 PASS 生效（前置已校验 overall=pass），刷新设备最近 PASS 巡检时间。
-        refreshDeviceLastPass(existing.projectId(), existing.deviceId(), existing.inspectedAt());
+        // F-OPS-04：批准恢复营业即巡检 PASS 生效（前置已校验 overall=pass），刷新设备最近 PASS 巡检时间。18CF 收尾复核修正（BSM:1271「停用的设备
+        // 完成合格巡检后才放行」）：合格时刻取复检时刻（没有复检取巡检时刻），与当日巡检闸「合格时刻有复检取复检时刻」同一口径。
+        refreshDeviceLastPass(existing.projectId(), existing.deviceId(),
+                existing.recheckedAt() != null ? existing.recheckedAt() : existing.inspectedAt());
         return saved;
     }
 

@@ -101,7 +101,9 @@ final class JdbcAmusementRowMapper {
                 instant(rs, "last_pass_inspection_at"),
                 rs.getString("merchant_id"),
                 instant(rs, "created_at"),
-                instant(rs, "updated_at")
+                instant(rs, "updated_at"),
+                rs.getString("safety_class"),
+                rs.getString("dependency")
         );
     }
 

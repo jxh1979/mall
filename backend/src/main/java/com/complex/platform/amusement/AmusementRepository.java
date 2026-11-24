@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.util.List;
@@ -114,7 +114,7 @@ public interface AmusementRepository {
 
     /**
      * P0 清单#6 查询项目「超容处置策略」（V104 amusement_over_capacity_policy）：
-     * 运营容量（软上限）与处置模式（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
+     * 运营容量（软上限）与处置方式（block_hard 记录异常事件，出厂默认 / warn_only 仅提示、不生成异常事件；两者都不改变硬上限阻断与自动停运）。
      * 未配置则返回禁用占位（仅硬阻断、无软上限告警），退化为既有行为（向后兼容）。
      */
     AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId);

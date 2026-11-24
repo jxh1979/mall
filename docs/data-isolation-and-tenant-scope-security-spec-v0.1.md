@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V764**，发现 **283** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V769**，发现 **285** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -67,6 +67,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `amusement_compensation_fulfillments` | `project_id` | direct | V505 | `V505__amusement_compensation_fulfillments.sql` |
 | `amusement_compensation_policies` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
 | `amusement_concurrent_reset_log` | `project_id` | direct | V448 | `V448__amusement_concurrent_count_auto_reset.sql` |
+| `amusement_device_class_changes` | `project_id` | direct | V769 | `V769__amusement_device_classes.sql` |
+| `amusement_device_continue_judgements` | `project_id` | direct | V769 | `V769__amusement_device_classes.sql` |
 | `amusement_device_statuses` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_devices` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
 | `amusement_domain_settlement_lines` | `project_id` | direct | V730 | `V730__amusement_domain_settlement.sql` |

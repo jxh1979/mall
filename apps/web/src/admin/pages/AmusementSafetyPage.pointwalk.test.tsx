@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -86,6 +86,16 @@ describe("AmusementSafetyPage 巡检点位走点", () => {
     const body = JSON.parse(String((createPosts()[0]![1] as RequestInit).body)) as Record<string, unknown>;
     expect(body.project_id).toBe("amuse-1");
     expect(body).not.toHaveProperty("items");
+  });
+
+  // 第十八批 CF 段第 404 条 404-R2（DEC-R6-09「补录记录与原始扫码记录并列展示、互不覆盖」；BSM:1642「补录记录与原始记录并列展示，标明“人工补录”」）：
+  // 主管复核通过的点位补录落成走点行（带补录单编号），走点进度里该行标「人工补录」，扫码记的行不标。
+  it("走点行带补录单编号的标「人工补录」，扫码记的不标", async () => {
+    walk = [FIRST, { ...SECOND, backfill_id: "mbf_1" }];
+    renderPage();
+    await openCreateFor("amuse-1");
+    await waitFor(() => expect(screen.getByTestId("amusement-inspection-walk-row-2").textContent).toContain("人工补录"));
+    expect(screen.getByTestId("amusement-inspection-walk-row-1").textContent).not.toContain("人工补录");
   });
 
   it("没配点位：不出走点进度，照旧填检查项、请求带检查项", async () => {

@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.20
+# 游乐设施运营系统开发设计文档 V0.21
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.20 ｜ 最后更新：2026-11-20 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.21 ｜ 最后更新：2026-11-24 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -334,6 +334,8 @@ stateDiagram-v2
 > 1. **硬安全容量禁 `warn_only` 旁路**：处置模式 `warn_only` 仅作用于**软上限（运营容量）**告警放行；**硬上限（`amusement_projects.capacity` 传入的项目安全容量）任何处置模式都阻断核销**（当前失败码仍为 `session_full`/`SESSION_CAPACITY_EXHAUSTED`，命名待收口），不存在“切到 warn_only 即可超过安全容量放行”的旁路。
 > 2. **over_capacity 事件 severity 恒 `high` 触发自动停运**：硬上限维超容落 `amusement.incident.over_capacity` 事件时 `severity` **恒为 `high`**，并据此自动把项目 `open → paused`（停运），不依赖人工处置。软上限告警放行落的 over_capacity 事件按告警口径，不强制停运。
 > 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转）。因达到单个项目硬安全容量而自动停运的项目，仅在该项目实时在玩人数回落到硬上限以下，且系统校验现有开放前安全巡检合格、无阻断项后，才自动恢复为 `open`；沿用现有合格巡检，不要求每次超容恢复都重新巡检，不新增主管确认前置。TK-16 已在项目人数变化的同一行锁下校验此恢复条件，仅豁免本次硬超容自动暂停本身，事故、人工暂停或巡检阻断仍不得恢复。
+>
+> **实现现状（第十八批 CF 段第 409 条，2026-11-24）**：处置方式为「仅提示」（`warn_only`）时，达到运营容量不再落软上限 `over_capacity` 事件，「记录异常事件」（`block_hard`）照旧；游乐入场核销结果带 `operating_capacity_reached`（两种处置方式都带，`AmusementOperatingCapacityNotice`），工作手机核销屏据此提示；后台「项目与场次」页可读改运营容量与处置方式（`GET/PUT /api/v1/amusement/projects/{projectId}/over-capacity-policy`）。
 
 > **离线核销下线口径（M07）**：HTML 明确游乐权益必须在线核验、不做离线核销。Android 端原有的本地权益摘要、待同步流水和恢复联网同步实现已于第十八批 O 段第 129 条下线，禁止新增离线核销、待同步或冲突流水。
 
@@ -385,6 +387,8 @@ stateDiagram-v2
 3. 关键设备不存在流程依赖、且其余关键设备均无故障时，只停该设备；存在流程依赖时，整个项目停止新增核销并停止运行。是否依赖按客人完成项目的实际必经流程和可替代性判断。
 4. 分类或依赖关系变更须经工程或安全审批。项目上线后把关键设备降为辅助设备，只能在项目停运后生效；普通管理员或运营人员不得直接降级。
 5. 停用设备完成合格巡检后才可放行；涉及项目恢复时仍须经过主管确认。
+
+> 实现现状（第十八批 CF 段第 405、406、407 条，2026-11-24）：开放判定（`evaluateOpenEligibility`）的巡检一段由 `AmusementInspectionDayGate` 承担——当日从上一个闭店时点（出厂 07:00，第十八批裁决 84）起算须有已提交、合格、无须或已获主管批准恢复的巡检，任一巡检未复检或待主管批准即报 `SAFETY_REOPEN_PENDING`；设备停用范围由 `AmusementDeviceStopScope` 按分级判（`CRITICAL_DEVICE_STOPPED`、`AUXILIARY_DEVICE_STOPPED`，分级未生效的设备超期照旧整项目报 `SAFETY_INSPECTION_EXPIRED`），替代原「指定设备周期校验」与「在役设备超期兜底」两段；分级申请与复核由 `AmusementDeviceClassService`（V769 `amusement_device_class_changes`），辅助设备继续运行判定由 `AmusementDeviceContinueJudgementService`（`amusement_device_continue_judgements`）。故障停用来源未接（待开发清单第 444 条），停运与停用事件分别落库未做（待开发清单第 443 条）。
 
 ### 6.7 事故处理流程
 
@@ -556,12 +560,11 @@ stateDiagram-v2
 | safety_check_interval_hours | int | 设备台账登记的安全检查周期；为空时当前代码回退项目级 24h，此固定回退与 HTML 不一致，待修 |
 | last_pass_inspection_at | timestamptz | 最近一次合格巡检时间，作为周期判定锚点 |
 | merchant_id | varchar(64) | 游乐商户 ID，用于数据隔离 |
-| safety_class | varchar(32) | **目标增补**：`critical_safety/auxiliary`（关键安全设备/辅助设备），须经工程或安全审批 |
-| dependency_mode | varchar(32) | **目标增补**：关键设备的必经依赖或可替代/可绕行关系，按客人完成项目的实际流程判断 |
-| classification_approved_by / classification_approved_at | varchar(64) / timestamptz | **目标增补**：分类或依赖关系审批留痕；关键降辅助仅能在项目停运后生效 |
+| safety_class | varchar(16) | V769：`critical`（关键安全设备）、`auxiliary`（辅助设备）；工程或安全复核通过才写入，为空表示分级还没生效 |
+| dependency | varchar(16) | V769：只登记关键安全设备，`dependent`（依赖，必经环节）、`independent`（不依赖，可顶替或可绕过）；辅助设备为空 |
 | created_at / updated_at | timestamptz | 审计时间 |
 
-> V143 已创建 `amusement_devices`、为巡检记录增补 `device_id` 并创建 `amusement_inspection_tasks`。`AmusementInspectionTaskJob` 和 `generateDueInspectionTasks` 已实现；调度在配置未提供时默认关闭，`application-prod.yml` 已显式开启。设备关键/辅助分类与依赖关系字段尚未落迁移，是待实现缺口。
+> V143 已创建 `amusement_devices`、为巡检记录增补 `device_id` 并创建 `amusement_inspection_tasks`。`AmusementInspectionTaskJob` 和 `generateDueInspectionTasks` 已实现；调度在配置未提供时默认关闭，`application-prod.yml` 已显式开启。设备关键/辅助分类与依赖关系两列由 V769 落地（第十八批 CF 段第 407 条）；分级申请与复核留痕（申请人、复核人、理由、生效时间、历史）在同迁移建的 `amusement_device_class_changes`，关键降辅助在项目开着时批准被拒；辅助设备继续运行判定在 `amusement_device_continue_judgements`。
 
 ### 7.10 amusement_device_statuses
 
@@ -765,7 +768,7 @@ stateDiagram-v2
 - V143 已为 `amusement_safety_inspections` 增补 `device_id`，并建立设备主数据和到期巡检任务表。
 - 当前 `inspection_result` CHECK 为 `pass/fail/pending_rectification`；旧稿提出的 `conditional_pass` 从未落迁移且现已明确删除。目标业务结论只允许“通过/警告/阻断”，代码须完成映射或迁移收口。
 - `abnormal_found` 只表示发现异常，不能一律自动暂停；只有结论为“阻断”或设备分类/依赖规则要求停运时，才触发 `amusement.safety_inspection.blocked` 并停止相关设备或项目。
-- 点位顺序与缺点位不得完成已承载（第十八批 BS 段第 373 条，V727）：`amusement_projects.inspection_points` 存有序点位（点位名称、点位码），`amusement_inspection_walk_points` 存进行中的走点（序号、点位名、结果、备注、记录人、记录时刻，主键项目＋序号；上一个闭店时点之前的行不算本轮，建成巡检或换清单即清空）；建成的巡检检查项仍写 `items_json`（`item_code`＝`point_序号`，带记录人与记录时间）。营业中抽检间隔表 `amusement_spot_check_policies`（按综合体项目，`__global__` 出厂行 120 分钟）与当班未抽检记录表 `amusement_spot_check_misses` 见 V728。证据补录与主管复核仍未承载。
+- 点位顺序与缺点位不得完成已承载（第十八批 BS 段第 373 条，V727）：`amusement_projects.inspection_points` 存有序点位（点位名称、点位码），`amusement_inspection_walk_points` 存进行中的走点（序号、点位名、结果、备注、记录人、记录时刻，主键项目＋序号；上一个闭店时点之前的行不算本轮，建成巡检或换清单即清空）；建成的巡检检查项仍写 `items_json`（`item_code`＝`point_序号`，带记录人与记录时间）。营业中抽检间隔表 `amusement_spot_check_policies`（按综合体项目，`__global__` 出厂行 120 分钟）与当班未抽检记录表 `amusement_spot_check_misses` 见 V728。点位缺扫码补录已承载（第十八批 CF 段第 404 条，V768）：走通用人工补录单 `manual_backfills`（`target_type=amusement_inspection_point`，部位为点位序号），主管复核通过后落走点行并记 `amusement_inspection_walk_points.backfill_id`（扫码记的行为空），建成巡检的检查项带 `backfill_id`。
 
 验收：项目入口、设备、巡检人和结论可结构化追溯；巡检事件携带项目、点位、设备、巡检人、结论和异常证据；警告不误触发阻断；阻断后未经整改、复检和主管确认不得恢复。
 
@@ -906,6 +909,8 @@ stateDiagram-v2
 | POST | `/api/v1/amusement/safety-inspections/{id}/approve-reopen` | 主管确认恢复；业务目标为恢复开放。当前代码仅联动 `maintenance/closed → open`，`paused` 不强制翻转，属待修缺口 |
 
 > 第十八批 BS 段第 373 条（新增 6 个接口）：`GET/PUT /api/v1/amusement/projects/{id}/inspection-points`（读点位清单与本轮走点／整份替换点位清单，`amusement.safety_inspection.view`／`amusement.safety_template.manage`）、`POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check`（工作手机按顺序逐点扫码记录，`amusement.safety_inspection.create`）、`GET/PUT /api/v1/amusement/spot-check-policies/{project_id}`（读／改营业中抽检间隔，改须最高权限本人）、`GET /api/v1/amusement/spot-check-misses`（当班未抽检记录）；`AmusementInspectionTaskJob` 每轮生成到期任务后判当班未抽检。项目配了点位的，`POST /api/v1/amusement/safety-inspections` 的检查项取本轮走完的点位，没走完 409 `INSPECTION_POINTS_INCOMPLETE`。
+
+> 第十八批 CF 段第 404、407 条（新增 5 个接口）：`POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill`（点位缺扫码补录，`amusement.safety_inspection.create`，进主管复核）；`GET /api/v1/amusement/projects/{id}/devices/classification-changes`、`POST /api/v1/amusement/projects/{id}/devices/{deviceId}/classification-changes`（设备分级历史／申请变更，`amusement.device.view`／`amusement.device.manage`）；`GET /api/v1/amusement/projects/{id}/devices/stops`、`POST /api/v1/amusement/projects/{id}/devices/{deviceId}/continue-judgements`（停用设备／辅助设备继续运行判定，`amusement.device.view`／`amusement.device.continue_judge`）。`POST /api/v1/amusement/projects/{id}/devices` 须带 `safety_class`（关键带 `dependency`）与 `operator_note`，首次分级随建档进工程或安全复核；`GET /api/v1/amusement/projects/{id}/open-eligibility` 的阻断原因加 `CRITICAL_DEVICE_STOPPED`、`AUXILIARY_DEVICE_STOPPED`。
 
 ### 8.7.1 定期检修 API
 
@@ -1260,6 +1265,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-24 | 改 | 抬头、§6.4、§6.6.2、§7.9、§7.18、§8.7 | V0.21：第十八批 CF 段第 404、405、406、407、409 条：点位缺扫码补录（V768 走点表 `backfill_id`）；开放判定巡检一段按当日（上一个闭店时点起）合格巡检与全部未复检或待批准阻断项判；设备分级与依赖关系、分级申请与历史、辅助设备继续运行判定（V769）与按分级判停用范围；新增 5 个接口；「仅提示」不落软上限事件，核销结果带已达运营容量提示 | BSM:1267；BSM:1271；BSM:1300；PGM:528；第十八批裁决 84；待开发清单第 404、405、406、407、409 条 |
 | 2026-11-20 | 改 | 抬头、§7.18、§8.7 | V0.20：第十八批 BS 段第 373 条：游乐项目巡检点位清单与走点表（V727）、营业中抽检间隔与当班未抽检记录两表（V728）、新增 6 个接口、巡检到期任务作业判当班未抽检；配了点位的项目新建巡检须先走完全部点位 | BSM:1300；第十八批裁决 76；待开发清单第 373 条 |
 | 2026-11-18 | 改 | 抬头、§15B | V0.19：第十八批 AW 段第 296 条 296-R1：full_reissue 改按原票该人份售出时所发权益逐行补发，不读票种现绑定 | ENUM:148；待开发清单第 296 条 |
 | 2026-11-11 | 改 | 抬头、文首已落地清单、§6.4.2、§7.7 索引 | V0.18：第十八批 AH 段第 219 条 219-R1：票内游乐消费与预览扣次前判本场已检票、一份封顶；第 239 条 239-R1：游乐侧有效期闸只拦未生效，票面到期由票务侧按本场已检票例外复核；第 219 条补充：V619 删除 `uk_amusement_verifications_active_entry`，§7.7 索引清单删去该行 | BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销……」；ENUM:46；BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」；V619 迁移 |

@@ -1,12 +1,13 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.ManualBackfillService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.SecureRandom;
@@ -47,10 +48,11 @@ public class AmusementInspectionPointService {
 
     public record Point(int seq, String pointName, String pointCode) {}
 
-    public record WalkPoint(int seq, String pointName, String result, String note, String checkedBy, Instant checkedAt) {}
+    /** backfillId＝人工补录单编号（第十八批 CF 段 404-R1：主管复核通过的点位补录落的行；扫码记的行为空）。 */
+    public record WalkPoint(int seq, String pointName, String result, String note, String checkedBy, Instant checkedAt, String backfillId) {}
 
-    /** walk 只含上一个闭店时点之后记的行。 */
-    public record View(String projectId, List<Point> points, List<WalkPoint> walk) {}
+    /** walk 只含上一个闭店时点之后记的行；backfills＝本轮提交的点位补录单（404-R1，与走点并列展示、互不覆盖）。 */
+    public record View(String projectId, List<Point> points, List<WalkPoint> walk, List<ManualBackfillService.Backfill> backfills) {}
 
     /** points＝点位名称，从上到下即走点顺序；空数组即清空。 */
     public record ReplaceRequest(String idempotencyKey, List<String> points) {}
@@ -58,7 +60,7 @@ public class AmusementInspectionPointService {
     /** pointCode＝工作手机扫到的点位码。 */
     public record CheckRequest(String idempotencyKey, String pointCode, String result, String note) {}
 
-    private record StoredPoint(String pointName, String pointCode) {}
+    record StoredPoint(String pointName, String pointCode) {}
 
     private final JdbcTemplate jdbc;
     private final AmusementSessionLifecycleService scope;
@@ -68,6 +70,11 @@ public class AmusementInspectionPointService {
     private final AuditEventService audit;
     private final AuthorizationService auth;
     private final ObjectMapper json;
+
+    // 第十八批 CF 段 404-R1：点位视图并列返回本轮补录单。字段注入、@Lazy 防初始化环（同 ManualBackfillService.supervisorReviews），不改构造器；未注入时为空数组。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    ManualBackfillService manualBackfills;
 
     public AmusementInspectionPointService(JdbcTemplate jdbc, AmusementSessionLifecycleService scope,
             AmusementBusinessDayService businessDays, BusinessDayResolver resolver, IdempotencyService idempotency,
@@ -202,6 +209,7 @@ public class AmusementInspectionPointService {
             item.put("item_name", row.pointName());
             item.put("result", row.result());
             if (row.note() != null) item.put("note", row.note());
+            if (row.backfillId() != null) item.put("backfill_id", row.backfillId());
             item.put("checked_by", row.checkedBy());
             item.put("checked_at", row.checkedAt().toString());
             items.add(item);
@@ -219,26 +227,33 @@ public class AmusementInspectionPointService {
         for (int i = 0; i < stored.size(); i++) {
             points.add(new Point(i + 1, stored.get(i).pointName(), stored.get(i).pointCode()));
         }
-        return new View(project, points, stored.isEmpty() ? List.of() : walk(project, roundStart(project, now)));
+        if (stored.isEmpty()) {
+            return new View(project, points, List.of(), List.of());
+        }
+        Instant round = roundStart(project, now);
+        List<ManualBackfillService.Backfill> backfills = manualBackfills == null ? List.of()
+                : manualBackfills.rows(AmusementInspectionPointBackfillTarget.TYPE, project).stream()
+                        .filter(row -> !row.submittedAt().isBefore(round)).toList();
+        return new View(project, points, walk(project, round), backfills);
     }
 
     /**
      * 本轮起点＝上一个闭店时点（BSM:1682 营业日起止与闭店按综合体配置）：当前时刻不早于本营业日闭店时刻取它，否则取前一营业日的闭店时刻。
      * 配了点位的项目已过范围闸，必有唯一综合体。
      */
-    private Instant roundStart(String project, Instant now) {
+    Instant roundStart(String project, Instant now) {
         String complex = businessDays.complexId(project);
         LocalDate day = resolver.businessDate(complex, null, now);
         Instant close = resolver.closeAt(complex, null, day).toInstant();
         return now.isBefore(close) ? resolver.closeAt(complex, null, day.minusDays(1)).toInstant() : close;
     }
 
-    private List<WalkPoint> walk(String project, Instant roundStart) {
+    List<WalkPoint> walk(String project, Instant roundStart) {
         return jdbc.query("""
-                SELECT seq,point_name,result,note,checked_by,checked_at FROM amusement_inspection_walk_points
+                SELECT seq,point_name,result,note,checked_by,checked_at,backfill_id FROM amusement_inspection_walk_points
                  WHERE project_id=? AND checked_at>=? ORDER BY seq
                 """, (rs, n) -> new WalkPoint(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
-                rs.getTimestamp(6).toInstant()), project, Timestamp.from(roundStart));
+                rs.getTimestamp(6).toInstant(), rs.getString(7)), project, Timestamp.from(roundStart));
     }
 
     private int count(String project, int seq) {
@@ -247,13 +262,13 @@ public class AmusementInspectionPointService {
         return found == null ? 0 : found;
     }
 
-    private void lockProject(String project) {
+    void lockProject(String project) {
         if (jdbc.queryForList("SELECT id FROM amusement_projects WHERE id=? FOR NO KEY UPDATE", project).isEmpty()) {
             throw ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除");
         }
     }
 
-    private List<StoredPoint> stored(String project) {
+    List<StoredPoint> stored(String project) {
         String raw = jdbc.query("SELECT inspection_points::text FROM amusement_projects WHERE id=?", (rs, n) -> rs.getString(1), project)
                 .stream().findFirst().orElse(null);
         if (raw == null) {

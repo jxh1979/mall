@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -166,6 +166,8 @@ data class VerificationResponse(
   val verificationNo: String = "",
   val status: String = "",
   val resultReason: String? = null,
+  /** 第十八批 CF 段 409-R3：游乐入场放行后项目在玩人数已达运营容量（软上限）时为 true，现场提示、仍放行。 */
+  val operatingCapacityReached: Boolean? = null,
 )
 
 /**
@@ -310,13 +312,28 @@ data class AmusementInspectionWalkPoint(
   val note: String? = null,
   val checkedBy: String? = null,
   val checkedAt: String? = null,
+  /** 第十八批 CF 段 404-R2：主管复核通过的点位补录落的行带补录单编号（扫码记的为空），屏上标「人工补录」。 */
+  val backfillId: String? = null,
 )
 
+/** 404-R2：backfills 为本轮提交的点位补录单（target_part＝点位序号，status 为 pending 待复核、approved 已通过、rejected 已驳回）。 */
 @Serializable
 data class AmusementInspectionPoints(
   val projectId: String = "",
   val points: List<AmusementInspectionPoint> = emptyList(),
   val walk: List<AmusementInspectionWalkPoint> = emptyList(),
+  val backfills: List<TraceHandoverBackfillRow> = emptyList(),
+)
+
+/** 404-R2：点位补录（POST .../inspection-points/{seq}/backfill）：原时点、原因、责任人、证据（至少一份）、点位结果 pass 或 fail；最终审批人不传。 */
+@Serializable
+data class AmusementInspectionPointBackfillRequest(
+  val idempotencyKey: String,
+  val occurredAt: String,
+  val reason: String,
+  val responsibleStaffId: String,
+  val evidenceAttachmentIds: List<String>,
+  val result: String,
 )
 
 /** 373-R5：记一个点位（POST .../inspection-points/{seq}/check），pointCode 为扫到的点位码，result 为 pass 或 fail。 */

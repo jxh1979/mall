@@ -1,4 +1,4 @@
-# 游乐 P0 安全巡检闭环规格 V0.04
+# 游乐 P0 安全巡检闭环规格 V0.05
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
@@ -61,7 +61,7 @@
 | `amusement_safety_inspections` | V014 主列 + V114 `inspector_id/inspection_result/abnormal_found/abnormal_note` + V143 `device_id` | 项目/设备巡检主记录，单项结果内嵌 `items_json` | 真实存在；无独立 `session_id`，也不需要为容量增加场次维度 |
 | `amusement_safety_inspection_items` | `inspection_id`, `item_id`, `result`, `remark`, `evidence_ids` | 单项结果和证据 | **整表目标增补（P0，尚未迁移）**：真实无此子表，单项结果内嵌于 `amusement_safety_inspections.items_json` |
 | `amusement_reopen_approvals` | `approval_id`, `inspection_id`, `approver_id`, `decision`, `reason`, `approved_at` | 阻断项恢复审批 | **整表目标增补（P0，尚未迁移）**：真实无此表，恢复审批以 `amusement_safety_inspections.reopen_status` 列 + `amusement_safety_actions` 行表达 |
-| `amusement_devices` | `project_id`, `device_code`, `location_point_id`, `safety_check_interval_hours`, `last_pass_inspection_at` | V143 设备主数据与巡检周期 | 真实存在；关键/辅助分类、依赖关系及审批留痕字段仍缺 |
+| `amusement_devices` | `project_id`, `device_code`, `location_point_id`, `safety_check_interval_hours`, `last_pass_inspection_at` | V143 设备主数据与巡检周期 | 真实存在；分级 `safety_class` 与依赖关系 `dependency` 已加（第十八批 CF 段第 407 条，V769），分级申请与复核留痕在 `amusement_device_class_changes`，辅助设备停用后能否继续运行的判定在 `amusement_device_continue_judgements` |
 
 严重度定义（**承载口径**：当前真实迁移无 `amusement_safety_template_items.severity` 列，严重度内嵌在 `items_json` 中；下列枚举为目标口径，结构化 `severity` 列为目标增补字段，P0 尚未迁移）：
 
@@ -181,6 +181,8 @@ Given 某游乐项目当天没有有效开放前巡检通过记录，
 When 核销员工尝试对该项目执行核销，  
 Then 系统必须拒绝核销，并返回“未完成开放前安全巡检”的明确原因。
 
+> 实现现状（第十八批 CF 段第 406 条 406-R1，第十八批裁决 84）：「当天」从上一个闭店时点（出厂 07:00）起算；当日没有已提交、合格且无须恢复审批或已获主管批准的巡检时拒绝，原因为 `MISSING_SAFETY_INSPECTION`（当日最新一条合格未提交为 `SAFETY_INSPECTION_NOT_SUBMITTED`）。
+
 ### AC-AMU-SAFE-002 阻断结论按设备范围停运
 
 Given 巡检员提交的巡检结果中存在 `blocking` 结论，
@@ -198,6 +200,8 @@ Then 项目可以开放，但必须写入警告事件，并向主管或配置的
 Given 阻断项已经整改并复检通过，
 When 巡检员或运营人员尝试直接恢复开放，  
 Then 系统必须拒绝；只有具备 `amusement.safety_inspection.approve_reopen` 权限的主管审批后才能恢复。
+
+> 实现现状（第十八批 CF 段第 405 条 405-R1）：复检通过、主管未批准前，开放判定按未复检阻断项报 `SAFETY_REOPEN_PENDING`、拒绝核销；该项目任一巡检未复检或待主管批准即拦，不只看最新一条。
 
 ### AC-AMU-SAFE-005 核销同时校验安全与容量
 
@@ -223,7 +227,7 @@ Given 巡检模板配置了多个有序点位，
 When 巡检员漏过任一点位、越过前一点位或提交事后补录，
 Then 未走完全部点位的任务不得完成；补录须附照片、录音或录像等证据并经主管复核后生效，且不得覆盖原记录。
 
-> 实现现状（第十八批 BS 段第 373 条 373-R1、373-R5）：点位清单配在游乐项目上，不是巡检模板；巡检员用工作手机按顺序逐点扫点位码记录，跳点、扫错码记不上，未走完全部点位不能新建巡检（409 `INSPECTION_POINTS_INCOMPLETE`）；补录未做。
+> 实现现状（第十八批 BS 段第 373 条 373-R1、373-R5）：点位清单配在游乐项目上，不是巡检模板；巡检员用工作手机按顺序逐点扫点位码记录，跳点、扫错码记不上，未走完全部点位不能新建巡检（409 `INSPECTION_POINTS_INCOMPLETE`）；补录（第十八批 CF 段第 404 条，V768）：缺扫码的点位在工作手机补录，附证据经提交人的直接上级复核通过后才落走点行，标「人工补录」，与扫码记录并列、互不覆盖，待复核期间下一个点位照旧记不上（见游乐 PRD §11B.2）。
 
 ### AC-AMU-SAFE-009 营业中最低频次
 
@@ -238,6 +242,8 @@ Then 系统必须把该班次标记为未抽检并通知责任人；出厂默认
 Given 设备巡检超期、不合格或发生故障，
 When 系统判定停运范围，
 Then 必须直接使用设备台账登记周期，并依据关键/辅助分类、关键设备依赖关系及工程/安全审批留痕决定停单台设备或整个项目。
+
+> 实现现状（第十八批 CF 段第 407 条，V769）：分级与依赖关系经工程或安全复核才生效；在役设备巡检超期或有未结的设备级巡检即停用该台，关键安全设备为依赖、或不依赖但另有关键安全设备停用的整项目拒绝新增核销（`CRITICAL_DEVICE_STOPPED`），辅助设备停用后，停用起点之后工程或安全岗位最新一条判定不是「可继续运行」（含没有判定）的整项目拒绝（`AUXILIARY_DEVICE_STOPPED`）；故障来源未接（待开发清单第 444 条）；设备周期为空时仍回退项目缺省周期（见文首）。
 
 ### AC-AMU-SAFE-011 营业日与项目时区
 
@@ -292,6 +298,7 @@ Then 局部故障不得直接发补偿通票；全园故障须停止所有新增
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-11-24 | V0.05 | 第十八批 CF 段第 404、405、406、407 条：§4 设备主数据行改记分级与依赖关系（V769）；AC-AMU-SAFE-001、004、008、010 记实现现状（当日从上一个闭店时点起算、复检通过待主管批准按阻断拦、点位缺扫码补录经主管复核、按设备分级判停用范围） |
 | 2026-11-20 | V0.04 | 第十八批 BS 段第 373 条：文首代码事实第二条改记点位清单与走点表（V727）；AC-AMU-SAFE-008、AC-AMU-SAFE-009 记实现现状（点位配在游乐项目上、逐点扫码；抽检间隔按综合体项目、当班未抽检只判定留痕不通知；补录未做） |
 | 2026-09-01 | V0.03 | Grok 只读复审返修：准确登记 `approveReopen` 只联动 `maintenance/closed → open`、不强翻 `paused` 的代码缺口；删除把电子免责和深度事故工单排入 P1 的未授权表述 |
 | 2026-09-01 | V0.02 | M07 收口：更新 V114/V143 与 approveReopen 代码事实；删除 `open_with_warning` 与重大即自动阻断；补点位顺序、证据补录、抽检频次、设备分级、营业日/项目时区、园区容量原文、全园故障与商户隔离；固化 James 批准的 P1/P2 边界 |

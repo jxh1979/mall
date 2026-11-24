@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -63,6 +63,10 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/amusement/projects/{id}/entitlements/{entitlementType}", "amusement"),
                     // 第十八批 BS 段第 373 条 373-R1：巡检点位清单与走点进度只有安全巡检页调（工作手机扫码走点不受本表约束）。
                     Map.entry("/api/v1/amusement/projects/{id}/inspection-points", "amusement"),
+                    // 第十八批 CF 段第 407 条 407-R3：设备台账（建档、分级申请与历史、停用设备与继续运行判定）只有安全巡检页调；
+                    // 409-R2：软上限处置方式只有项目与场次页调（工作手机检修屏读设备列表不受本表约束）。
+                    Map.entry("/api/v1/amusement/projects/{id}/devices", "amusement"),
+                    Map.entry("/api/v1/amusement/projects/{projectId}/over-capacity-policy", "amusement"),
                     Map.entry("/api/v1/bar-business-day-configs", "amusement"),
                     Map.entry("/api/v1/audit", "audit"),
                     Map.entry("/api/v1/security/export-files", "audit"),

@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -51,11 +51,12 @@ public class ManualBackfillService {
 
     /**
      * 提交原文（前端蛇形键）。公共字段：idempotency_key、reason、responsible_staff_id、evidence_attachment_ids、recording_started_at、
-     * final_approver_id；其余按对象取用——交接扫码补录 occurred_at；销售归属补录 sales_staff_id；服务责任补录 user_id、started_at、ended_at。
+     * final_approver_id；其余按对象取用——交接扫码补录 occurred_at；销售归属补录 sales_staff_id；服务责任补录 user_id、started_at、ended_at；
+     * 游乐巡检点位补录 occurred_at、result（pass 或 fail，第十八批 CF 段 404-R1）。
      */
     public record Request(String idempotencyKey, String reason, String responsibleStaffId, List<String> evidenceAttachmentIds,
                           Instant recordingStartedAt, String finalApproverId, Instant occurredAt, String salesStaffId,
-                          String userId, Instant startedAt, Instant endedAt) {
+                          String userId, Instant startedAt, Instant endedAt, String result) {
     }
 
     /** 补录单（manual_backfills 一行）。proposed 的键为蛇形。 */

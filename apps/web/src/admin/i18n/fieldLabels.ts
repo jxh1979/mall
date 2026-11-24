@@ -1,4 +1,4 @@
-// 文件版本：V0.63
+// 文件版本：V0.64
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -395,6 +395,8 @@ export const FIELD_LABELS: Record<string, string> = {
   // 第十八批 BS 段第 373 条：游乐巡检点位与走点（/api/v1/amusement/projects/{id}/inspection-points）、营业中抽检间隔与当班未抽检记录。
   point_name: "点位名称",
   point_code: "点位码",
+  // 第十八批 CF 段第 404 条 404-R1：主管复核通过的点位补录落的走点行带补录单编号。
+  backfill_id: "人工补录单",
   walk: "走点记录",
   checked_by: "记录人",
   interval_minutes: "抽检间隔（分钟）",
@@ -442,6 +444,20 @@ export const FIELD_LABELS: Record<string, string> = {
   gps_lng: "经度",
   device_id: "设备",
   device_code: "设备编码",
+  // 第十八批 CF 段第 407 条：游乐设备分级与依赖关系、辅助设备停用后继续运行判定。
+  safety_class: "设备分级",
+  dependency: "依赖关系",
+  conclusion: "判定结论",
+  conditions: "判定依据条件",
+  judged_by: "判定人",
+  judged_at: "判定时间",
+  reasons: "停用原因",
+  stopped_at: "停用起点",
+  latest_judgement: "最近判定",
+  from_class: "原分级",
+  from_dependency: "原依赖关系",
+  to_class: "申请分级",
+  to_dependency: "申请依赖关系",
   device_model: "设备型号",
   repair_work_order_id: "维修工单",
   terminal_type: "终端类型",
@@ -1845,6 +1861,8 @@ export const FIELD_LABELS: Record<string, string> = {
   opened_at: "开台时间",
   opened_by_user_id: "开台人",
   operating_capacity: "运营容量",
+  // 第十八批 CF 段第 409 条 409-R3：游乐核销结果现场提示已达运营容量（软上限）。
+  operating_capacity_reached: "已达运营容量",
   operation: "操作",
   operation_source: "操作来源",
   operation_subject_id: "运营主体",

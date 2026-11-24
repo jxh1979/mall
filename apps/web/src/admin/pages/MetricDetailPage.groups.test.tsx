@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -113,6 +113,8 @@ describe("MetricDetailPage ROOT-04：分组表与新登记指标", () => {
     ["trace_handover_step", "交接扫码补录"],
     ["bar_session_sales", "销售归属补录"],
     ["bar_session_service", "服务责任补录"],
+    // 第十八批 CF 段第 404 条 404-R1：游乐巡检点位补录同样计入补录数量（PGM:287 枚举取值全中文）。
+    ["amusement_inspection_point", "游乐巡检点位补录"],
   ])("补录数量：补录类型 %s 显示「%s」", async (sourceType, label) => {
     renderPage({ ...BACKFILL_PAYLOAD, rows: [{ id: "mb-1", sourceType, status: "pending" }] }, "risk.manual_backfill|2026-07-17|2026-07-17");
 

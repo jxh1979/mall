@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -302,6 +302,8 @@ const STATUS_LABELS: Record<string, string> = {
   trace_handover_step: "交接扫码补录",
   bar_session_sales: "销售归属补录",
   bar_session_service: "服务责任补录",
+  // 第十八批 CF 段第 404 条 404-R1：游乐巡检点位补录（补录对象类型，计入补录数量）
+  amusement_inspection_point: "游乐巡检点位补录",
   // 18F 复核：三类人工补录复核单的动作类型（审批链页待复核表）
   "inventory.trace.scan_backfill": "交接扫码补录",
   "bar.sales.backfill": "销售归属补录",

@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.util.Map;
@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * 第十八批 F 段第 14 条 14-R1：一类可人工补录的对象（BSM 第 1642 行「记录缺失时允许人工补录」）。各对象只实现本接口并注册为 Spring 组件，
  * 公共流程（原因与责任人、凭证、时限、通话录音、主管复核、批准落地、查询、指标）由 {@link ManualBackfillService} 统一办理。
- * type() 须为 manual_backfills.target_type 的三值之一（V570）；policyActionType() 须在主管复核策略表登记（SupervisorReviewService）。
+ * type() 须为 manual_backfills.target_type 的四值之一（V570，第十八批 CF 段 V768 加游乐巡检点位）；policyActionType() 须在主管复核策略表登记（SupervisorReviewService）。
  */
 public interface ManualBackfillTarget {
 
@@ -28,7 +28,7 @@ public interface ManualBackfillTarget {
     void requireScope(String targetId);
 
     /**
-     * 幂等之内调用：核对对象确属缺失（不满足抛 409／400），并给出补录所需的事实。part 为补录部位（交接段名，其余为空）；
+     * 幂等之内调用：核对对象确属缺失（不满足抛 409／400），并给出补录所需的事实。part 为补录部位（交接段名、游乐巡检点位序号，其余为空）；
      * request 为提交原文（各对象只读自己用到的字段）。
      */
     Resolved resolve(String targetId, String part, ManualBackfillService.Request request);

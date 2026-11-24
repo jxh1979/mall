@@ -1,4 +1,4 @@
-# 证据留痕与风控产品 PRD V0.10
+# 证据留痕与风控产品 PRD V0.11
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -192,6 +192,7 @@ flowchart TD
 
 - **实现现状（第十八批 F 段第 14 条 14-R1，2026-10-29，V570）**：通用人工补录单 `manual_backfills`（补录对象三类一次建全：交接扫码缺段、台位会话销售归属、台位会话服务责任区间；具体对象由各自模块接入，入口随对象）。提交一律写原因与责任人（须为已存在账号）、附至少一个已真实上传的凭证（`business_type=manual_backfill` 上传另收语音 m4a/aac/mp3/amr/wav）；业务发生后超过补录时限 409 `MANUAL_BACKFILL_WINDOW_EXPIRED`；对象有到店时刻且凭证含语音即视为以通话录音为凭证，须填录音起始（400 `RECORDING_START_REQUIRED`），录音起始＋提前量须不晚于到店与开卡中较早者，否则 400 `RECORDING_NOT_EARLY_ENOUGH`；然后一律进主管复核（策略 `manual_backfill_trace_scan`、`manual_backfill_bar_sales`（店长复核，权限 `bar.sales_backfill.review`）、`manual_backfill_bar_service`，恒阻断），被影响方登记为直接受益人、不得复核；复核通过才由对象落业务（批准时重核，对象已变 409 `MANUAL_BACKFILL_TARGET_CHANGED`、整笔批准回滚），驳回不生效；原始记录不改，`GET /api/v1/evidence/manual-backfills` 按对象列出全部补录单（含提交时的原始记录）供并列展示。参数按项目（`manual_backfill_policies`，项目无自有行用出厂 3 天／30 分钟、上下限未配）：`GET/PUT /api/v1/evidence/manual-backfill-policies/{project_id}`（权限 `evidence.manual_backfill.policy.manage`），两组分开提交、组内值与上下限同填；补录时限为安全阈值，调整须最高权限本人办理（403 `MASTER_APPROVAL_REQUIRED`，DEC-R3-2026-08-04-41），录音提前量持参数权限即可；商户账号不能改；留痕改动人与前后值。补录数量（`risk.manual_backfill`）同步计入三类补录单。
 - **实现现状（第十八批 AV 段第 307 条 307-R1，2026-11-18；BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）**：人工补录凭证（证据附件上传 `business_type=manual_backfill`）同锁账补录凭证写法——不带商户编号的账号（如不挂单店、服务多家酒吧的上级）也可上传，附件不记商户，商户账号照旧记本商户；回读时不带商户编号的账号须是引用该凭证的某笔补录单复核链上的审批人或被转发人，或能查看该补录对象，都不满足的照旧按商户范围判（平台管理员以外 403 `MERCHANT_SCOPE_REQUIRED`）；商户账号照旧只看本商户的凭证（403 `CROSS_MERCHANT_FORBIDDEN`）。
+- **实现现状（第十八批 CF 段第 404 条 404-R1，2026-11-24，V768；BSM:1300「确需补录的一律须附证据（照片／录音／录像等）并经主管复核后方生效」）**：补录对象由三类扩为四类，加游乐巡检点位缺扫码（`amusement_inspection_point`，对象为游乐项目、部位为点位序号；提交入口 `POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill`，提交权限 `amusement.safety_inspection.create`、查看权限 `amusement.safety_inspection.view`；补录时限按游乐项目所属综合体的参数；复核策略 `manual_backfill_amusement_inspection_point`，由提交人的直接上级复核；被影响方为责任人），细则见游乐 PRD §11B.2。`GET /api/v1/evidence/manual-backfills` 与补录数量（`risk.manual_backfill`）同样包含这一类。
 
 ### 7.3 异常关闭
 
@@ -410,6 +411,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-24 | 实现现状 | §7.2 | 版本升 V0.11；第十八批 CF 段第 404 条 404-R1：人工补录对象加第四类游乐巡检点位缺扫码（`amusement_inspection_point`，迁移 V768），由提交人的直接上级复核 | BSM:1300；BSM:1642；DEC-R6-09；待开发清单第 404 条 |
 | 2026-11-20 | 实现现状 | §11A.2 | 版本升 V0.10；第十八批 BG 段第 261 条 261-B22-R1、261-B22-R2：企微违规命中复核带请求编号、重复提交返回第一次的结果，已被领取后再领取不生效 | PGM:528⑤；PGM:303 |
 | 2026-11-20 | 实现现状 | §8.2 实现状态与实现现状 | 版本升 V0.09；第十八批 BC 段第 369 条（369-R1～369-R3、369-R5～369-R7）与第 375 条（375-R1、375-R2）：§8.2 补异常预警页（ADM-RISK-002）、队列按项目隔离、列表与明细查看留痕、驾驶舱未处理条数卡的实现现状；上条高频出入场的查看处置页由「风控预警」页改为「异常预警」页、风险等级名按 ENUM:217；原「实现状态」段标注为已被更正的历史记录 | BSM:1657；BSM:1835；BSM:1438；ENUM:217；PGM:659；待开发清单第 369、375 条 |
 | 2026-11-18 | 实现现状 | §7.2 | 版本升 V0.08；第十八批 AV 段第 307 条 307-R1：人工补录凭证不带商户编号的账号也可上传，回读按引用该凭证的补录单复核链节点或补录对象查看范围判 | BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；待开发清单第 307 条 |

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -481,7 +481,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, device_code, name, status,
                        safety_check_interval_hours, location_point_id, last_pass_inspection_at,
-                       merchant_id, created_at, updated_at
+                       merchant_id, created_at, updated_at, safety_class, dependency
                   FROM amusement_devices
                  WHERE project_id = :project_id
                  ORDER BY created_at DESC, id
@@ -493,7 +493,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, device_code, name, status,
                        safety_check_interval_hours, location_point_id, last_pass_inspection_at,
-                       merchant_id, created_at, updated_at
+                       merchant_id, created_at, updated_at, safety_class, dependency
                   FROM amusement_devices
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapDevice).stream().findFirst();
@@ -504,7 +504,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, device_code, name, status,
                        safety_check_interval_hours, location_point_id, last_pass_inspection_at,
-                       merchant_id, created_at, updated_at
+                       merchant_id, created_at, updated_at, safety_class, dependency
                   FROM amusement_devices
                  WHERE project_id = :project_id AND device_code = :device_code
                 """, Map.of("project_id", projectId, "device_code", deviceCode), rowMapper::mapDevice)
@@ -514,9 +514,10 @@ class JdbcAmusementRepository implements AmusementRepository {
     @Override
     public void updateDeviceLastPassInspection(String projectId, String deviceCode, java.time.Instant inspectedAt) {
         lockProjectForSafety(projectId);
+        // 18CF 收尾复核修正（BSM:1271「停用的设备完成合格巡检后才放行」）：最近合格巡检时间只往后推，不把已记的更晚时刻改回更早。
         jdbcTemplate.update("""
                 UPDATE amusement_devices
-                   SET last_pass_inspection_at = :t, updated_at = :t
+                   SET last_pass_inspection_at = GREATEST(last_pass_inspection_at, :t), updated_at = :t
                  WHERE project_id = :p AND device_code = :c
                 """, new MapSqlParameterSource()
                 .addValue("t", timestampWithTimeZone(inspectedAt))
@@ -537,9 +538,10 @@ class JdbcAmusementRepository implements AmusementRepository {
     @Override
     public void updateProjectDevicesLastPass(String projectId, java.time.Instant inspectedAt) {
         lockProjectForSafety(projectId);
+        // 18CF 收尾复核修正（BSM:1271「停用的设备完成合格巡检后才放行」）：最近合格巡检时间只往后推，不把已记的更晚时刻改回更早。
         jdbcTemplate.update("""
                 UPDATE amusement_devices
-                   SET last_pass_inspection_at = :t, updated_at = :t
+                   SET last_pass_inspection_at = GREATEST(last_pass_inspection_at, :t), updated_at = :t
                  WHERE project_id = :p
                 """, new MapSqlParameterSource()
                 .addValue("t", timestampWithTimeZone(inspectedAt))

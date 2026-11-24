@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -141,19 +141,20 @@ class AmusementStatusBoardJdbcTests {
     @Test
     void deviceCreatedWithCodeStatusAndIntervalWhileContractLegacyDisabledRejected() throws Exception {
         // 170-R2（契约 AmusementDeviceRequest 按代码收的字段与 DEVICE_STATUSES 对齐）：后台建档按蛇形键 device_code、name、status、
-        // safety_check_interval_hours；status=inactive 照存，旧契约的 disabled 不在代码取值里，拒绝。
+        // safety_check_interval_hours；status=inactive 照存，旧契约的 disabled 不在代码取值里，拒绝。第十八批 CF 段 407-R1：建档必带分级与理由。
         RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_asb_dev_" + s, "staff", complex, merchant,
                 "amusement.device.manage");
         mockMvc.perform(post("/api/v1/amusement/projects/" + p + "/devices").with(manager).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "asb-dev-" + s, "device_code", "carousel-1",
-                                "name", "木马一号", "status", "inactive", "safety_check_interval_hours", 12))))
+                                "name", "木马一号", "status", "inactive", "safety_check_interval_hours", 12,
+                                "safety_class", "auxiliary", "operator_note", "排队区辅助设备"))))
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForMap("SELECT name, status, safety_check_interval_hours FROM amusement_devices"
                         + " WHERE project_id = ? AND device_code = 'carousel-1'", p))
                 .containsEntry("name", "木马一号").containsEntry("status", "inactive").containsEntry("safety_check_interval_hours", 12);
         mockMvc.perform(post("/api/v1/amusement/projects/" + p + "/devices").with(manager).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "asb-dev-off-" + s, "device_code", "carousel-2",
-                                "name", "木马二号", "status", "disabled"))))
+                                "name", "木马二号", "status", "disabled", "safety_class", "auxiliary", "operator_note", "排队区辅助设备"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM amusement_devices WHERE project_id = ? AND device_code = 'carousel-2'",

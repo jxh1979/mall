@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.59
+// 文件版本：V0.60
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -514,6 +514,8 @@ public final class FieldLabels {
         p("inspection_id", "巡检单号");
         // 第十八批 BS 段第 373 条 373-R5：游乐巡检走点扫到的点位码（POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check）。
         p("point_code", "点位码");
+        // 第十八批 CF 段第 404 条 404-R1：主管复核通过的点位补录落的走点行带补录单编号。
+        p("backfill_id", "人工补录单");
         p("equipment_name", "设备名称");
         p("equipment_type", "设备类型");
         p("disposal_method", "处置方式");
@@ -557,6 +559,21 @@ public final class FieldLabels {
         p("gps_lng", "经度");
         p("device_id", "设备");
         p("device_code", "设备编码");
+        // 第十八批 CF 段第 407 条：游乐设备分级与依赖关系、辅助设备停用后继续运行判定。
+        p("safety_class", "设备分级");
+        p("dependency", "依赖关系");
+        p("conclusion", "判定结论");
+        p("conditions", "判定依据条件");
+        p("judged_by", "判定人");
+        p("judged_at", "判定时间");
+        p("reasons", "停用原因");
+        p("stopped_at", "停用起点");
+        p("latest_judgement", "最近判定");
+        p("from_class", "原分级");
+        p("from_dependency", "原依赖关系");
+        p("to_class", "申请分级");
+        p("to_dependency", "申请依赖关系");
+        p("operating_capacity_reached", "已达运营容量");
         p("device_model", "设备型号");
         p("repair_work_order_id", "维修工单");
         p("bound_space_id", "绑定空间");

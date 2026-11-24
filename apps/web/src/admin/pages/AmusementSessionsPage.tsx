@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { AdminDataState } from "../components/AdminDataState";
@@ -14,6 +14,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
+import { AmusementOverCapacityPolicySection } from "./AmusementOverCapacityPolicySection";
 
 const SESSION_MANAGE = ["amusement.session.manage"];
 // V341（R-12 软删）：权益绑定停用/恢复走 manage；删除审批走 approve（只授平台最高管理员）。
@@ -426,6 +427,7 @@ export function AmusementSessionsPage({ api, user, setActionResult, setGlobalErr
       {priceRefError ? <div className="admin-form-error" data-testid="amusement-price-ref-error">{priceRefError}</div> : null}
       </>}
       <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th><th>内部结算价目录条目</th><th>详情</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.catalogItemCode || "不引用（不参与域内结算）"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody></table></div>
+      <AmusementOverCapacityPolicySection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} projects={projects} />
     </>
   );
 

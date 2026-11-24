@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.45
+文档版本：V1.46
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3986,6 +3986,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 80 | **自定事项第 49 条复议：有价的餐饮零售权益能不能标成「商户让利」**（题面：「【自定第 49 条·有价的餐饮零售权益能不能标成「商户让利」】前因：第 264 条（你选了「商户在系统里申请确认」）的设计顺带发现：票务策略页配通票时，餐饮、零售的「专属直付」权益就算有价格，出资方下拉也能选「商户让利型」，后端照存；核销时只看「商户让利」不看票面价，结算记 0，商户收不到这项有价权益的直付款。ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；BSM:751「商户让利的零元免费权益不结算」——原句把让利限在零元免费权益。我定的：不登记。理由是第 264 条做完后，要标商户让利必须先有该商户为这张票提交并确认的申请，我判断正常业务碰不到。重新看一遍后：商户仍可能对有价权益提交申请（误点或以为是活动折扣），而原句让利只管零元权益，拦一下成本很小。所以这次我改为推荐「登记并随第 264 条一并拦」。」）—— 操作员选「只零元权益能选让利（推荐）」：登记并随第 264 条（18BV）一并做：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益。（未选：「维持不登记」）（2026-11-21 弹窗；来由：操作员要求复议控制席自定事项。控制席说明：待开发清单第 420 条，随 18BV 第 264 条修复阶段一并做。） | 控制席自定事项（18BV） |
 | 81 | **第 387 条 已存档内容页要不要显示每条记录当初的存档理由**（题面：「【第 387 条】「已存档内容」页要不要显示每条记录当初的存档理由？前因：BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」BSM:576、577 写「存档及删除都需要填写理由」。删除另有 BSM:574「谁在什么时候、以什么理由删了什么，都有记录可查」，存档没有这样一句。现状：各类存档时都必须填理由、也存进了库；但本页 15 个分类只有服务项目、游乐项目权益绑定两类能显示理由，其余只显示存档时间和存档人；空间类型连时间和存档人也没存。设施设备、商户服务工单、员工档案等几类必填的理由在界面上任何地方都看不到。分歧：HTML 没写本页要显示哪些内容，属「属实但无依据」，按 11-19 规矩要问你。」）—— 操作员选「显示存档理由（推荐）」：每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由。（未选：「不显示，维持现状」）（2026-11-21 弹窗；来由：18BY 只读设计第 387 条待裁题。控制席说明：随 18BY 做 387-R1～R3） | 待开发清单第 387 条（18BY） |
 | 82 | **第 395 条 涉钱配置批准追溯适用后范围内已出单据怎么处理**（题面：「【第 395 条】涉钱配置经批准「追溯适用到生效日之前」后，范围内已经出过的单据怎么处理？前因：BSM:521「……确需追溯适用到生效日之前的，属于例外，必须单独申请、说明追溯范围与理由，经最高权限审批后才可执行，追溯的范围与影响金额逐笔留痕。」同句还写「重新月结只重算金额、不改动单据上已锁定的版本」。定了申请、审批、留痕，没写执行时已出单据的钱怎么动。现状：系统没有任何追溯申请入口；各涉钱配置（渠道费、卡座提成、综合服务费、赠送权益预估成本、内部结算价等）只能从今天以后生效；也没有重算已出账单的功能。例：卡座提成比例 15 日才谈定、约定自当月 1 日起执行。分歧：批准后是系统自己改算并多退少补，还是系统只列明细、财务手工调，还是影响金额由申请人填。工作量差一个量级。」）—— 操作员选「系统重算并自动多退少补（推荐）」：申请时系统按新版本逐笔重算、列出逐笔影响金额；最高权限批准后（本人提交不需审批）自动补记调整、多退少补；原单锁定版本不改，另记追溯记录。（未选：「系统列明细、财务手工调」「只做申请审批与留痕」）（2026-11-21 弹窗；来由：18CB 只读设计第 395 条待裁题。控制席说明：随 18CB 做，工作量大、分段） | 待开发清单第 395 条（18CB） |
+| 84 | **第 406 条 闭店时段做完的游乐开放前巡检算不算当天**（题面：「【第 406 条】闭店时段（出厂 07:00～10:00）做完的游乐开放前巡检，算不算当天的合格巡检？前因：PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1300「开放前巡检 + 营业中抽检 + 定期检修」；BSM:1682「营业日从当日上午 10:00 起算，至次日上午 10:00 止；其中次日凌晨 07:00 至上午 10:00 为非营业时段（已闭店），该时段内发生的记录仍归属正在进行的这一个营业日」。现状：系统不看日期，只看项目历史上最新一条巡检，合格一次就一直放行（第 406 条要修）。第五轮巡检组已把逐点扫码的「一轮」定为从上一个闭店时点（出厂 07:00）算起。分歧：照 BSM:1682 字面，07:00～10:00 做完的巡检归前一营业日，10:00 开门时就成了「当日无合格巡检」、核销被拦；照「开放前巡检」的用意，开门前做完的应算这一天。每天开门前都会遇到。」）—— 操作员选「从 07:00 闭店起算这一天（推荐）」：从上一个闭店时点（出厂 07:00）起做完并合格的巡检算这一天，与扫码走点「一轮」同一条界线。（未选：「严格按营业日 10:00 起算」）（2026-11-21 弹窗；来由：18CF 只读设计第 406 条待裁题。控制席说明：随 18CF 做） | 待开发清单第 406 条（18CF） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -13332,3 +13333,153 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 门禁：verify-full-admin-page-matrix、verify:data-isolation-spec、git diff --check 通过。
 - 18CN 合并前变基（2026-11-24）：本段自 efd57257 变基到 origin/main 1e3b22b7；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.16、决策台账 V1.45，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CN 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 2aa9afbe 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7430 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2120；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 14:56 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CF 落地位置补记（2026-11-20）：第十八批 CF 段（batch104）按 18CF 只读设计实现待开发清单第 404、405、406、407、409 条（游乐巡检补录与设备组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CF 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CF 段，batch104）实现待开发清单第 404、405、406、407、409 条（18CF 只读设计 b104-audit/d6-cf.json，两轮质疑者修订后定稿，第 406 条待裁题已由第十八批裁决 84 答复）。控制席判定：照设计做 404-R1、404-R2、405-R1、406-R1、407-R1、407-R2、407-R3、409-R1、409-R2、409-R3。第 406 条已由第十八批裁决 84 定：从上一个闭店时点（出厂 07:00）起做完并合格的巡检算这一天，与扫码走点「一轮」同一条界线（裁决表第 84 行已插入本工作树决策台账）。本段在 18BS（第 373 条按序扫码走点、营业中抽检，V727、V728）合并后的主干上做，按现码定位。设计旁见（禁止巡检员单人闭环审批人比对、关键设备停运与辅助设备停用事件落库、游乐事故与设备故障登记入口）已登记待开发清单第 442～444 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 9d6a781c 开工（第六轮 13 段并行），变基到 0ed7c377 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 【18CF 落地位置补记（第 404、405、406、407、409 条）】本段新增 5 个操作，迁移 V768、V769。
+  404-R1　游乐巡检点位缺扫码补录接入通用补录主链。
+  - 新类 AmusementInspectionPointBackfillTarget：对象类型 amusement_inspection_point，部位为点位序号。只补本轮（上一个闭店时点之后）还没记、且上一个点位本轮已记的点位；原时点不早于本轮起点和上一个点位的记录时刻、不晚于当前；结果只收 pass 或 fail；补录时限按游乐项目所属综合体的参数；责任人登记为被影响方，不得复核。批准时先删上一轮残留，再重核同样条件，不满足 409 MANUAL_BACKFILL_TARGET_CHANGED，整笔批准回滚；满足就落一行走点（记录人为责任人、记录时刻为原时点、带补录单编号）。
+  - ManualBackfillService.Request 加 result。
+  - AmusementInspectionPointService.view 在 View.backfills 里并列返回本轮补录单；WalkPoint 加 backfillId；completedWalkItems 的检查项带 backfill_id。
+  - 新接口 AmusementInspectionPointController.backfill（submitAmusementInspectionPointBackfill）。
+  - 主管复核策略 manual_backfill_amusement_inspection_point：动作 amusement.inspection.point_backfill，提交人直接上级复核。
+  - 迁移 V768：manual_backfills.target_type 改为四值；amusement_inspection_walk_points 加 backfill_id。
+  - 依据：BSM:1300「……确需补录的一律须附证据（照片／录音／录像等）并经主管复核后方生效」；DEC-R6-09「扫码缺失可事后人工补录，但一律须附证据（照片／录音／录像等）并经主管复核后方生效；补录记录与原始扫码记录并列展示、互不覆盖」；第十八批裁决 76。
+  - 测试：AmusementInspectionPointBackfillJdbcTests 的 missedPointBackfillCountsOnlyAfterSupervisorApproval、previousRoundLeftoversDoNotCountForBackfill、backfillIsRefusedWithoutEvidenceOrOutOfOrderAndResponsiblePersonCannotReview、approvalIsRefusedWhenThePointWasScannedMeanwhile。
+  404-R2　工作手机提交点位补录，网页与安卓并列标「人工补录」。
+  - 两份 TerminalApiClient 加 submitAmusementInspectionPointBackfill；TerminalModels 加 AmusementInspectionPointBackfillRequest，AmusementInspectionWalkPoint 加 backfillId，AmusementInspectionPoints 加 backfills。
+  - AmusementInspectionWalkScreen 加补录屏 showAmusementInspectionPointBackfill（结果、原时点、原因、责任人、证据；最终审批人不传）。走点屏上，本轮有待复核补录时不给补录按钮、标「补录待复核」；被驳回的标「补录已驳回」；补录落的行标「人工补录」。
+  - MainActivity 只把 TRACE_EVIDENCE_REQUEST、store、evidencePickResult、evidenceExtension 改为 internal。
+  - 网页 AmusementInspectionWalkPanel 的走点表、AmusementSafetyPage 的 pointRecords 标「（人工补录）」。
+  - 依据：BSM:1642「补录记录与原始记录并列展示，标明“人工补录”」；DEC-R6-09。
+  - 测试：TerminalFieldWorkflowTest.amusementInspectionPointBackfillSendsSnakeKeysAndViewCarriesBackfills；AmusementSafetyPage.pointwalk.test.tsx「走点行带补录单编号的标「人工补录」，扫码记的不标」。
+  405-R1　复检通过、主管还没批准恢复营业（reopen_status=pending_approval）时，按未复检阻断项拦，原因 SAFETY_REOPEN_PENDING。
+  - 落在 AmusementInspectionDayGate.reasons；AmusementService.evaluateOpenEligibility 未注入当日闸时的原段也补了同一拦截。核销、开放资格查询、硬超容自动恢复三处共用。
+  - 依据：BSM:1300「检修后必须主管确认才能恢复营业（禁止巡检员单人闭环）」；BSM:1270「主管确认检修通过后，设施才能恢复营业。」
+  - 测试：AmusementReopenPendingJdbcTests 的 recheckedPassStaysBlockedUntilSupervisorApprovesReopen、hardCapacityPauseIsNotLiftedBeforeReopenApproval。
+  406-R1　开放判定改为「当日有合格巡检，且没有任何未复检或待批准的阻断项」。
+  - 新类 AmusementInspectionDayGate，AmusementService 字段注入 inspectionDayGate，evaluateOpenEligibility 注入时用它代替「最新一条」。
+  - 「当日」取 AmusementInspectionPointService.roundStart，即上一个闭店时点（出厂 07:00），与扫码走点的「一轮」同一条界线。项目级、设备级合格巡检都算；有复检的取复检时刻。全部巡检里只要有 pending 或 pending_approval 就拦。
+  - 不满足时报 MISSING_SAFETY_INSPECTION、SAFETY_INSPECTION_NOT_SUBMITTED 或 SAFETY_REOPEN_PENDING。
+  - 依据：PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1298「当日无合格巡检或有未复检阻断项则拒绝核销」；第十八批裁决 84「从上一个闭店时点（出厂 07:00）起做完并合格的巡检算这一天，与扫码走点「一轮」同一条界线」。
+  - 测试：AmusementInspectionDayGateJdbcTests 的 onlyInspectionsSinceLastCloseCountForTheDay、olderUnrecheckedFailureStillBlocksAfterTodaysPass、hardCapacityRecoveryNeedsTodaysPass。
+  407-R1　设备关键／辅助分级与依赖关系，首次和每次变更都经工程或安全复核，保留历史。
+  - 迁移 V769：amusement_devices 加 safety_class、dependency 及组合约束；新建分级申请与历史表 amusement_device_class_changes；新权限码 amusement.device.class.approve。
+  - AmusementDeviceRecord 加 safetyClass、dependency；AmusementDeviceRequest 加 safetyClass、dependency、finalApproverId，理由用 operator_note 且必填。
+  - AmusementService.createDeviceInternal 校验分级，并经 AmusementDeviceClassService.submitInitial 在同一事务提交复核。
+  - 新类 AmusementDeviceClassService：request、decided（复核结案监听）、history；新类 AmusementDeviceClassController：requestAmusementDeviceClassChange、listAmusementDeviceClassChanges。
+  - 复核策略 amusement_device_class_change：动作 amusement.device.class.change，specific_role，审批权限 amusement.device.class.approve。
+  - 关键安全设备改为辅助设备，批准时项目还开着就 409 DEVICE_DOWNGRADE_REQUIRES_PROJECT_STOPPED，整笔批准回滚。
+  - 依据：BSM:1271「每台关键安全设备属于哪一种，须在设备台账中登记……登记内容变更须经工程或安全审批。项目上线后要把某台关键安全设备改为辅助设备，必须重新经过工程或安全审批，并且只能在该项目停运后生效」；决策台账「项目首次上线前，由游乐公司提出设备关键／辅助分类，工程或安全岗位复核通过后生效」「设备分类和每次变更必须保留申请人、复核人、理由、生效时间和历史版本」。
+  - 测试：AmusementDeviceClassificationJdbcTests 的 firstClassificationTakesEffectOnlyAfterEngineeringReview、downgradeOfCriticalDeviceOnlyTakesEffectAfterProjectStops；随改 AmusementStatusBoardJdbcTests.deviceCreatedWithCodeStatusAndIntervalWhileContractLegacyDisabledRejected 和 AmusementServiceTests 的五处建档请求。
+  407-R2　按设备类别判停机范围，并留痕辅助设备停用后能否继续运行的判定。
+  - V769 另建 amusement_device_continue_judgements，并加权限码 amusement.device.continue_judge。
+  - 新类 AmusementDeviceStopScope：stops、projectReasons、deviceStopped。停用来源是巡检超期和巡检不合格。分级未生效的设备超期照旧整项目拦；关键设备有依赖关系，或不依赖但另有关键设备也停用，报 CRITICAL_DEVICE_STOPPED；辅助设备停用后，停用起点之后最新一条判定不是可继续运行（含没有判定），报 AUXILIARY_DEVICE_STOPPED；指定该台设备核销照旧拦。
+  - AmusementService 字段注入 deviceStopScope，evaluateOpenEligibility 注入时用它代替原来两段。AmusementInspectionDayGate 的阻断项不计在役且分级已生效设备的设备级巡检。
+  - 新类 AmusementDeviceContinueJudgementService：judge、stops。新接口 listAmusementDeviceStops、judgeAmusementDeviceContinue。
+  - 依据：BSM:1271「辅助设备只停用该台设备本身，项目是否可以在其余条件下继续运行，由工程岗位或安全岗位判断……判断结论必须留痕，记下是谁判的、什么时间判的、依据了哪几项条件，没有留痕的一律按停止运行处理；关键安全设备……存在依赖关系的，整个游乐项目停止新增核销并停止运行」「停用的设备完成合格巡检后才放行」；DEC-R3B-2026-08-04-22。
+  - 测试：AmusementDeviceStopScopeJdbcTests 的 auxiliaryStopNeedsARecordedContinueJudgement、criticalStopScopeFollowsDependency、deviceLevelFailureFollowsClassification。
+  407-R3　网页设备台账。
+  - 新组件 AmusementDeviceLedgerSection，挂在安全巡检页：设备表、建档分级、申请变更分级、分级历史、停用设备与继续运行判定。
+  - 页面矩阵 ADM-AMU-003 补接口和权限码。
+  - 依据：BSM:1271「须在设备台账中登记」「判断结论必须留痕」。
+  - 测试：AmusementDeviceLedgerSection.test.tsx 三条。
+  409-R1　「仅提示」达到软上限时不生成异常事件。
+  - AmusementService 核销主链的软上限一段：disposal_mode=warn_only 不调 recordOverCapacity。AmusementOverCapacityPolicy、ConfigureOverCapacityPolicyRequest、AmusementRepository 的注释改为 block_hard＝记录异常事件（出厂默认）、warn_only＝仅提示。
+  - 依据：BSM:1267「……「记录异常事件」（超过软上限即生成异常事件留痕，出厂默认）或「仅提示」（只在现场提示、不生成异常事件）；两种方式都不改变硬安全容量的阻断与自动停运」；DEC-R7-02。
+  - 测试：AmusementSoftCapacityDisposalJdbcTests.warnOnlySkipsSoftIncidentAndBothModesStillStopAtHardCapacity；随改 AmusementServiceTests.configureOverCapacityPolicyActuallyEnablesSoftWarnDuringVerification，改用记录异常事件方式。
+  409-R2　后台「项目与场次」页加软上限处置方式入口。
+  - 新组件 AmusementOverCapacityPolicySection，用现有的 getAmusementOverCapacityPolicy 和 configureAmusementOverCapacityPolicy 两个接口。
+  - 页面矩阵 ADM-AMU-001 补接口和权限码；ServerModuleRoutes 加模块行。
+  - 依据：BSM:1267「达到运营容量（软上限）时的处置方式可在后台配置为两种之一」；BSM:1295；ENUM:145。
+  - 测试：AmusementOverCapacityPolicySection.test.tsx 三条。
+  409-R3　达到运营容量时，在现场核销结果里提示（两种处置方式都提示）。
+  - VerificationResponse 加 operatingCapacityReached；新类 AmusementOperatingCapacityNotice.reached；TicketVerificationService.verifyAmusementEntitlement 返回时带上。
+  - 安卓游乐核销屏已达运营容量时多显示一行「已达运营容量（软上限），仍可放行」。
+  - 依据：BSM:1267「运营容量（软上限）只是经营建议线，超过时仅告警提示、仍可放行」。
+  - 测试：AmusementSoftCapacityDisposalJdbcTests.verificationResultFlagsOperatingCapacityReached；TerminalFieldWorkflowTest.amusementVerifyOnlineParsesOperatingCapacityReached。
+- 18CF 契约落地（契约代理）：本段新增 5 个操作。
+  点位补录（404-R1）
+  - 新增 submitAmusementInspectionPointBackfill：POST 游乐巡检点位缺扫码补录。
+    - 请求 AmusementInspectionPointBackfillRequest（必填 idempotency_key、occurred_at、reason、responsible_staff_id、evidence_attachment_ids、result）；响应 AmusementInspectionPointBackfill。
+    - 权限 amusement.safety_inspection.create，终端为工作手机。
+    - 留痕 evidence.manual_backfill_submitted／evidence.manual_backfill_submit_failed；复核动作 amusement.inspection.point_backfill。
+    - 依据：BSM:1300「确需补录的一律须附证据（照片／录音／录像等）并经主管复核后方生效」；DEC-R6-09「补录记录与原始扫码记录并列展示、互不覆盖」。
+  - 既有契约改动：
+    - AmusementInspectionWalkPoint 加 backfill_id；AmusementInspectionPointsView 加 backfills。getAmusementProjectInspectionPoints、replaceAmusementProjectInspectionPoints、checkAmusementInspectionPoint 三个操作共用这两个 schema。
+    - createAmusementSafetyInspection 的说明补：由走点生成的检查项带 backfill_id。
+    - listManualBackfills 的 target_type 加 amusement_inspection_point。
+    - approveSupervisorReview 的说明补：点位补录批准时 409 MANUAL_BACKFILL_TARGET_CHANGED。
+  开放判定（405-R1、406-R1、407-R2）
+  - getAmusementOpenEligibility 补说明：
+    - 「当日」从上一个闭店时点起算。
+    - 任一未复检或待主管批准的巡检都报 SAFETY_REOPEN_PENDING。
+    - 新增 CRITICAL_DEVICE_STOPPED、AUXILIARY_DEVICE_STOPPED。
+  - 依据：BSM:1298「当日无合格巡检或有未复检阻断项则拒绝核销」；PGM:528「②当天没有做过合格巡检的设施不得开放」；第十八批裁决 84。
+  设备分级（407-R1）
+  - 新增 listAmusementDeviceClassChanges：GET，返回 AmusementDeviceClassChange 数组，权限 amusement.device.view。
+  - 新增 requestAmusementDeviceClassChange：POST，请求 AmusementDeviceClassChangeRequest，权限 amusement.device.manage。
+    - 留痕 amusement.device_class.change_submitted／amusement.device_class.change_failed。
+    - 复核动作 amusement.device.class.change，对象 amusement_device_class_change，审批权限 amusement.device.class.approve。
+  - 既有契约改动：
+    - AmusementDeviceRequest 加 safety_class（必填）、dependency、operator_note（必填）、evidence_attachment_ids、final_approver_id。
+    - createAmusementDevice、listAmusementDevices 补说明。
+    - approveSupervisorReview 补 409 DEVICE_DOWNGRADE_REQUIRES_PROJECT_STOPPED。
+  - 依据：BSM:1271「登记内容变更须经工程或安全审批……只能在该项目停运后生效」；决策台账「设备分类和每次变更必须保留申请人、复核人、理由、生效时间和历史版本」。
+  停用设备与继续运行判定（407-R2）
+  - 新增 listAmusementDeviceStops：GET，返回 AmusementDeviceStop 数组，权限 amusement.device.view。
+  - 新增 judgeAmusementDeviceContinue：POST，请求 AmusementDeviceContinueJudgementRequest，响应 AmusementDeviceContinueJudgement，权限 amusement.device.continue_judge。
+    - 留痕 amusement.device.continue_judged／amusement.device.continue_judge_failed。
+    - 错误码 409 DEVICE_NOT_AUXILIARY、DEVICE_NOT_STOPPED。
+  - 依据：BSM:1271「判断结论必须留痕，记下是谁判的、什么时间判的、依据了哪几项条件」；DEC-R3B-2026-08-04-22。
+  软上限处置方式（409-R1）
+  - getAmusementOverCapacityPolicy、configureAmusementOverCapacityPolicy 补说明。
+  - ConfigureOverCapacityPolicyRequest 的 disposal_mode 改为：block_hard＝记录异常事件（出厂默认），warn_only＝仅提示（只在现场提示、不生成异常事件），两者都不改变硬上限阻断与自动停运。
+  - 依据：BSM:1267「达到运营容量（软上限）时的处置方式可在后台配置为两种之一」。
+  现场提示（409-R3）
+  - createTicketVerification 的说明补：响应带 operating_capacity_reached（游乐入场已达运营容量为 true，非游乐核销为 null）。
+  - 依据：BSM:1267「超过时仅告警提示、仍可放行」。
+  校验：npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 均通过。
+- 18CF 汇合段 J（e2e 与门禁）：tests/e2e 不用改。「项目与场次」（ADM-AMU-001）新增的软上限处置区块 AmusementOverCapacityPolicySection、「安全巡检/事故」（ADM-AMU-003）新增的游乐设备台账区块 AmusementDeviceLedgerSection，选了项目才发请求，testid 前缀 amusement-overcap-*、amusement-device-* 跟现有 e2e 选择器和 mock 都不冲突。视觉基线不含这两页，没重拍。合在一起后各项门禁全部为绿：后端全量从空库真迁本段 V768、V769，0 红；前端 typecheck 与全量 vitest、客人三个工作区单测、安卓员工端 gradle test 与 android-app 编译全过；chromium 跑 5 份后台 e2e spec 全过；四份生成物重生成后 verify:p0-contract 全过。契约 yaml 与 json 一致，本段新增 5 个操作：submitAmusementInspectionPointBackfill、listAmusementDeviceClassChanges、requestAmusementDeviceClassChange、listAmusementDeviceStops、judgeAmusementDeviceContinue。不删操作，git diff --check 无问题。
+- 18CF 落地位置补记·文档组（第 404、405、406、407、409 条现状句同步）：按现码就地改 PRD 与下位文档的现状句，各文件升一版并在修订表加一行；不新增业务规则，不扩表。
+  - 游乐基础运营 PRD：
+    - §11B.2：第 373 条实现现状里的「补录未做」改为指向下条，补第 404 条实现现状。工作手机对缺扫码的点位补录（submitAmusementInspectionPointBackfill，AmusementInspectionPointBackfillTarget），经提交人直接上级复核（策略 manual_backfill_amusement_inspection_point）后落走点行，带 backfill_id；待复核期间下一个点位照旧记不上；AmusementInspectionPointService.View 并列返回本轮 backfills，网页与安卓标「人工补录」。
+    - §11B.2「当日无合格巡检或有未复检阻断项的，拒绝核销」下补第 405、406 条实现现状（AmusementInspectionDayGate.reasons）：当日从上一个闭店时点起算；任一巡检未复检或复检通过待主管批准即报 SAFETY_REOPEN_PENDING；核销、getAmusementOpenEligibility、硬超容恢复三处共用。
+    - §11B.1 补第 407 条实现现状：AmusementDeviceClassService 管分级申请与复核，createAmusementDevice 必带分级与理由，requestAmusementDeviceClassChange、listAmusementDeviceClassChanges 管变更与历史，降级时项目开着报 409 DEVICE_DOWNGRADE_REQUIRES_PROJECT_STOPPED；AmusementDeviceStopScope 判停用范围，报 CRITICAL_DEVICE_STOPPED、AUXILIARY_DEVICE_STOPPED；AmusementDeviceContinueJudgementService.judge（judgeAmusementDeviceContinue）与 listAmusementDeviceStops 管辅助设备能否继续运行的判定留痕。故障来源未接（待开发清单第 444 条），停运与停用事件分别落库未做（第 443 条）。
+    - §11A.1 补第 409 条实现现状：「仅提示」不生成异常事件；createTicketVerification 应答带 operating_capacity_reached（AmusementOperatingCapacityNotice.reached）；「项目与场次」页可配软上限处置方式（getAmusementOverCapacityPolicy、configureAmusementOverCapacityPolicy）。
+    - §8「巡检记录」行：补「人工补录」标注与设备台账一块。
+  - 证据留痕与风控 PRD §7.2：补第 404 条实现现状，补录对象由三类扩为四类（amusement_inspection_point）。
+  - 游乐 P0 安全巡检闭环规格：§4 设备主数据行改记分级两列与两张新表；AC-AMU-SAFE-001、004、010 各补实现现状；AC-AMU-SAFE-008 的「补录未做」改为已做。
+  - 游乐开发设计：
+    - §7.9：三行「目标增补」改为 V769 实际的两列 safety_class、dependency；表下「尚未落迁移」句改为已落地。
+    - §7.18：「证据补录与主管复核仍未承载」改为已承载。
+    - §6.4、§6.6.2 补实现现状；§8.7 补本段新增的 5 个接口。
+  - 终端与页面 PRD §6：「游乐作业」「巡检记录」两行补现状（核销提示已达运营容量；走点补录）。
+  - 统一口径基准 D14.2「over_capacity」条：改为硬上限一律落事件、软上限只在「记录异常事件」方式下落；实证补 AmusementSoftCapacityDisposalJdbcTests。
+  - V099–V124 统一规格 §7：三处「软、硬上限均落 incident」按现码改（该文件没有版本行和修订表，未升版）。
+  - 页面矩阵 ADM-AMU-001、ADM-AMU-003 两行：补主要动作、关键字段与实现状态。
+  - 依据：
+    - BSM:1267「「仅提示」（只在现场提示、不生成异常事件）」
+    - BSM:1271「每个游乐项目可以关联多台设备，并区分「关键安全设备」与「辅助设备」」
+    - BSM:1298「当日无合格巡检或有未复检阻断项则拒绝核销」
+    - BSM:1300「确需补录的一律须附证据（照片／录音／录像等）并经主管复核后方生效」
+    - BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人」
+    - PGM:528「②当天没有做过合格巡检的设施不得开放」
+    - DEC-R6-09
+    - 第十八批裁决 84「从上一个闭店时点（出厂 07:00）起做完并合格的巡检算这一天，与扫码走点「一轮」同一条界线」
+  - 校验：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 通过。
+- 18CF 收尾复核修正（2026-11-24）：按收尾复核经反驳核实成立的意见 1～16 与控制席补充修正（意见 1 与 13、5 与 11 与 12 与 14、4 与 9 各是同一缺陷，合并处理）；本组没有迁移，新增操作 0 个，不新增权限码与字段键。
+  ① 意见 1、13（补录数量明细的补录类型）：共用状态码表补 amusement_inspection_point「游乐巡检点位补录」（放在人工补录单另三类旁，不撞键）；MetricRegistry 的 risk.manual_backfill 口径说明与 AnalyticsService 指标目录说明的「当前已接入」补上「游乐巡检点位补录」。依据：PGM:287「界面全中文」；BSM:1823「补录数量」。
+  ② 意见 5、11、12、14（设备台账停用设备表）：AmusementDeviceLedgerSection 停用设备行读接口返回的 dependency，关键安全设备的分级带依赖关系；「最近判定」只对辅助设备显示判定内容或「未判定（按停止运行处理）」，其余行显示「—」。依据：BSM:1271「每台关键安全设备属于哪一种，须在设备台账中登记，作为故障时判定停机范围的依据」，「没有留痕的一律按停止运行处理」只说辅助设备。
+  ③ 意见 3（控制席自定 79，本段修）：AmusementInspectionService.approveReopenInternal 批准恢复营业时，设备最近合格巡检时间改取复检时刻（没有复检取巡检时刻）；JdbcAmusementRepository.updateDeviceLastPassInspection、updateProjectDevicesLastPass 改用 GREATEST，最近合格巡检时间只往后推、不改回更早。游乐 PRD §11B.1 第 407 条现状句同步。依据：BSM:1271「停用的设备完成合格巡检后才放行」；18CF 设计判断第 14 项「合格时点有复检取复检时刻」。
+  ④ 意见 2（控制席自定 80）：工作手机游乐巡检点位补录屏的原时点时刻默认值保留秒（LocalTime.now().withNano(0)），同一分钟内紧接上一个点位补录不再被判早于上一个点位；后端顺序校验不改。
+  ⑤ 意见 4、9：AmusementInspectionDayGateJdbcTests 的本轮起点只取一次，本轮内的巡检时刻取起点后一分钟与当前时刻中较早者，北京时间 07:00～07:01 跑不再假红。
+  ⑥ 意见 10：同一测试类补两条：上一轮不合格、本轮内复检通过并已批准恢复营业的已提交巡检算当日，开放资格放行；本轮只有一条合格未提交的巡检，只报 SAFETY_INSPECTION_NOT_SUBMITTED。
+  ⑦ 意见 6：AmusementSoftCapacityDisposalJdbcTests 在「仅提示」方式下核销，断言核销结果 operating_capacity_reached=true。依据：BSM:1267「「仅提示」（只在现场提示、不生成异常事件）」。
+  ⑧ 意见 7：AmusementDeviceClassificationJdbcTests 补：把只持通用复核权限、不持 amusement.device.class.approve 的上级指定为最终审批人，建档 400 FINAL_APPROVER_LACKS_ROLE（放在保存点里）；辅助设备带依赖关系、理由为空各 400 VALIDATION_FAILED（现码已是 400，实现未改）。
+  ⑨ 意见 8：AmusementInspectionPointBackfillJdbcTests 补：原时点为两天前 400 VALIDATION_FAILED；一张责任人为经理、结果为不通过的补录单批准后，走点行的记录人是该经理、结果是不通过。
+  ⑩ 意见 15：游乐 PRD §11B.1、getAmusementOpenEligibility 说明、本节 18CF 补记 407-R2 统一为「辅助设备停用后，停用起点之后最新一条判定不是可继续运行（含没有判定），即报 AUXILIARY_DEVICE_STOPPED」，与现码及 judgeAmusementDeviceContinue 说明一致；同根的游乐 P0 安全巡检规格第 407 条现状句与 AmusementDeviceStopScope.projectReasons 注释一并改，代码逻辑不改。
+  ⑪ 意见 16：本节控制席判定条里 18BS 的迁移号改为 V727、V728，「无待裁题」改为「第 406 条待裁题已由第十八批裁决 84 答复」；开工与变基提交号照全仓定型写法保留（控制席自定 80）。
+  测试：新增后端用例 4 条（AmusementDeviceStopScopeJdbcTests.approvedRecheckReleasesTheDeviceWithoutRollingBackLastPass（设备级与项目级巡检各批准一次）、AmusementInspectionDayGateJdbcTests 两条、AmusementDeviceClassificationJdbcTests.classificationReviewerMustHoldTheClassApprovePermission）、前端用例 2 条（MetricDetailPage.groups 补录类型一行、AmusementDeviceLedgerSection 停用的关键安全设备行），其余在原有用例里加请求与断言。③与两条前端用例修复前为红；⑥⑦⑧⑨与③的不回退各做变异（当日合格时刻只看巡检时刻、合格未提交恒报缺巡检、现场提示只给「记录异常事件」方式、分级复核策略改为 one_level_up、删补录原时点范围校验、补录落行结果写死通过、落行记录人改写提交人、设备级 updateDeviceLastPassInspection 与项目级 updateProjectDevicesLastPass 的 GREATEST 分两次各自单独去掉），相应用例都变红；变异已还原，逐字节核对一致。
+- 18CF 合并前变基（2026-11-24）：本段自 0ed7c377 变基到 origin/main 2927434e；合并时 OpenAPI 共 1425 个操作（主干 1420）、info.version V1.17、决策台账 V1.46，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

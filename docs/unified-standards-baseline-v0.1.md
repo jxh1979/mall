@@ -1,4 +1,4 @@
-# 统一口径基准 V0.02（跨文档单一权威）
+# 统一口径基准 V0.03（跨文档单一权威）
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
 
@@ -137,8 +137,8 @@
 ### D14.2 游乐超容术语（硬上限 vs 软上限）
 - **硬上限（安全容量，hard cap）**：安全容量上限，达上限**一律阻断**核销（F-OPS-03：人身安全红线，处置模式 `block_hard`/`warn_only` 均**不可旁路**，SESSION_CAPACITY_EXHAUSTED 口径，并触发自动停运）。
 - **软上限（运营容量，soft cap）**：运营容量上限，达上限**告警放行**（不阻断）。
-- **over_capacity（超容）**：无论硬上限阻断还是软上限告警放行，均落 `over_capacity` incident 并发 `amusement.incident.over_capacity` 事件（超容必留痕）；`disposal_mode` 仅作 incident 留痕标注，不改变硬上限阻断行为。
-- 实证：`AmusementServiceTests`（安全容量=硬上限恒阻断且 `warn_only` 不可旁路、运营容量=软上限告警放行，均落 over_capacity 事件）。
+- **over_capacity（超容）**：达硬上限一律落 `over_capacity` incident 并发 `amusement.incident.over_capacity` 事件；达软上限按处置方式——「记录异常事件」（`block_hard`，出厂默认）落 incident 与事件，「仅提示」（`warn_only`）只在现场提示、不生成异常事件（第十八批 CF 段第 409 条）；`disposal_mode` 不改变硬上限阻断行为。
+- 实证：`AmusementServiceTests`（安全容量=硬上限恒阻断且 `warn_only` 不可旁路、运营容量=软上限告警放行，均落 over_capacity 事件）；`AmusementSoftCapacityDisposalJdbcTests`（「仅提示」达软上限不落异常事件、两种方式达硬上限都停运，核销结果带已达运营容量提示）。
 
 ### D14.3 积分状态机术语（pending → confirmed → deducted/reversed）
 - **pending（支付入账未可用）**：支付成功即写 pending，**不计入可用余额**（pending 不可花）。
@@ -195,3 +195,4 @@
 | 2026-06-20 `文档goalP2` | 增 | 新增 D14 新功能统一术语：D14.1 综合体计费（turnover rent/deposit 四动作/CAM/CAM true-up + 库存差异科目方向）、D14.2 游乐超容（硬上限阻断/软上限告警 over_capacity）、D14.3 积分状态机（pending→confirmed→deducted/reversed）、D14.4 企微违规命中（wecom_risk_hits 规则码+risk_level，open→reviewing→confirmed/dismissed）、D14.5 多综合体隔离（project_id scoped 通道）、D14.6 异常责任链（risk_alerts 5 态 + 关闭必须有结论）。每条已 grep 后端/迁移实证，权威指向 v099-v124-feature spec | 把 V099–V124 新功能跨文档共用术语沉淀为单一口径，防止后续各文档各写一套（文档goalP2） |
 | 2026-07-22 | 增 | 新增 D15 全局金额精度/并发/考勤时区/留痕保存/导出脱敏加密/金额变动短信 + 最低消费绝对不按人数 | 用户 2026-07-22 IR 铁律提取轮拍板 8 项跨域口径，同步三份最终解释权业务 HTML（10 处）；防止金额舍入/分账尾差、并发幂等、考勤时区、留痕保存期、导出脱敏加密、金额变动短信各文档写散 |
 | 2026-11-17 | 改 | 版本由历史标题 V0.1（统一格式对应 V0.01）递增为 V0.02；D15.1「补数式拆分不产生尾差」的例子「分红劈分链」改为「分红主理人应得之后的扣除链」，并补分红三方劈分各自四舍五入、尾差单列（第十八批 AQ 段第 234 条 234-R2，迁移 V643） | 代码现状：`DividendMath` 劈分改为各方各自四舍五入、尾差单列；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」 |
+| 2026-11-24 | 改 | 版本 V0.02 → V0.03；D14.2「over_capacity（超容）」条按现码改：软上限处置方式为「仅提示」（`warn_only`）时不生成异常事件，硬上限一律落事件；实证补 `AmusementSoftCapacityDisposalJdbcTests` | 第十八批 CF 段第 409 条 409-R1；BSM:1267 |

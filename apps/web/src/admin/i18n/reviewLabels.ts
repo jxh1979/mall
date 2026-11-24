@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -73,12 +73,14 @@ export const REVIEW_LABELS: Record<string, string> = {
   "security.export.editable_copy": "可编辑版导出申请", export_file: "导出文件",
   // 第十八批 F 段第 14 条 14-R8（BSM 第 1642 行「补录一律进入主管复核队列」）：人工补录三类复核动作与补录单。
   "inventory.trace.scan_backfill": "交接扫码补录", "bar.sales.backfill": "销售归属补录", "bar.service.backfill": "服务责任补录",
+  // 第十八批 CF 段第 404 条 404-R1：游乐巡检点位补录复核动作。
+  "amusement.inspection.point_backfill": "游乐巡检点位补录",
   manual_backfill: "人工补录单",
   // 第十八批 I 段第 87 条 87-R1：会建复核单的其余动作码。码闭集三路：① evaluate（SupervisorReviewService 策略表）；
   // ② 准入闸（V068/V099/V541 中 outcome=block 且有 @GuardedAction(admissionAction) 的行）；③ AccessService 直接建单。
   "staff.payroll.scheme.change": "工资方案变更", "staff.payroll.period.confirm": "工资期间确认", "staff.performance.points.deduct": "绩效扣分",
   "staff.performance.points.appeal": "绩效扣分申诉", "staff.payroll.calendar.publish": "计薪日历发布", "staff.performance.rule.publish": "绩效规则发布",
-  "bar.payroll_rule.adjust": "酒吧薪酬规则调整", "amusement.business_day.configure": "游乐营业日配置", "bar.business_day.configure": "酒吧营业日配置",
+  "bar.payroll_rule.adjust": "酒吧薪酬规则调整", "amusement.business_day.configure": "游乐营业日配置", "amusement.device.class.change": "游乐设备分级变更", "bar.business_day.configure": "酒吧营业日配置",
   "settlement.high_value_threshold.configure": "高价值判定阈值调整", "inventory.purchase_request": "采购申请", "inventory.purchase_terminate": "采购余量终止",
   "inventory.supply_contract": "供货合同审批", "inventory.purchase_return": "采购退货", "inventory.purchase_prepayment_resolution": "预付款余额处理",
   "contract.new": "新建合同", "contract.expiry_termination": "合同到期终止", "contract.change": "合同变更", "energy.reading_anomaly_confirm": "能耗异常读数核实",
@@ -96,7 +98,7 @@ export const REVIEW_LABELS: Record<string, string> = {
   contract_change: "合同变更单", contract_settlement: "合同到期结算单", ticket_reward_config: "积分规则版本", ticket_points_billing_rule: "积分结算规则",
   ticket_points_calendar: "积分结算日历", ticket_points_portal_outage: "积分平台故障登记", ticket_points_objection_resolution: "积分账单异议处理",
   purchase_prepayment_resolution: "预付款余额处理单", inventory_transfer_order: "流转单", inventory_quarantine_disposition: "隔离处置单", supply_contract: "供货合同",
-  inventory_purchase_request: "采购申请单", purchase_quantity_resolution: "采购余量处理单", purchase_return: "采购退货单", amusement_business_day_config: "游乐营业日配置",
+  inventory_purchase_request: "采购申请单", purchase_quantity_resolution: "采购余量处理单", purchase_return: "采购退货单", amusement_business_day_config: "游乐营业日配置", amusement_device_class_change: "游乐设备分级申请",
   energy_reading_verification: "能耗读数核实单", energy_review_settings: "能耗核实设置", high_value_threshold: "高价值判定阈值", dealer_return_freight: "经销首程运费调减",
   dealer_return: "经销退货单", dealer_order_refund: "经销订单退款", dealer_delivery_resolution: "经销交付差异处理单", staff_performance_score: "绩效扣分记录",
   staff_payroll_scheme: "工资方案", staff_payroll_calendar: "计薪日历", staff_payroll_period: "工资期间", staff_performance_rule: "绩效规则",

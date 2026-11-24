@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import android.app.Activity
 import android.content.Intent
@@ -44,13 +44,13 @@ import kotlin.concurrent.thread
 // TK-06：入场人脸拍照的回调请求码（与 ZXing 扫码 0xc0de 区分）。
 private const val FACE_SHOT_REQUEST = 0x7E06
 // 第 84 条 84-R2：交接补录选证据的回调请求码。
-private const val TRACE_EVIDENCE_REQUEST = 0x7E84
+internal const val TRACE_EVIDENCE_REQUEST = 0x7E84
 // 第 123 条 123-R4：定位权限申请的请求码。
 private const val LOCATION_PERMISSION_REQUEST = 0x7E7B
 
 class MainActivity : Activity() {
 
-  private val store = InMemoryLocalStore()
+  internal val store = InMemoryLocalStore()
   // 平板 POS 绑定持久化：首次配置本机所属酒吧后写入，之后不再追问（跨启动保留）。
   private val posPrefs: SharedPreferences by lazy { getSharedPreferences("bar_pos", Context.MODE_PRIVATE) }
   private var posBarId: String? = null
@@ -1182,8 +1182,10 @@ class MainActivity : Activity() {
           action = { workflow.amusementVerifyOnline(code) },
           // PGM:287：只显示中文状态与核销号，不显示 result_reason 机器码。
           // 第十八批 BO 段 261-B06-R1（PGM:303）：重复提交返回第一次的结果时先出「已完成」提示。
+          // 第十八批 CF 段 409-R3（BSM:1267「超过时仅告警提示、仍可放行」）：已达运营容量时多提示一行。
           onSuccess = { r ->
-            status.text = listOfNotNull(workflow.operationKeys.completedNotice, "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}").joinToString("\n")
+            status.text = listOfNotNull(workflow.operationKeys.completedNotice, "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}" +
+              (if (r.operatingCapacityReached == true) "\n已达运营容量（软上限），仍可放行" else "")).joinToString("\n")
           },
           onError = { status.text = "游乐核销失败：${friendly(it)}" },
         )
@@ -1463,7 +1465,7 @@ class MainActivity : Activity() {
 
   /** 幂等键按「交接单＋段」：失败重试沿用同一个键，成功后才换，网络重试不会变成重复扫码。 */
   private val traceKeys = java.util.concurrent.ConcurrentHashMap<String, String>()
-  private var evidencePickResult: ((List<android.net.Uri>) -> Unit)? = null
+  internal var evidencePickResult: ((List<android.net.Uri>) -> Unit)? = null
 
   private fun traceKey(scope: String): String = traceKeys.getOrPut(scope) { java.util.UUID.randomUUID().toString() }
 
@@ -1629,7 +1631,7 @@ class MainActivity : Activity() {
   }
 
   /** 证据扩展名：取所选文件显示名的扩展名，没有时按内容类型反查（服务端按扩展名判定照片、录音、录像）；只留 ASCII 小写字母数字，签名规范串里的文件名与服务端一致。 */
-  private fun evidenceExtension(uri: android.net.Uri): String {
+  internal fun evidenceExtension(uri: android.net.Uri): String {
     val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
       ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
     val ext = name?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.isNotBlank() }
