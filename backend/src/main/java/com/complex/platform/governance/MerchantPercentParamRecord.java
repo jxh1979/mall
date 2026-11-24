@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 /**
  * 第十八批 C 段：酒吧（商户）按酒吧可配的百分比参数，值与上下限同配（范式同 TK-27 {@link MerchantPendingClearAlertRecord}）。
@@ -17,7 +17,7 @@ public record MerchantPercentParamRecord(
     public enum Param {
         /** 第 15 条 BSM:1468「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限」：HTML 未给出厂值，未配置不自动停用。 */
         STAFF_BOOKING_NO_SHOW_LIMIT("staff_booking_no_show_limit", "staff-booking-no-show-limit", "员工代订爽约率上限", null, 0),
-        /** 第 17 条 BSM:2015 损耗率阈值「按酒吧可配，出厂默认 5%，须同时配置上下限」；第十八批裁决 4 标准损耗＝标准出酒量×该阈值，故下限不得为 0。 */
+        /** 第 17 条 BSM:2015 损耗率阈值「按酒吧可配，出厂默认 5%，须同时配置上下限」；第十八批裁决 4 标准损耗＝标准出酒量×该阈值，故下限不得为 0；调整只由最高权限本人办理（第十八批 CG 段第 408 条）。 */
         POUR_LOSS_RATE("pour_loss_rate", "pour-loss-rate", "损耗率阈值", 5, 1);
 
         private final String column;

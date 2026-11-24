@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -40,7 +40,9 @@ describe("formatBusinessStatus 新增枚举域中文化", () => {
     expect(formatBusinessStatus("temporary_permission")).toBe("临时权限");
     expect(formatBusinessStatus("success")).toBe("成功");
     expect(formatBusinessStatus("failure")).toBe("失败");
-    expect(formatBusinessStatus("to_work_order")).toBe("转工单");
+    // 第十八批 CG 段第 410 条：巡检异常模式显示名按 PGM:846 原词。
+    expect(formatBusinessStatus("light")).toBe("轻记录/重转整改工单分级");
+    expect(formatBusinessStatus("to_work_order")).toBe("全部转整改工单");
     expect(formatBusinessStatus("abnormal")).toBe("异常");
   });
 

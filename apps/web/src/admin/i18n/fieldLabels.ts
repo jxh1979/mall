@@ -1,4 +1,4 @@
-// 文件版本：V0.58
+// 文件版本：V0.59
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -455,6 +455,7 @@ export const FIELD_LABELS: Record<string, string> = {
   incident_id: "事件单号",
   exception_id: "异常单号",
   abnormal_note: "异常说明",
+  abnormal_level: "异常分级",
   alert_id: "告警编号",
   alert_type: "告警类型",
   hit_id: "命中记录",
@@ -3641,6 +3642,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   alarm_type: { elevator: "电梯扶梯", hvac: "暖通空调", power: "配电供电", water_fire: "给排水消防" },
   result: { pass: "通过", fail: "不通过" },
   overall_result: { pass: "通过", fail: "不通过", pending_rectification: "待整改" },
+  // 第十八批 CG 段第 410 条 410-R2（PGM:846「「轻记录/重转整改工单」分级」）：巡检异常分级（同楼宇运营页、外包巡检页分级下拉）。
+  abnormal_level: { light: "轻记录", heavy: "重转整改工单" },
   // 第十八批 AP 段第 229 条 229-R6：游乐安全复检结论可选不通过（同页内复检结论下拉）。
   action_result: { pass: "通过", fail: "不通过", rectified: "已整改" },
   // 第十八批 AN 段第 227 条 227-R1（PGM:287）：证据事件类型只收正常业务会进证据事件表的网页两种（审计事件页、商户准入审计页的导出登记），

@@ -36,6 +36,8 @@ public class FacilityInspectionService {
             Set.of("pending", "in_progress", "normal", "abnormal", "rectifying", "rechecked", "closed");
     static final Set<String> SCHEDULE_MODES = Set.of("template", "manual", "route");
     static final Set<String> ABNORMAL_MODES = Set.of("light", "to_work_order");
+    // 第十八批 CG 段第 410 条：分级模式（abnormal_mode=light）下异常的轻重——light 轻记录、heavy 重转整改工单。
+    static final Set<String> ABNORMAL_LEVELS = Set.of("light", "heavy");
     static final Set<String> RESULTS = Set.of("normal", "abnormal");
     private static final String PERM = "facility.inspection.manage";
     private static final String TEMPLATE_BUSINESS_TYPE = "facility_inspection_template";
@@ -179,6 +181,7 @@ public class FacilityInspectionService {
         if ("abnormal".equals(result) && abnormalNote == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "abnormal_note is required");
         }
+        boolean toWorkOrder = "abnormal".equals(result) && abnormalToWorkOrder(cur, r.abnormalLevel());
         validateGps(r.gpsLat(), r.gpsLng());
 
         Instant now = Instant.now();
@@ -190,7 +193,7 @@ public class FacilityInspectionService {
                 actor.id(), now, now);
         repository.insertRecord(rec);
 
-        String finalStatus = applySubmitTransition(cur, rec, now);
+        String finalStatus = applySubmitTransition(cur, rec, toWorkOrder, now);
         audit("facility.inspection_record_submitted", RECORD_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
                 Map.of("task_id", cur.id(), "result", result, "task_status", finalStatus));
         return rec;
@@ -213,6 +216,7 @@ public class FacilityInspectionService {
         }
         validateGps(r.gpsLat(), r.gpsLng());
         String abnormalNote = requireText(r.abnormalNote(), "abnormal_note");
+        boolean toWorkOrder = abnormalToWorkOrder(cur, r.abnormalLevel());
         Instant now = Instant.now();
         FacilityInspectionTaskRecord started = cur;
         if ("pending".equals(cur.status())) {
@@ -225,7 +229,7 @@ public class FacilityInspectionService {
                 trimToNull(r.note()), abnormalNote, actor.id(), now, now);
         repository.insertRecord(rec);
 
-        String finalStatus = applySubmitTransition(started, rec, now);
+        String finalStatus = applySubmitTransition(started, rec, toWorkOrder, now);
         audit("facility.inspection_exception_reported", REPORT_EXCEPTION_PERM, RECORD_BUSINESS_TYPE,
                 rec.id(), r.idempotencyKey(), Map.of("task_id", started.id(), "task_status", finalStatus));
         return rec;
@@ -330,7 +334,7 @@ public class FacilityInspectionService {
                 trimToNull(r.spaceId()), now, now);
     }
 
-    private String applySubmitTransition(FacilityInspectionTaskRecord cur, FacilityInspectionRecordRecord rec, Instant now) {
+    private String applySubmitTransition(FacilityInspectionTaskRecord cur, FacilityInspectionRecordRecord rec, boolean toWorkOrder, Instant now) {
         if ("normal".equals(rec.result())) {
             FacilityInspectionTaskRecord normal = withTaskState(cur, "normal", cur.startedAt(), now, now);
             repository.updateTask(normal);
@@ -341,7 +345,7 @@ public class FacilityInspectionService {
 
         FacilityInspectionTaskRecord abnormal = withTaskState(cur, "abnormal", cur.startedAt(), null, now);
         repository.updateTask(abnormal);
-        if ("to_work_order".equals(abnormalModeFor(cur))) {
+        if (toWorkOrder) {
             FacilityInspectionTaskRecord rectifying = withTaskState(abnormal, "rectifying", abnormal.startedAt(), null, now);
             repository.updateTask(rectifying);
             eventPublisher.publishEvent(new FacilityInspectionAbnormalEvent(
@@ -352,6 +356,17 @@ public class FacilityInspectionService {
         FacilityInspectionTaskRecord closed = withTaskState(abnormal, "closed", abnormal.startedAt(), now, now);
         repository.updateTask(closed);
         return closed.status();
+    }
+
+    /**
+     * 第十八批 CG 段第 410 条（PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式，整改后复检、主管确认闭环」）：
+     * 全部转整改工单模式下异常一律转工单；分级模式（不挂模板的任务同此）由发现异常的巡检人提交时选轻重，缺或非法 400，重的转整改工单。
+     */
+    private boolean abnormalToWorkOrder(FacilityInspectionTaskRecord task, String abnormalLevel) {
+        if ("to_work_order".equals(abnormalModeFor(task))) {
+            return true;
+        }
+        return "heavy".equals(normalizeAllowed(abnormalLevel, "abnormal_level", ABNORMAL_LEVELS));
     }
 
     private String abnormalModeFor(FacilityInspectionTaskRecord task) {

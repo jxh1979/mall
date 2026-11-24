@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.06
+  version: V1.07
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -12881,7 +12881,7 @@ paths:
         - platform
       operationId: configureMerchantPourLossRate
       summary: 配置酒吧损耗率阈值(值与上下限同配)
-      description: 第十八批 C 段第 17 条：配置酒吧损耗率阈值。value_pct、min_pct、max_pct 三者必填，1≤min_pct≤value_pct≤max_pct≤100（标准损耗＝标准出酒量×该阈值，阈值为 0 即零损耗，违反 BSM L1065「不得按零损耗记账」），否则 400 VALIDATION_FAILED。未配采集设备的吧台按杯出品据此记标准损耗。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
+      description: 第十八批 C 段第 17 条：配置酒吧损耗率阈值。value_pct、min_pct、max_pct 三者必填，1≤min_pct≤value_pct≤max_pct≤100（标准损耗＝标准出酒量×该阈值，阈值为 0 即零损耗，违反 BSM L1065「不得按零损耗记账」），否则 400 VALIDATION_FAILED。未配采集设备的吧台按杯出品据此记标准损耗。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。第十八批 CG 段第 408 条（BSM L2015「安全阈值」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」）：只由持授权 U 盘密钥的最高权限本人办理，提交即生效；其他账号（含平台管理员）403 MASTER_APPROVAL_REQUIRED，不保存，记 merchant.pour_loss_rate_config_failed。
       x-permission: merchant.profile.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -33304,7 +33304,7 @@ paths:
         - facility
       operationId: submitFacilityInspectionRecord
       summary: 提交巡检记录
-      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。第十八批 CG 段第 410 条（PGM:846）：分级模式下 light 记录后任务关闭、不建工单；heavy 转整改中并自动建整改工单；全部转整改工单模式下异常一律转工单。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -37116,7 +37116,7 @@ paths:
         - facility
       operationId: reportInspectionException
       summary: 外包对被指派巡检任务上报异常
-      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。第十八批 CG 段第 410 条（PGM:846）：分级模式下 light 记录后任务关闭、不建工单；heavy 转整改中并自动建整改工单；全部转整改工单模式下异常一律转工单。
       x-permission: facility.inspection.report_exception_assigned
       x-data-scope: self
       x-terminal-allowed:
@@ -37127,6 +37127,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
         "403":
@@ -37189,6 +37191,12 @@ paths:
                   type: string
                   description: 异常说明（必填）。
                   maxLength: 1000
+                abnormal_level:
+                  type: string
+                  description: 异常分级：light 轻记录、heavy 重转整改工单。任务所用模板的 abnormal_mode 为 light（「轻记录/重转整改工单」分级，不挂模板的任务同此）时，异常必填，缺或非法 400 VALIDATION_FAILED；为 to_work_order（全部转整改工单）时不读。
+                  enum:
+                    - light
+                    - heavy
               required:
                 - idempotency_key
                 - abnormal_note
@@ -77421,7 +77429,7 @@ components:
           minimum: 1
         abnormal_mode:
           type: string
-          description: 异常处理方式，默认 light。
+          description: 异常处理方式：light＝「轻记录/重转整改工单」分级（默认），to_work_order＝全部转整改工单。
           enum:
             - light
             - to_work_order
@@ -77574,6 +77582,12 @@ components:
           type: string
           description: 异常说明。
           maxLength: 1000
+        abnormal_level:
+          type: string
+          description: 异常分级：light 轻记录、heavy 重转整改工单。任务所用模板的 abnormal_mode 为 light（「轻记录/重转整改工单」分级，不挂模板的任务同此）时，异常必填，缺或非法 400 VALIDATION_FAILED；为 to_work_order（全部转整改工单）时不读。
+          enum:
+            - light
+            - heavy
     EnergyMeterRequest:
       type: object
       description: 能源表计新建/更新请求。

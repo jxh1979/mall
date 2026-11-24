@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.35
+文档版本：V1.36
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12435,3 +12435,57 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本组新增操作 0 个，迁移 0 个。
 - 18CH 合并前变基（2026-11-24）：本段自 6068f50e 变基到 origin/main 2a69a7c9；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.06、决策台账 V1.35，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CH 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 01044412 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7321 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2079；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 09:56 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CG 落地位置补记（2026-11-20）：第十八批 CG 段（batch105）按 18CG 只读设计实现待开发清单第 408、410 条（损耗率阈值与楼宇巡检分级组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CG 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CG 段，batch105）实现待开发清单第 408、410 条（18CG 只读设计 b105-audit/d6-cg.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 408-R1、410-R1、410-R2。设计旁见（楼宇巡检正常结果与轻记录异常提交后直接关闭、不经主管确认，PGM:844）设计旁见由控制席另行登记为待核实新条目（第 424 条起），本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2bd98895 开工（第六轮 13 段并行），变基到 2bd98895 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CG 落地位置补记·G1-d6-cg（第 408 条 408-R1；第 410 条 410-R1、410-R2；本段新增 OpenAPI 操作 0、迁移 0（预留 V772～V775 未用）、权限码 0）
+  一、408-R1：酒吧损耗率阈值只由最高权限本人调整，其他账号 403 MASTER_APPROVAL_REQUIRED。
+  - 改法：PlatformService.configurePercentParam 交给 executeWrite 的范围闸（scopeGate）原来只调 requireMerchant（merchant.profile.manage），现改为先 requireMerchant，再在参数为 MerchantPercentParamRecord.Param.POUR_LOSS_RATE、且当前操作者不是持授权 U 盘密钥的最高权限（PlatformService.isMasterAuthority）时，抛 403 MASTER_APPROVAL_REQUIRED「损耗率阈值是安全阈值，调整须由最高权限本人办理」。
+  - 这道闸在幂等之前。被拒时不保存，executeWrite 记 merchant.pour_loss_rate_config_failed（带请求的幂等键）。最高权限本人提交即生效，不建审批单，记 merchant.pour_loss_rate_configured，操作人即最高权限，这条审计事件就是留痕。
+  - 员工代订爽约率上限（Param.STAFF_BOOKING_NO_SHOW_LIMIT）是业务参数，照旧只要商户资料写权限。
+  - 注释同步：方法注释删去「HTML 未写审批级别」，改写依据；Param.POUR_LOSS_RATE 与 PlatformController.configurePourLossRate 的注释一并改。
+  - 前端不改：非最高权限在后台「组织与商户」点「损耗率阈值」保存时，后端的中文提示经 reportWriteFailure 显示。不加列、不加迁移。
+  - 契约：configureMerchantPourLossRate 的说明补同口径一句（契约组统一改）；403 已声明，x-permission 不变。
+  - 依据：BSM:2015「损耗率（当期损耗量 ÷ 标准出酒量）超过后台配置的阈值即转核查工单（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）。」；DEC-CFG-2026-08-03-01「参数分三层：法定值不可配；安全阈值可配但须最高权限审批并留痕；其余业务参数一律可配。三层一律在参数原句里字面标出，不设临场判定」；DEC-R3-2026-08-04-29「损耗率超过后台配置阈值即转核查工单（安全阈值、按酒吧可配、出厂默认 5%）」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；DEC-R3-2026-08-04-41。范式同 InventoryService.configureManualPickupPolicy、ManualBackfillService.savePolicy。
+  - 测试：MerchantBarPercentParamsJdbcIntegrationTests.pourLossRateOnlyMasterAdjusts_staffWithManageForbidden（新）。同类 pourLossRate_unconfiguredFactory5_configuredReadBack_partialOutOfBoundsOrZeroMinRejected 的写口改用最高权限会话。BarPourStandardLossJdbcIntegrationTests、BarGiftPourStandardLossJdbcIntegrationTests、BarPourVolumeStockJdbcIntegrationTests 夹具里配置损耗率阈值的那一处改用最高权限会话。
+  二、410-R1：楼宇巡检在「轻记录/重转整改工单」分级模式下，异常按巡检人所选轻重分流，重的转整改工单。
+  - 改法：请求体 FacilityInspectionRecordSubmitRequest、FacilityInspectionExceptionReportRequest 各加 abnormalLevel（蛇形键 abnormal_level：light 轻记录、heavy 重转整改工单）。
+  - FacilityInspectionService 新增私有方法 abnormalToWorkOrder：
+    - 任务所用模板 abnormal_mode 为 to_work_order（全部转整改工单）时，异常一律转工单，不读分级；
+    - 为 light（分级，不挂模板的任务同此）时分级必填，缺或非法 400 VALIDATION_FAILED（中文为「异常分级未填写」「异常分级格式不正确」），记录不落、任务状态不变；
+    - 选 heavy 的转工单。
+  - submitRecordOnce（结果为异常时）与 reportExceptionOnce 都在落记录、改任务状态之前算出是否转工单，传给 applySubmitTransition（新增参数 toWorkOrder）。
+  - 转工单与全部转整改工单走同一条现成路径：abnormal→rectifying，发布 FacilityInspectionAbnormalEvent，由 FacilityWorkOrderService.onInspectionAbnormal 建整改工单（rectification／normal）并回写 work_order_id；整改后照旧 recheck、supervisor-confirm 闭环。轻记录照旧 abnormal→closed，不建工单。
+  - 轻重不落库，审计元数据不加键。码值 light、to_work_order 保留，不改表、不加迁移。FieldLabels 加 abnormal_level「异常分级」。
+  - 契约：submitFacilityInspectionRecord、reportInspectionException 的请求体（FacilityInspectionRecordSubmitRequest schema 与 reportInspectionException 内联请求体）加 abnormal_level，两个操作说明各补一句；FacilityInspectionTemplateRequest.abnormal_mode 说明改写为两种模式原词。操作数不变。
+  - 依据：PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式，整改后复检、主管确认闭环」；PGM:842「巡检任务分派到人，现场扫码或定位留痕，发现异常生成整改工单。」；PGM:843「任务状态：待执行、执行中、正常、发现异常、整改中、已复检、已关闭。」
+  - 测试：FacilityInspectionAbnormalLevelJdbcIntegrationTests（新）的 gradedHeavyRaisesRectificationOrder、gradedLightRecordsAndCloses、gradedWithoutLevelRejected、untemplatedHeavyRaisesRectificationOrder、allToWorkOrderIgnoresLevel、gradedExceptionReportHeavyRaisesRectificationOrder；FacilityInspectionServiceTests.abnormalGradedHeavyPublishesEventAndRectifies（新），abnormalLightModeRecordsAndClosesWithoutWorkOrderEvent 改为带 light；FacilityInspectionWebShape229Tests.outsourcedExceptionReportKeepsNoFabricatedEvidence 请求体补 abnormal_level=light；FacilityInspectionControllerTests 两处构造补实参。
+  三、410-R2：后台巡检记录与外包上报异常在分级模式下选轻重，异常模式显示名按 HTML 原词。
+  - 改法（楼宇运营页 FacilityWorkbenchPage）：所选任务的模板不是全部转整改工单（含不挂模板、找不到模板），且巡检结果选「异常」时，出「异常分级」下拉（请选择分级／轻记录／重转整改工单）。未选时提示「请选择异常分级：轻记录或重转整改工单」，不提交；选了请求体带 abnormalLevel。页内码值中文和模板表单「异常模式」下拉改为「轻记录/重转整改工单分级」「全部转整改工单」。
+  - 改法（外包巡检页 VendorInspectionsPage）：同样的下拉放在「异常说明」与「异常上报说明」之间，所选任务为分级模式才显示。「记录」（结果为异常时）与「上报异常」未选时提示同一句、不发请求；选了请求体带 abnormalLevel。
+  - 共用码表 formatBusinessStatus（customer-core statusLabels）的 light、to_work_order 显示名同改。apps/web fieldLabels.ts 加 abnormal_level「异常分级」，KEY_VALUE_LABELS 加 abnormal_level（light 轻记录、heavy 重转整改工单）。页面矩阵、路由、权限码不变。
+  - 依据：PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式」。
+  - 测试：FacilityWorkbenchPage.abnormallevel.test.tsx（新）的「分级模式任务提交异常须选轻重：不选拦下不发请求，选重后请求体带 abnormalLevel=heavy」「全部转整改工单模式任务不出分级、请求体不带 abnormalLevel；模板异常模式两项按 HTML 原词」；VendorInspectionsPage.test.tsx「不选轻重上报异常被拦下、不发请求；选重后上报请求体带 abnormal_level=heavy」（新）、「记录：结果为异常时不选轻重被拦下、不发请求；选重后记录请求体带 abnormal_level=heavy」（新）；FacilityWorkbenchPage.rowdetail.test.tsx、VendorInspectionsPage.test.tsx 模板抽屉、statusLabels.test.ts 的显示名断言改为 HTML 原词。
+- 18CG 契约（K-contract）。本段新增操作 0，无迁移（预留 V772～V775 未用）。yaml 与 json 两份同步就地改。
+  - 408-R1：configureMerchantPourLossRate 的 description 末尾补「第十八批 CG 段第 408 条（BSM L2015「安全阈值」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」）：只由持授权 U 盘密钥的最高权限本人办理，提交即生效；其他账号（含平台管理员）403 MASTER_APPROVAL_REQUIRED，不保存，记 merchant.pour_loss_rate_config_failed。」x-permission 仍为 merchant.profile.manage，403 已声明，不加 x-failure-codes。对应代码：PlatformService.configurePercentParam 的 scopeGate（isMasterAuthority 闸）。依据：BSM:2015 原句「损耗率（当期损耗量 ÷ 标准出酒量）超过后台配置的阈值即转核查工单（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」。测试：MerchantBarPercentParamsJdbcIntegrationTests.pourLossRateOnlyMasterAdjusts_staffWithManageForbidden。
+  - 410-R1：
+    · schema FacilityInspectionRecordSubmitRequest 与 reportInspectionException 的内联请求体，各在 abnormal_note 旁加 abnormal_level（string，enum light/heavy，不进 required）。说明：模板 abnormal_mode 为 light（分级，不挂模板的任务同此）时异常必填，缺或非法 400 VALIDATION_FAILED；为 to_work_order 时不读。
+    · submitFacilityInspectionRecord 与 reportInspectionException 的 description 末尾各补「第十八批 CG 段第 410 条（PGM:846）：分级模式下 light 记录后任务关闭、不建工单；heavy 转整改中并自动建整改工单；全部转整改工单模式下异常一律转工单。」
+    · reportInspectionException 照现码补声明 400 响应。
+    · FacilityInspectionTemplateRequest.abnormal_mode 说明改为「异常处理方式：light＝「轻记录/重转整改工单」分级（默认），to_work_order＝全部转整改工单。」
+    · 对应代码：FacilityInspectionRecordSubmitRequest、FacilityInspectionExceptionReportRequest 的 abnormalLevel；FacilityInspectionService.abnormalToWorkOrder、applySubmitTransition。
+    · 依据：PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式，整改后复检、主管确认闭环」。
+    · 测试：FacilityInspectionAbnormalLevelJdbcIntegrationTests、FacilityInspectionServiceTests.abnormalGradedHeavyPublishesEventAndRectifies。
+- 18CG 汇合段 J（e2e 与门禁）：
+  - e2e 改法与位置：tests/e2e 不改，视觉基线不重拍。
+    - full-admin-remaining.spec.ts 的 ADM-REM-05：外包会话的 mock 任务 fit-1 挂全部转整改工单模板（template-security-1，abnormal_mode=to_work_order）。用例先等模板表出现「夜间安保模板」再点上报异常，所以 VendorInspectionsPage 不出分级下拉，上报照旧不带 abnormal_level。
+    - ADM-FAC-001 只核楼宇运营工作台三张表可见，不提交巡检记录。
+    - 没有 e2e 断言模板异常模式的旧显示名（轻度告警、转工单），也没有 e2e 调用 configureMerchantPourLossRate。
+    - 四张视觉基线（overview、ops-readiness、bar-orders、dynamic-pricing）都不含本段改的页面。
+  - 门禁结论：门禁链 b105_j_chain.sh 已跑完：后端全量（重建空库）7195 测，0 失败 0 错误；后台前端 typecheck 0 错，vitest 366 个文件 2118 测全过；客人三个工作区单测（customer-app 131、customer-miniapp 85、customer-core 77）全过；安卓员工端单测 127 测全过，android-app 编译通过；chromium 后台五份 spec 33 条全过；四份生成物重生成后与工作树一致，verify:p0-contract、verify:security-baseline 绿；verify:entry-doc-baseline 当时报入口文档快照落后，属合并前汇总重写范围。
+    - 已核：yaml 与 json 深比较一致，git diff --check 干净。
+    - 本段增量：新增 0 个操作；改说明或结构的既有操作 3 个（configureMerchantPourLossRate、submitFacilityInspectionRecord、reportInspectionException）；改动的 schema 2 个（FacilityInspectionRecordSubmitRequest 加 abnormal_level，FacilityInspectionTemplateRequest 改 abnormal_mode 说明）；reportInspectionException 的请求体也加 abnormal_level；本段无迁移。
+- 18CG 文档组（D-docs）：两份 PRD 按现码写成现状。①docs/bar-business-operations-product-prd-v0.1.md：§7.5A「损耗率阈值」条末尾补「调整只由最高权限本人办理（DEC-CFG-2026-08-03-01；第十八批 CG 段第 408 条），提交即生效；其他账号（含平台管理员）403 MASTER_APPROVAL_REQUIRED，不保存，记 merchant.pour_loss_rate_config_failed」，对应 PlatformService.configurePercentParam 的范围闸与契约 configureMerchantPourLossRate 的说明；修订表加一行。依据：BSM:2015「（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」②docs/building-operations-prd-v1.0.md：§1 枚举表 abnormal_mode 行的中文名改为「「轻记录/重转整改工单」分级 / 全部转整改工单」；§4 异常记录条改写为：分级模式（light，不挂模板的任务同此）下，提交异常记录与上报异常须带 abnormal_level（light 轻记录、heavy 重转整改工单，由巡检人选），缺或非法 400 VALIDATION_FAILED；light 记录后直接关闭、不建工单；heavy 与 to_work_order 同走 rectifying 并自动建整改工单，之后照旧复检、主管确认闭环。后台楼宇运营工作台巡检记录区与外包巡检任务页在分级模式下选轻重。对应 FacilityInspectionService.abnormalToWorkOrder 与 applySubmitTransition、schema FacilityInspectionRecordSubmitRequest、submitFacilityInspectionRecord 与 reportInspectionException 的 abnormal_level；变更日志加一行。依据：PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式，整改后复检、主管确认闭环」。本组没有测试改动；本组新增操作 0、迁移 0。
+- 18CG 合并前变基（2026-11-24）：本段自 2bd98895 变基到 origin/main 593bdf7b；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.07、决策台账 V1.36，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CG 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 937645bb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7329 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2083；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 10:35 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

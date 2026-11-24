@@ -123,7 +123,7 @@ describe("FacilityWorkbenchPage 整行明细抽屉 + 零英文", () => {
     // 巡检模板
     fireEvent.click(await screen.findByTestId("facility-inspection-template-tpl-1"));
     expect(within(drawer()).getByText("巡检模板明细 · 消防巡检模板")).toBeTruthy();
-    expect(within(drawer()).getByText("转工单")).toBeTruthy(); // abnormalMode=to_work_order
+    expect(within(drawer()).getByText("全部转整改工单")).toBeTruthy(); // abnormalMode=to_work_order（第十八批 CG 段第 410 条：按 PGM:846 原词）
   });
 
   it("巡检任务整行可点 → 抽屉含中文排程/日期；巡检记录表整行可点", async () => {

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -510,7 +510,10 @@ public class PlatformService {
     /**
      * 第十八批 C 段：配置酒吧（商户）百分比参数。BSM:1468、BSM:2015「须同时配置上下限」，按仓库「值与上下限同配」范式（同 TK-27）：
      * 值、下限、上限三者同填，下限不小于该参数的下限底线（损耗率阈值为 1，见 {@link MerchantPercentParamRecord.Param}）、上限不大于 100，值在闭区间内，否则 400。
-     * 不涉钱（爽约率上限只决定是否停用代订权限；损耗量不进任何金额计算），HTML 未写审批级别，不走版本审批。
+     * 不涉钱（爽约率上限只决定是否停用代订权限；损耗量不进任何金额计算），不走版本审批。员工代订爽约率上限是业务参数（BSM:1468），只要商户资料写权限。
+     * 第十八批 CG 段第 408 条：损耗率阈值是安全阈值（BSM:2015、DEC-R3-2026-08-04-29），按 DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」
+     * 由最高权限本人办理（范式同 InventoryService.configureManualPickupPolicy、ManualBackfillService.savePolicy；BSM:576 本人发起的操作不需要经过任何审批），
+     * 其他账号 403 MASTER_APPROVAL_REQUIRED，闸在幂等之前、被拒记失败审计；留痕即 executeWrite 审计事件。
      */
     public MerchantPercentParamRecord configurePercentParam(String merchantId, MerchantPercentParamRecord.Param param,
                                                             com.complex.platform.governance.dto.MerchantPercentParamRequest request) {
@@ -519,7 +522,12 @@ public class PlatformService {
         String event = "merchant." + param.column();
         return executeWrite("configurePercentParam:" + param.column() + ":" + id, request == null ? null : request.idempotencyKey(),
                 request, MerchantPercentParamRecord.class, event + "_configured", event + "_config_failed",
-                "merchant.profile.manage", "merchant", () -> requireMerchant(id, "merchant.profile.manage"), () -> {
+                "merchant.profile.manage", "merchant", () -> {
+                    requireMerchant(id, "merchant.profile.manage");
+                    if (param == MerchantPercentParamRecord.Param.POUR_LOSS_RATE && !isMasterAuthority()) {
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "损耗率阈值是安全阈值，调整须由最高权限本人办理");
+                    }
+                }, () -> {
                     findMerchant(id);
                     Integer value = request == null ? null : request.valuePct();
                     Integer min = request == null ? null : request.minPct();

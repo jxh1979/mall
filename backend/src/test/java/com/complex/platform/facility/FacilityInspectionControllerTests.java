@@ -72,7 +72,7 @@ class FacilityInspectionControllerTests {
         controller.submitRecord("task_1", new FacilityInspectionRecordSubmitRequest(
                 "normal", List.of("https://cdn.example/a.jpg"), "qr_1",
                 BigDecimal.ONE, BigDecimal.TEN, List.of(Map.of("item", "door", "result", "normal")),
-                "note", null, "usr_vendor_a", "k_record"));
+                "note", null, "usr_vendor_a", null, "k_record"));
 
         verify(authorizationService, times(2)).requirePermission("facility.inspection.record_assigned");
     }
@@ -82,7 +82,7 @@ class FacilityInspectionControllerTests {
         controller.reportException("task_1", new FacilityInspectionExceptionReportRequest(
                 List.of("https://cdn.example/abnormal.jpg"), "qr_1",
                 BigDecimal.ONE, BigDecimal.TEN, List.of(Map.of("item", "door", "result", "abnormal")),
-                "note", "door broken", "usr_vendor_a", "k_exception"));
+                "note", "door broken", "usr_vendor_a", null, "k_exception"));
 
         verify(authorizationService).requirePermission("facility.inspection.report_exception_assigned");
     }

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -106,7 +106,7 @@ const LABELS: Record<string, string> = {
   ...Object.fromEntries(INSPECTION_TYPES), ...Object.fromEntries(MAINTENANCE_TYPES),
   manual: "手工", iot: "物联网", // 告警来源
   handler: "处理人", supervisor: "主管", reporter: "报告人", // 验收方
-  light: "轻度告警", to_work_order: "转工单", // 巡检异常模式
+  light: "轻记录/重转整改工单分级", to_work_order: "全部转整改工单", // 巡检异常模式（第十八批 CG 段第 410 条：按 PGM:846 原词）
   template: "按模板", route: "按路线", // 排程模式（manual=手工，见上）
   abnormal: "异常", // 巡检结果（normal=正常，已在设备状态里）
   // 工单/巡检状态枚举中文（statusBadge 与行明细共用；normal/alarm/fault/maintenance/disabled/retired 已在设备状态里）：
@@ -218,7 +218,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "", projectId: "" });
   const [selectedTaskId, setSelectedTaskId] = React.useState("");
   // 第十八批 AP 段第 229 条 229-R8（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」）：巡检人由服务端取提交账号，代录不再手填。
-  const [recordForm, setRecordForm] = React.useState({ result: "normal", note: "", abnormalNote: "" });
+  const [recordForm, setRecordForm] = React.useState({ result: "normal", note: "", abnormalNote: "", abnormalLevel: "" });
   // 行明细抽屉：本页 8 张业务表整行可点 → 该行完整字段（枚举中文·日期 cnDate·人员 TraceLink）。一个 detail state 复用。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-2：新增设备收起为主按钮，点击弹出分步引导（GuidedFlowModal）。仅改设备创建主流程。
@@ -649,15 +649,28 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
     await reload();
   }
 
+  // 第十八批 CG 段第 410 条（PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式」）：
+  // 所选任务的模板为全部转整改工单才不分级；不挂模板或找不到模板按分级，异常须由巡检人选轻重。
+  function inspectionTaskGraded(taskId: string) {
+    const templateId = inspectionTasks.find((row) => row.id === taskId.trim())?.templateId;
+    return inspectionTemplates.find((row) => row.id === templateId)?.abnormalMode !== "to_work_order";
+  }
+  const needsAbnormalLevel = recordForm.result === "abnormal" && inspectionTaskGraded(selectedTaskId);
+
   async function submitInspectionRecord() {
     if (!selectedTaskId.trim()) {
       setGlobalError("提交巡检记录需选择任务");
+      return;
+    }
+    if (needsAbnormalLevel && !recordForm.abnormalLevel) {
+      setGlobalError("请选择异常分级：轻记录或重转整改工单");
       return;
     }
     await api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selectedTaskId.trim())}/records`, {
       result: recordForm.result,
       note: recordForm.note.trim() || undefined,
       abnormalNote: recordForm.result === "abnormal" ? recordForm.abnormalNote.trim() : undefined,
+      abnormalLevel: needsAbnormalLevel ? recordForm.abnormalLevel : undefined,
       checklistResult: [],
       photos: [],
     });
@@ -1032,7 +1045,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-inspection-template-name" aria-label="模板名" placeholder="模板名" value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} />
           <select data-testid="facility-inspection-template-type" aria-label="巡检类型" value={templateForm.inspectionType} onChange={(event) => setTemplateForm({ ...templateForm, inspectionType: event.target.value })}>{INSPECTION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-inspection-template-cycle" aria-label="周期天数" type="number" min="1" value={templateForm.cycleDays} onChange={(event) => setTemplateForm({ ...templateForm, cycleDays: event.target.value })} />
-          <select data-testid="facility-inspection-template-abnormal-mode" aria-label="异常模式" value={templateForm.abnormalMode} onChange={(event) => setTemplateForm({ ...templateForm, abnormalMode: event.target.value })}><option value="light">轻度告警</option><option value="to_work_order">转工单</option></select>
+          <select data-testid="facility-inspection-template-abnormal-mode" aria-label="异常模式" value={templateForm.abnormalMode} onChange={(event) => setTemplateForm({ ...templateForm, abnormalMode: event.target.value })}><option value="light">轻记录/重转整改工单分级</option><option value="to_work_order">全部转整改工单</option></select>
           <input data-testid="facility-inspection-template-checklist" aria-label="检查项" placeholder="检查项，逗号分隔" value={templateForm.checklist} onChange={(event) => setTemplateForm({ ...templateForm, checklist: event.target.value })} />
           {pickProject ? <label>所属项目<select data-testid="facility-inspection-template-project" aria-label="巡检模板所属项目" value={templateForm.projectId} onChange={(event) => setTemplateForm({ ...templateForm, projectId: event.target.value })}><option value="">本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-template-create" onClick={() => void createInspectionTemplate()}>新建模板</PermissionButton>
@@ -1071,6 +1084,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <select data-testid="facility-inspection-record-result" aria-label="巡检结果" value={recordForm.result} onChange={(event) => setRecordForm({ ...recordForm, result: event.target.value })}><option value="normal">正常</option><option value="abnormal">异常</option></select>
           <input data-testid="facility-inspection-record-note" aria-label="记录备注" placeholder="备注" value={recordForm.note} onChange={(event) => setRecordForm({ ...recordForm, note: event.target.value })} />
           <input data-testid="facility-inspection-record-abnormal-note" aria-label="异常说明" placeholder="异常说明" value={recordForm.abnormalNote} onChange={(event) => setRecordForm({ ...recordForm, abnormalNote: event.target.value })} />
+          {needsAbnormalLevel ? <select data-testid="facility-inspection-record-abnormal-level" aria-label="异常分级" value={recordForm.abnormalLevel} onChange={(event) => setRecordForm({ ...recordForm, abnormalLevel: event.target.value })}><option value="">请选择分级</option><option value="light">轻记录</option><option value="heavy">重转整改工单</option></select> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-record-submit" onClick={() => void submitInspectionRecord()}>提交记录</PermissionButton>
         </div>
         <div className="admin-table-scroll">
