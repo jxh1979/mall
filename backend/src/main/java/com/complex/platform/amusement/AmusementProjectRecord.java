@@ -1,6 +1,5 @@
 package com.complex.platform.amusement;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.util.Map;
 
@@ -15,7 +14,7 @@ public record AmusementProjectRecord(
         String locationPointId,
         Instant createdAt,
         Instant updatedAt,
-        @JsonIgnore
+        // 第十八批 CC 段 399-R1：项目所属游乐商户（空＝游乐公司自营）随项目返回，后台据此按项目取游乐权益的提供方。
         String merchantId,
         // 第十八批 BR 段 357-R1（BSM:753；ENUM:53）：游乐公司为该项目引用的所属商户内部结算价目录条目；空＝不参与域内结算。
         String catalogItemCode

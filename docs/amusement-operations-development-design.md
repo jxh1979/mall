@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.21
+# 游乐设施运营系统开发设计文档 V0.22
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.21 ｜ 最后更新：2026-11-24 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.22 ｜ 最后更新：2026-11-24 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -306,7 +306,8 @@ stateDiagram-v2
 - `AmusementBusinessDayService` 计算各综合体有效窗口，入场与场次保存当时版本和起止边界；指标明细、聚合与小时客流共用 `AmusementBusinessDayAnalytics`，综合体范围按实际归属过滤；缺资料不以服务器时区或其他域窗口替代。
 - 后台入口 `ADM-AMU-008` 提交完整新旧快照并可查看审批原件；证据上传与读取分别核业务权限和证据权限的真实综合体交集。
 - **当天无限票入场实现（V487）**：两种在线核销入口通过 `TicketAmusementAdmissionService` 和现有共享幂等链办理；真实综合体已审批窗口写入 `entitlement_business_day_activations`，首刷扣一次，同一锁定窗口再次入场不重复扣次或发送奖励、结算事件。每次真实入场都保留游乐与票务关联事实；缺真实游乐项目明确拒绝，不再回退服务器自然日。容量失败仅回补本次尚未完成入场的激活，冲正保留原件。真实终端编号与游乐资产码分别核对，不把资产码写进票务终端外键；动态凭证按请求令牌与持久化摘要对应事实验签，不恢复明文存储。
-- **第十八批 AH 段（第 219 条 219-R1 及补充、第 239 条 239-R1）**：`TicketAmusementAdmissionService` 消费与预览在扣次前对非当天无限权益调 `TicketVerificationService.requireAmusementSessionShare`——同人份有入场类权益的票内游乐须本场（订单综合体本营业日）已检票、本场按一份封顶，否则 409 `ENTITLEMENT_SESSION_NOT_CHECKED_IN` / `ENTITLEMENT_SESSION_SHARE_USED_UP`、不扣次；`AmusementService` 只拦权益未生效，票面到期由票务侧 `requireAmusementConsumption` 复核，本场已检票的票本场内放行；V619 去掉 `uk_amusement_verifications_active_entry`，同一权益同一场次可有多条未释放成功入场，并发扣次仍由权益行锁与原子扣次守住。
+- **第十八批 AH 段（第 219 条 219-R1 及补充、第 239 条 239-R1）**：`TicketAmusementAdmissionService` 消费与预览在扣次前调 `TicketVerificationService.requireAmusementSessionShare`（第十八批 CC 段 400-R1 起当天无限权益在当天首次入场时同样调，当天已激活的再入不调）——同人份有入场类权益的票内游乐须本场（订单综合体本营业日）已检票、本场按一份封顶，否则 409 `ENTITLEMENT_SESSION_NOT_CHECKED_IN` / `ENTITLEMENT_SESSION_SHARE_USED_UP`、不扣次；`AmusementService` 只拦权益未生效，票面到期由票务侧 `requireAmusementConsumption` 复核，本场已检票的票本场内放行；V619 去掉 `uk_amusement_verifications_active_entry`，同一权益同一场次可有多条未释放成功入场，并发扣次仍由权益行锁与原子扣次守住。
+- **第十八批 CC 段（第 399 条 399-R1、399-R2，V770；第 400 条 400-R1、400-R2）**：`entitlement_templates.amusement_project_id`（V770，外键 `amusement_projects`）记游乐权益指定的游乐项目；`TicketCatalogService.createEntitlementTemplate` 经 `AmusementTemplateProjectGuard.requireProjectProvider` 校验游乐类必填、项目存在、项目已登记经营商户的提供方须为该商户，并对游乐类模板一律落 `consumption_window=unlimited_in_day`；`TicketingAmusementEntitlementGateway` 经模板号把指定项目带入 `AmusementEntitlementView.amusementProjectId`，`AmusementService.performAmusementVerification` 在项目↔权益类型绑定校验之后、扣次之前判指定项目与入场项目不一致即 409 `ENTITLEMENT_NOT_FOR_PROJECT`；`AmusementProjectRecord.merchantId` 随项目返回。`TicketAmusementAdmissionService` 消费与预览在当天未激活时先数同父票同人份（同一 `compensation_item_id` 为一组，原票为一组；无父票的不数）各权益在 `entitlement_business_day_activations` 中已激活的其他营业日数，达到本条 `total_times` 即判用完（消费 409 `ENTITLEMENT_USED`、预览 `allowed=false`），不扣次。
 - **验证边界**：当天无限、真实凭证及24小时奖励链、出场并发、闭场／暂停后的原请求重放已完成定向数据库测试；撤权或改变原请求事实仍拒绝。出口自动感应、真实设备与外部供应商联调另列，不能据此宣称完整设备链交付。
 
 > **~~三维度容量校验规则~~（修订说明 2026-06-07，amuse-1 / PRD §11 已确认规则 1）——本规则于 2026-08-06 R10 整块废止**：
@@ -1265,6 +1266,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-24 | 改 | 抬头、§6.4.2 | V0.22：第十八批 CC 段：第 399 条 399-R1、399-R2 游乐权益模板指定游乐项目（V770）、提供方按项目经营商户校验，核销只认指定项目；第 400 条 400-R1、400-R2 游乐类模板新建即 `unlimited_in_day`，当天首次入场照判本场检票，同一人份各设施合计营业日数封顶 | BSM:784；BSM:1033；BSM:800；第十八批裁决 83；待开发清单第 399、400 条 |
 | 2026-11-24 | 改 | 抬头、§6.4、§6.6.2、§7.9、§7.18、§8.7 | V0.21：第十八批 CF 段第 404、405、406、407、409 条：点位缺扫码补录（V768 走点表 `backfill_id`）；开放判定巡检一段按当日（上一个闭店时点起）合格巡检与全部未复检或待批准阻断项判；设备分级与依赖关系、分级申请与历史、辅助设备继续运行判定（V769）与按分级判停用范围；新增 5 个接口；「仅提示」不落软上限事件，核销结果带已达运营容量提示 | BSM:1267；BSM:1271；BSM:1300；PGM:528；第十八批裁决 84；待开发清单第 404、405、406、407、409 条 |
 | 2026-11-20 | 改 | 抬头、§7.18、§8.7 | V0.20：第十八批 BS 段第 373 条：游乐项目巡检点位清单与走点表（V727）、营业中抽检间隔与当班未抽检记录两表（V728）、新增 6 个接口、巡检到期任务作业判当班未抽检；配了点位的项目新建巡检须先走完全部点位 | BSM:1300；第十八批裁决 76；待开发清单第 373 条 |
 | 2026-11-18 | 改 | 抬头、§15B | V0.19：第十八批 AW 段第 296 条 296-R1：full_reissue 改按原票该人份售出时所发权益逐行补发，不读票种现绑定 | ENUM:148；待开发清单第 296 条 |

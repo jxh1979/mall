@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -140,6 +140,22 @@ class AmusementDomainSettlementJdbcIntegrationTests {
         assertThat(lines(f.project())).isEmpty();
         settlement.onSettled(event(verification,null));
         assertThat(lines(f.project())).hasSize(1);
+    }
+
+    /**
+     * 第十八批 CC 段 400-R1（第十八批裁决 83「同一设施当天只按内部结算价跟提供设施的游乐商户结算一次」）：按营业日计次的游乐权益同一营业日两次进同一设施，
+     * 两次都核销成功，只有首入记一行域内结算（settled/3000），当天再入（day_replay）不记。回归守护，修复前后都绿。
+     */
+    @Test void businessDayReentryToTheSameRideSettlesOnlyOnce() throws Exception {
+        seed(true);
+        var next=AmusementTicketJdbcFixture.anotherTicket(jdbc,f,2,"unlimited_in_day");seeded.add(next);
+        String first=admit(next,"day_first");
+        String again=admit(next,"day_again");
+        assertThat(jdbc.queryForList("SELECT kind||'/'||amount_cent FROM amusement_domain_settlement_lines WHERE verification_id=?",String.class,first))
+                .containsExactly("settled/3000");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM amusement_domain_settlement_lines WHERE verification_id=?",Integer.class,again)).isZero();
+        assertThat(lines(f.project())).hasSize(1);
+        assertThat(used(next)).isEqualTo(1);
     }
 
     // ---------- 夹具 ----------

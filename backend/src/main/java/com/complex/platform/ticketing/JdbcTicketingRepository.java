@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -275,14 +275,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                     agreement_price_cent, consumption_window, exclusive_merchant_id,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                    catalog_item_code, created_at, updated_at
+                    catalog_item_code, amusement_project_id, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
                     :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
-                    :catalog_item_code, :created_at, :updated_at
+                    :catalog_item_code, :amusement_project_id, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -299,6 +299,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     consumption_window = EXCLUDED.consumption_window,
                     exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
                     catalog_item_code = EXCLUDED.catalog_item_code,
+                    amusement_project_id = EXCLUDED.amusement_project_id,
                     archived_at = EXCLUDED.archived_at,
                     archived_by = EXCLUDED.archived_by,
                     delete_status = EXCLUDED.delete_status,
@@ -317,7 +318,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       catalog_item_code, created_at, updated_at, archive_reason
+                       catalog_item_code, created_at, updated_at, archive_reason, amusement_project_id
                   FROM entitlement_templates
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -332,7 +333,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       catalog_item_code, created_at, updated_at, archive_reason
+                       catalog_item_code, created_at, updated_at, archive_reason, amusement_project_id
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();

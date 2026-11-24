@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.amusement.AmusementEntitlementGateway;
 import com.complex.platform.amusement.AmusementEntitlementView;
@@ -90,7 +90,10 @@ public class TicketingAmusementEntitlementGateway implements AmusementEntitlemen
                 entitlement.remainingTimes(),
                 entitlement.numPeople(),
                 entitlement.orderId() == null ? null : repository.findTicketOrderById(entitlement.orderId())
-                        .map(TicketOrderRecord::projectId).orElse(null)
+                        .map(TicketOrderRecord::projectId).orElse(null),
+                // 第十八批 CC 段 399-R2：经模板号取指定游乐项目（补偿补发、转赠沿用原模板号，自然继承）。
+                entitlement.entitlementTemplateId() == null ? null : repository.findEntitlementTemplateById(entitlement.entitlementTemplateId())
+                        .map(EntitlementTemplateRecord::amusementProjectId).orElse(null)
         );
     }
 

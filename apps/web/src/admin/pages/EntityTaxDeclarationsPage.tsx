@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -104,7 +104,7 @@ const percent = (bps: number) => `${(bps / 100).toFixed(2)}%`;
 const COST_LABELS: Record<string, string> = KEY_VALUE_LABELS.cost_type ?? {};
 const PROFIT_BASIS_TEXT: Record<string, string> = {
   platform: "平台主体口径：收入按收入归属归到本主体；成本为本主体在平台内作为付款方的内部结算应付与作为发放主体的工资单税前应发（第十八批裁决 60）。",
-  dividend: "酒吧经营主体：沿用持股分红税前口径，利润＝收入−销货成本−费用。",
+  dividend: "酒吧与引进参股的游乐项目经营主体：沿用持股分红税前口径，利润＝收入−销货成本−费用。",
 };
 
 function yuan(cent: number): string {

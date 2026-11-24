@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -76,7 +76,8 @@ type PriceRuleRow = {
   deleteStatus?: string;
 };
 type MerchantRow = { id: string; merchantName: string; merchantType: string | null };
-type AmusementProjectRow = { id: string; projectName: string };
+// 第十八批 CC 段 399-R3：项目所属游乐商户（空＝游乐公司自营），游乐权益的提供方按它取。
+type AmusementProjectRow = { id: string; projectName: string; merchantId?: string | null };
 
 // V230：票种资格/定价档分类的中文名（全终端零英文）。
 const TICKET_CATEGORY_LABELS: Record<string, string> = { standard: "标准票", new_person: "新人票", student: "学生票" };
@@ -266,7 +267,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
 
   // 区2 新建权益模板
   // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：提供方商户必选。
-  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "" });
+  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "", amusementProjectId: "" });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "", applicationId: "" });
@@ -319,8 +320,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   const [diningLines, setDiningLines] = React.useState<DiningLine[]>([]);
   const [selectedProjects, setSelectedProjects] = React.useState<Record<string, boolean>>({});
   const [projectTimes, setProjectTimes] = React.useState("1");
-  // 游乐权益也必须归属商户（后端 createEntitlementTemplate 强制 merchant_id 非空，否则结算成孤儿）。
-  // /amusement/projects 不返回项目所属商户（merchantId 被 @JsonIgnore），故此处让运营选一个归属商户，全部游乐权益用它。
+  // 第十八批 CC 段 399-R3：游乐权益的提供方按项目经营商户取；所选项目里未登记经营商户的（游乐公司自营），由运营在此选其提供方商户。
   const [amusementMerchantId, setAmusementMerchantId] = React.useState("");
   // S11：游乐权益的票面原价（元）。整票的钱按各业态票面原价占比拆，游乐没填价就分不到钱。
   const [amusementPriceYuan, setAmusementPriceYuan] = React.useState("");
@@ -616,6 +616,11 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("权益模板名称必填");
       return;
     }
+    // 第十八批 CC 段 399-R3（BSM:784「游乐（指定项目/次数/场次）」）：游乐权益须指定游乐项目。
+    if (tplForm.entitlementType === "amusement" && !tplForm.amusementProjectId) {
+      setGlobalError("游乐权益须指定游乐项目");
+      return;
+    }
     if (!tplForm.merchantId) {
       setGlobalError("请选择权益的提供方商户");
       return;
@@ -629,9 +634,10 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         default_value_cent: tplForm.valueYuan.trim() ? Math.round(Number(tplForm.valueYuan) * 100) : null,
         status: "active",
         merchant_id: tplForm.merchantId,
+        amusement_project_id: tplForm.entitlementType === "amusement" ? tplForm.amusementProjectId : null,
       });
       setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
-      setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "" });
+      setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "", amusementProjectId: "" });
       reload();
     } catch (e) { setGlobalError(e instanceof Error ? e.message : "新建权益模板失败"); }
   }
@@ -887,6 +893,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     exclusiveMerchantId?: string | null;
     // 酒水兑换：提供方商品（成本按该商品的内部结算价与这家酒吧结算）。
     barItemRef?: string | null;
+    // 第十八批 CC 段 399-R3：游乐权益指定的游乐项目；其余传 null。
+    amusementProjectId?: string | null;
     // S11 票面原价（分）：这份权益在票面上值多少钱，决定客人这笔钱按什么比例分给它所属的业态。
     //   免费/赠送填 0（不分钱，成本另按内部结算价与提供方结算）。与内部结算价是两条价线，不可互相顶替。
     componentPriceCent: number;
@@ -906,6 +914,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       catalog_item_code: payload.catalogItemCode ?? null,
       exclusive_merchant_id: payload.exclusiveMerchantId ?? null,
       bar_item_ref: payload.barItemRef ?? null,
+      amusement_project_id: payload.amusementProjectId ?? null,
     });
     await api.post(`/api/v1/ticketing/ticket-types/${ticketTypeId}/entitlements`, {
       idempotency_key: crypto.randomUUID(),
@@ -930,9 +939,9 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setComboError("至少选择一个酒吧权益、游乐设施或餐饮/零售项。");
       return;
     }
-    // 游乐权益也须归属商户（后端强制），选了游乐就必须选归属商户。
-    if (chosenProjects.length > 0 && !amusementMerchantId) {
-      setComboError("已勾选游乐设施，请选择游乐权益的归属商户。");
+    // 第十八批 CC 段 399-R3（BSM:783「联合通票里的权益可分属不同商户，各自核销、各自结算。」）：游乐权益提供方按项目经营商户取，未登记的才用运营所选。
+    if (chosenProjects.some((p) => !p.merchantId) && !amusementMerchantId) {
+      setComboError("所选游乐设施里有未登记经营商户的项目，请选择其提供方商户。");
       return;
     }
     // 酒水兑换必须指明是哪件商品：成本按该商品的内部结算价与这家酒吧结算，不指明就没法结账。
@@ -992,17 +1001,19 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           concessionApplicationId: line.kind === "gift_drink" && line.costBearer === "merchant_concession" ? line.applicationId : null,
         }, comboTicketId) });
       }
-      // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
+      // 游乐设施：每个项目一条 amusement 类权益模板（指定该项目）+ 绑定通票 + 收紧项目核销绑定。提供方取项目经营商户，未登记的用运营所选（399-R3）。
       // 游乐票面原价：游乐份额就是按它在整票里的占比分给游乐公司的，留空即 0=不分。
       const amusementPriceCent = amusementPriceYuan.trim() ? Math.round(Number(amusementPriceYuan) * 100) : 0;
       for (const project of chosenProjects) {
-        tasks.push({ paid: amusementPriceCent > 0, merchantId: amusementMerchantId, run: async () => {
+        const provider = project.merchantId || amusementMerchantId;
+        tasks.push({ paid: amusementPriceCent > 0, merchantId: provider, run: async () => {
           await createAndBind({
             name: `${project.projectName} · 游乐`,
             entitlementType: "amusement",
             totalTimes: Number(projectTimes) || 1,
             valueCent: null,
-            merchantId: amusementMerchantId,
+            merchantId: provider,
+            amusementProjectId: project.id,
             componentPriceCent: amusementPriceCent,
           }, comboTicketId);
           // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
@@ -1634,8 +1645,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         ))}
         <input aria-label="游乐次数" type="number" min={1} value={projectTimes} onChange={(event) => setProjectTimes(event.target.value)} placeholder="游乐次数（每设施）" />
         <input aria-label="游乐业态价格（元）" type="number" min={0} step="0.01" value={amusementPriceYuan} data-testid="combo-amusement-price" onChange={(event) => setAmusementPriceYuan(event.target.value)} placeholder="游乐业态价格（元，每设施）" />
-        <select aria-label="游乐权益归属商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
-          <option value="">游乐权益归属商户</option>
+        <select aria-label="未登记经营商户的游乐项目的提供方商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
+          <option value="">未登记经营商户的游乐项目的提供方商户</option>
           {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
         </select>
       </div>
@@ -1743,6 +1754,15 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
             <option key={t} value={t}>{formatBusinessStatus(t)}</option>
           ))}
         </select>
+        {/* 第十八批 CC 段 399-R3：游乐权益指定游乐项目；项目已登记经营商户的，提供方随之设为该商户。 */}
+        {tplForm.entitlementType === "amusement" ? (
+          <select aria-label="指定游乐项目" data-testid="entitlement-template-amusement-project" value={tplForm.amusementProjectId}
+            onChange={(event) => setTplForm({ ...tplForm, amusementProjectId: event.target.value,
+              merchantId: projects.find((p) => p.id === event.target.value)?.merchantId || tplForm.merchantId })}>
+            <option value="">选择游乐项目</option>
+            {projects.map((p) => (<option key={p.id} value={p.id}>{p.projectName}</option>))}
+          </select>
+        ) : null}
         <input aria-label="默认次数" type="number" min={1} value={tplForm.totalTimes} onChange={(event) => setTplForm({ ...tplForm, totalTimes: event.target.value })} placeholder="默认次数" />
         <input aria-label="默认面值（元）" type="number" min={0} step="0.01" value={tplForm.valueYuan} onChange={(event) => setTplForm({ ...tplForm, valueYuan: event.target.value })} placeholder="默认面值（元，可空）" />
         <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="entitlement-template-create" onClick={() => void createTemplate()}>

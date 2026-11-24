@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -990,6 +990,52 @@ class EntityTaxJdbcIntegrationTests {
                 .isEqualTo(((Number) JsonPath.read(body, "$.data.revenue_cent")).longValue() - 300_000L);
         assertThat(costs(profitOf(platformCo, "2031-05", "2031-05").andExpect(status().isOk()).andReturn().getResponse().getContentAsString()))
                 .doesNotContainKey("amusement_domain_settlement");
+    }
+
+    /**
+     * 第十八批 CC 段第 401 条 401-R1（ENUM:201「每个主体 × 每类收入 × 每种税」；BSM:1760「申报差异等于实际申报金额减系统计算金额」；ENUM:297「引进参股的
+     * 游乐项目的参股方为引进该项目的域主管公司」；BSM:753「与实际提供服务的游乐商户结算」；按常理比照第十八批裁决 60 对酒吧经营主体的处理）：引进参股的游乐项目
+     * 经营主体（名下有游乐项目的游乐商户）2031-05 游乐域内结算 3180 元、同月撤销 1060 元，按前端蛇形键登记增值税 120 元：系统计算金额取游乐收入 2120 元价内
+     * 拆出的 120 元；主体收入成本利润按持股分红税前口径，收入只有游乐收入 2120 元。游乐公司为自营项目权益另建的游乐商户档案（名下没有游乐项目）的经营主体
+     * 仍按平台口径。修复前系统计算收入为 0：断言红。
+     */
+    @Test
+    void amusementOperatingEntityTaxBaseIsItsAmusementDomainSettlement() throws Exception {
+        String operator = newEntity("ao", "management_company", "游乐项目经营主体");
+        String self = newEntity("as", "management_company", "游乐公司");
+        String shop = "etd_mao_" + s;
+        String selfShop = "etd_mas_" + s;
+        String amusementProject = "etd_amp_" + s;
+        for (String[] m : List.of(new String[]{shop, operator}, new String[]{selfShop, self})) {
+            jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, project_id, status, created_at, updated_at)"
+                    + " VALUES (?, ?, 'amusement', ?, ?, 'active', now(), now())", m[0], "税费游乐商户" + m[0], m[1], project);
+        }
+        jdbc.update("INSERT INTO amusement_projects (id, project_name, capacity, open_status, merchant_id, created_at, updated_at)"
+                + " VALUES (?, '税费引进游乐项目', 10, 'open', ?, now(), now())", amusementProject, shop);
+        jdbc.update("INSERT INTO settlement_bills (id, project_id, period_start, period_end, status) VALUES (?, ?, DATE '2031-05-01', DATE '2031-05-31',"
+                + " 'confirmed')", "sb_etd_ao_" + s, project);
+        String vat = taxRate(operator, "game", "vat", 600);
+        for (String[] line : List.of(new String[]{"settled", "318000"}, new String[]{"reversed", "-106000"})) {
+            jdbc.update("INSERT INTO amusement_domain_settlement_lines (id, verification_id, kind, amusement_project_id, project_id, provider_merchant_id,"
+                    + " payer_entity_id, amount_cent, price_catalog_entry_id, business_at, business_date)"
+                    + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'etd_ipc', now(), DATE '2031-05-12')",
+                    "adsl_etd_o" + line[0] + "_" + s, "ver_etd_o_" + s, line[0], amusementProject, project, shop, self, Long.parseLong(line[1]));
+        }
+
+        declareFor(operator, "etd-ao-" + s, "vat", "2031-05", "2031-05", 12_000).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.system_calculated_amount_cent").value(12_000))
+                .andExpect(jsonPath("$.data.declaration_difference_cent").value(0))
+                .andExpect(jsonPath("$.data.calculation_basis.length()").value(1))
+                .andExpect(jsonPath("$.data.calculation_basis[0].income_type").value("game"))
+                .andExpect(jsonPath("$.data.calculation_basis[0].income_cent").value(212_000))
+                .andExpect(jsonPath("$.data.calculation_basis[0].rate_version_id").value(vat));
+        profitOf(operator, "2031-05", "2031-05").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.basis").value("dividend"))
+                .andExpect(jsonPath("$.data.revenue_cent").value(212_000))
+                .andExpect(jsonPath("$.data.revenue_items.length()").value(1))
+                .andExpect(jsonPath("$.data.revenue_items[0].income_type").value("game"));
+        profitOf(self, "2031-05", "2031-05").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.basis").value("platform"));
     }
 
     /** 233-R6「主体收入成本利润」页签的真实请求形状（蛇形键）。 */

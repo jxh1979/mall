@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -138,14 +138,15 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it("勾了游乐但没选归属商户：拦下报错，不发任何编排请求", async () => {
+  // 第十八批 CC 段 399-R3：所选项目未登记经营商户（游乐公司自营）又没选兜底提供方商户时拦下。
+  it("勾了未登记经营商户的游乐设施但没选其提供方商户：拦下报错，不发任何编排请求", async () => {
     const postSpy = vi.fn(async () => ({}) as unknown);
     renderPage(postSpy);
     await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
     fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
     fireEvent.click(screen.getByTestId("combo-project-pj-1").querySelector("input")!);
     fireEvent.click(screen.getByTestId("combo-submit"));
-    await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("归属商户"));
+    await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("未登记经营商户"));
     expect(postSpy).not.toHaveBeenCalled();
   });
 
@@ -303,6 +304,60 @@ describe("TicketingPoliciesPage 第十八批 AH 段", () => {
     expect(put?.url).toContain("/api/v1/ticketing/ticket-types/tt-1/min-gift-cups");
     expect(put?.body).toMatchObject({ min_gift_cups: 2, min_gift_cups_lower: 1, min_gift_cups_upper: 3 });
     expect(typeof put?.body.idempotency_key).toBe("string");
+  });
+});
+
+// 第十八批 CC 段第 399 条 399-R3（BSM:783「联合通票里的权益可分属不同商户，各自核销、各自结算。」；BSM:784「游乐（指定项目/次数/场次）」）：组合式套票按项目
+// 取提供方并带指定项目；通用「新建权益模板」选游乐类型须指定游乐项目，选了项目提供方带出项目经营商户。真实 AdminApi，假响应用文本体。
+function amusementBackend(url: string, method: string): Response | null {
+  if (method !== "GET") return null;
+  if (url.includes("/amusement/projects")) {
+    return okBody('{"items":[{"id":"pj-a","project_name":"过山车","merchant_id":"mch-a"},{"id":"pj-b","project_name":"旋转木马","merchant_id":"mch-b"}]}');
+  }
+  if (url.includes("/platform/merchants")) {
+    return okBody('{"items":[{"id":"mch-a","merchant_name":"甲乐园","merchant_type":"amusement"},{"id":"mch-b","merchant_name":"乙乐园","merchant_type":"amusement"}]}');
+  }
+  return null;
+}
+
+describe("TicketingPoliciesPage 第十八批 CC 段 399-R3 游乐权益按项目取提供方", () => {
+  afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+  it("组合式套票勾两家游乐商户各自经营的设施、不选兜底商户：各建一条游乐模板，提供方与指定项目各按项目", async () => {
+    const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+    stubBackend(sent, amusementBackend);
+    await waitFor(() => expect(screen.queryByTestId("combo-project-pj-b")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select").querySelector('option[value="tt-1"]')).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-project-pj-a").querySelector("input")!);
+    fireEvent.click(screen.getByTestId("combo-project-pj-b").querySelector("input")!);
+    fireEvent.click(screen.getByTestId("combo-submit"));
+
+    await waitFor(() => expect(sent.filter((c) => c.url.endsWith("/ticketing/entitlement-templates")).length).toBe(2));
+    const templates = sent.filter((c) => c.url.endsWith("/ticketing/entitlement-templates")).map((c) => c.body);
+    expect(templates.map((t) => t.merchant_id)).toEqual(["mch-a", "mch-b"]);
+    expect(templates.map((t) => t.amusement_project_id)).toEqual(["pj-a", "pj-b"]);
+    expect(templates.map((t) => t.entitlement_type)).toEqual(["amusement", "amusement"]);
+  });
+
+  it("通用新建权益模板选游乐类型：不选游乐项目不提交；选了项目提供方带出项目经营商户，并带指定项目提交", async () => {
+    const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+    const props = stubBackend(sent, amusementBackend);
+    const form = screen.getByTestId("entitlement-template-form");
+    await waitFor(() => expect(within(form).getByTestId("entitlement-template-merchant").querySelector('option[value="mch-b"]')).not.toBeNull());
+    fireEvent.change(within(form).getByLabelText("模板名称"), { target: { value: "旋转木马2次" } });
+    fireEvent.change(within(form).getByLabelText("权益类型"), { target: { value: "amusement" } });
+    await waitFor(() => expect(screen.queryByTestId("entitlement-template-amusement-project")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(expect.stringContaining("游乐权益须指定游乐项目")));
+    expect(sent).toEqual([]);
+
+    await waitFor(() => expect(screen.getByTestId("entitlement-template-amusement-project").querySelector('option[value="pj-b"]')).not.toBeNull());
+    fireEvent.change(screen.getByTestId("entitlement-template-amusement-project"), { target: { value: "pj-b" } });
+    await waitFor(() => expect((screen.getByTestId("entitlement-template-merchant") as HTMLSelectElement).value).toBe("mch-b"));
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => expect(sent.filter((c) => c.url.endsWith("/ticketing/entitlement-templates")).length).toBe(1));
+    expect(sent[0]?.body).toMatchObject({ entitlement_type: "amusement", amusement_project_id: "pj-b", merchant_id: "mch-b" });
   });
 });
 

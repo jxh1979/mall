@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -74,6 +74,10 @@ public class TicketCatalogService {
     // 第十八批 AW 段 294-R1：单一酒吧门票发布前查本项目本酒吧综合服务费已转正（字段注入免改构造点；单测未注入＝不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     SingleBarServiceFeeConfigPort serviceFeeConfigPort;
+
+    // 第十八批 CC 段 399-R1：游乐权益模板须指定游乐项目、提供方须为项目经营商户（字段注入免改构造点；单测未注入＝不校验）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementTemplateProjectGuard amusementTemplateProjects;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketCatalogService(TicketingRepository repository, BarMerchantDirectory barDirectory) {
@@ -273,6 +277,7 @@ public class TicketCatalogService {
         Instant now = Instant.now();
         String entitlementType = requireText(actual.entitlementType(), "entitlement_type");
         String templateMerchantId = requireMerchant(actual.merchantId());
+        if (amusementTemplateProjects != null) amusementTemplateProjects.requireProjectProvider(entitlementType, actual.amusementProjectId(), templateMerchantId);
         String barItemRef = trimToNull(actual.barItemRef());
         // AUD-015：赠饮(gift_drink)模板启用前必须绑定提供方商品(bar_item_ref)。缺映射则核销时
         // 无法生成 0 元出品单/扣吧台库存/进结算（业务图 :727,1044-1050；bar PRD §15.2 第 2 条）。
@@ -342,13 +347,14 @@ public class TicketCatalogService {
                 // 批10/E(V380)：agreement_price_cent 自此为目录价快照(只读)——上方已按目录引用取当前生效价;
                 //   未挂引用/条目未转正=null,判定层对提供方兑付类 fail-closed、其余回退 value_amount(行为同现状)。
                 snapshotPriceCent,
-                // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use，行为同现状)；入场资格「场次规则」(per_session)
-                // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
-                "per_use",
+                // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use)。第十八批 CC 段 400-R1（第十八批裁决 83「游乐票的「一次」即一个营业日（场次）：
+                //   当天首次入场扣一次，当天内各设施任意进、每次进设施都核销留痕」）：游乐类（类型以 amusement 开头，同 TicketVerificationService.isAmusementEntitlement）
+                //   一律按营业日计次（unlimited_in_day）。
+                entitlementType.trim().toLowerCase(Locale.ROOT).startsWith("amusement") ? "unlimited_in_day" : "per_use",
                 // 批3-4/餐饮(用户2026-07-06)：专属商户「不分摊」由请求透传(可空=非专属走池)；餐饮填餐厅商户使核销全额按内部结算价直付餐厅。
                 trimToNull(actual.exclusiveMerchantId())
         // 批10/E：挂目录引用(withCatalogRef 同步写快照;code 为空时等价于原构造,快照亦空)。
-        ).withCatalogRef(catalogItemCode, snapshotPriceCent, now));
+        ).withCatalogRef(catalogItemCode, snapshotPriceCent, now).withAmusementProject(trimToNull(actual.amusementProjectId())));
     }
 
     // 批10/E：原「改虚拟权益签约价」端点（PR#274 updateAgreementPrice）已下线——内部结算价唯一可编辑处收编为

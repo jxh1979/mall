@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1449,6 +1449,11 @@ public class AmusementService {
         // 回退口径（V082 向后兼容）：项目无任何绑定配置时，仅按「游乐类」放行（上方已校验）。
         List<String> boundTypes = repository.listProjectEntitlementTypes(project.id());
         if (!boundTypes.isEmpty() && !boundTypes.contains(entitlement.entitlementType())) {
+            throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "该权益未绑定到此游乐项目");
+        }
+        // 第十八批 CC 段 399-R2（BSM:784「游乐（指定项目/次数/场次）」；BSM:753「游乐权益核销的收入按具体的游乐项目归属」）：权益指定了游乐项目的只认该项目，
+        //   扣次之前拒绝（规则拒绝落 rejected、不扣次）。
+        if (entitlement.amusementProjectId() != null && !entitlement.amusementProjectId().equals(project.id())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "该权益未绑定到此游乐项目");
         }
 
