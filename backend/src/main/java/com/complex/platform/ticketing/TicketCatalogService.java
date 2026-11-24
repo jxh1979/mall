@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -148,7 +148,7 @@ public class TicketCatalogService {
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(current.id());
         // 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票改价
         //   只存进草稿版（同样当场过误差闸，按草稿组成算），现表与售卖不变。
-        if (toDraftVersion(current, bindings)) {
+        if (toDraftVersion(current)) {
             Draft draft = openDraft(current, bindings);
             requirePriceWithinTolerance(updated, draft.bindings());
             ruleVersions.saveOpen(current.id(), snapshot(updated, draft.bindings(), draft.floor(), draft.priceRules(), draft.dynamicRules()));
@@ -216,7 +216,7 @@ public class TicketCatalogService {
         // 第十八批 AS 段 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份
         //   草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票新建派生价只存进草稿版、返回草稿态，不进现表，获批时写入。
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
-        boolean staged = toDraftVersion(ruleTicketType, bindings);
+        boolean staged = toDraftVersion(ruleTicketType);
         TicketPriceRuleRecord rule = new TicketPriceRuleRecord(
                 "price_rule_" + slug(actual.idempotencyKey()),
                 ticketTypeId,
@@ -247,7 +247,7 @@ public class TicketCatalogService {
 
     /**
      * 第十八批 AS 段 297-R2（第十八批裁决 63、裁决 61）：发布动态价时，已上架跨域组合通票的草稿动态价只存进草稿版（表内仍为草稿、不参与售价，获批时置已发布），
-     * 返回该规则；待审期间 409；其余（非跨域、未上架、规则已不是草稿）返回空，由调用方照现行发布。
+     * 返回该规则；待审期间 409；其余（单一酒吧门票、未上架、规则已不是草稿）返回空，由调用方照现行发布。第十八批 BP 段 300-R1 起已上架域内票同跨域组合通票。
      */
     java.util.Optional<TicketDynamicPricingRuleRecord> stageDynamicPricingRule(String ruleId, StatusChangeRequest request) {
         if (ruleVersions == null) {
@@ -259,7 +259,7 @@ public class TicketCatalogService {
         requireNoPendingRuleVersion(rule.ticketTypeId());
         TicketTypeRecord ticketType = requireTicketTypeRecord(rule.ticketTypeId());
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketType.id());
-        if (!"draft".equals(rule.status()) || !toDraftVersion(ticketType, bindings)) {
+        if (!"draft".equals(rule.status()) || !toDraftVersion(ticketType)) {
             return java.util.Optional.empty();
         }
         Draft d = openDraft(ticketType, bindings);
@@ -623,7 +623,8 @@ public class TicketCatalogService {
             requireApprovedInternalPrices(java.util.List.of(binding), "不能加到已上架票种");
         }
         // 第十八批 AJ 段 236-R7（第十八批裁决 61）：已上架跨域组合通票加权益只存进该票种唯一一份草稿版，现表与售卖不变，获批后自动换成新版。
-        if (ruleVersions != null && crossDomain) {
+        //   第十八批 BP 段 300-R1（第十八批裁决 74）：已上架未挂酒吧的域内票同。
+        if (toDraftVersion(ticketType)) {
             Draft draft = openDraft(ticketType, current);
             ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), withBinding(draft.bindings(), binding), draft.floor(), draft.priceRules(),
                     draft.dynamicRules()));
@@ -713,7 +714,8 @@ public class TicketCatalogService {
         requirePublishable(current, bindings, () -> barGiftCoverageViolation(current));
         // 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754）：
         //   未上架的跨域组合通票闸全过后提交平台权限审批、留一版规则，票仍为草稿（ENUM:30「草稿（规则未发布）」），获批即上架。
-        if (ruleVersions != null && !"published".equals(current.status()) && crossDomain(current, bindings)) {
+        //   第十八批 BP 段 300-R1（第十八批裁决 74；BSM:1673「域内规则由对应域主管公司负责」）：未挂酒吧的域内票同样提交审批、留一版，审批人为对应域主管公司的人。
+        if (ruleVersions != null && !"published".equals(current.status()) && trimToNull(current.barId()) == null) {
             ruleVersions.submit(current, snapshot(current, bindings, repository.findGiftFloor(current.id()).orElse(null),
                     tablePriceRules(current.id()), tableDynamicRules(current.id())),
                     actual.reason(), actual.finalApproverId(), actual.idempotencyKey());
@@ -878,7 +880,7 @@ public class TicketCatalogService {
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketType.id());
         // 第十八批 AJ 段 236-R7（第十八批裁决 61；ENUM:34 最低赠酒杯数「一律记为域主管公司出资」）：已上架跨域组合通票改最低杯数只存进草稿版，
         //   现表与售卖不变；草稿赠酒够不够数在提交审批时由发布闸点名。
-        if (toDraftVersion(ticketType, bindings)) {
+        if (toDraftVersion(ticketType)) {
             Draft draft = openDraft(ticketType, bindings);
             ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), draft.bindings(), floor, draft.priceRules(), draft.dynamicRules()));
             return floor;
@@ -1136,7 +1138,7 @@ public class TicketCatalogService {
      * 业态 → {主管公司键, 经营域名}（ENUM:49「酒吧域 → 娱乐平台公司；游乐域 → 游乐公司；餐饮域与零售域 → 城市项目公司；演出传媒域 → 传媒公司」；
      * ENUM:195；同 TicketDistributionSettlementService 口径）。「其他」业态按商户档案主管公司（空则按商户）自成一键。
      */
-    private static final Map<String, String[]> FORMAT_DOMAINS = Map.of(
+    static final Map<String, String[]> FORMAT_DOMAINS = Map.of(
             "bar", new String[] {"entertainment_platform_company", "酒吧域（娱乐平台公司）"},
             "amusement", new String[] {"amusement_company", "游乐域（游乐公司）"},
             "media", new String[] {"media_company", "演出传媒域（传媒公司）"},
@@ -1312,9 +1314,12 @@ public class TicketCatalogService {
             java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> dynamicRules) {
     }
 
-    /** 改价、加权益、改最低赠酒杯数的去向：已上架的跨域组合通票（按现表即当前生效版判）存进草稿版，其余照现行写现表。 */
-    private boolean toDraftVersion(TicketTypeRecord ticketType, java.util.List<TicketTypeEntitlementRecord> current) {
-        return ruleVersions != null && "published".equals(ticketType.status()) && crossDomain(ticketType, current);
+    /**
+     * 改价、加权益、改最低赠酒杯数、新建派生价、发布动态价的去向：已上架的跨域组合通票存进草稿版；第十八批 BP 段 300-R1（第十八批裁决 74「改动先存草稿版，
+     * 审批期间按旧版照卖，批准后自动换新版」）起凡未挂酒吧的已上架票（域内票同）都存进草稿版，单一酒吧门票照现行写现表。
+     */
+    private boolean toDraftVersion(TicketTypeRecord ticketType) {
+        return ruleVersions != null && "published".equals(ticketType.status()) && trimToNull(ticketType.barId()) == null;
     }
 
     /** 该票种唯一一份未结版本（草稿版）的内容；没有就由现表起一份。调用方已持票种锁且已排除待审。 */

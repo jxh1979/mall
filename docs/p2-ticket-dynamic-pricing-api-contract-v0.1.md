@@ -1,4 +1,4 @@
-# P2-C 票务动态定价规则容器 API 契约 V0.12
+# P2-C 票务动态定价规则容器 API 契约 V0.13
 
 ## 1. 定位
 
@@ -32,7 +32,7 @@
 | `min_price_cent` | long/null | 最低保护价 |
 | `max_price_cent` | long/null | 最高保护价 |
 | `status` | string | `draft`、`published`、`disabled` |
-| `condition_rule` | object | 条件键值，例如库存、会员等级、渠道上下文 |
+| `condition_rule` | object | 动态价条件，可空（第十八批 BP 段第 359 条起）：只认每日时段 `time_from`、`time_to`（时:分，须同时填写且不相同，结束早于开始表示跨零点）与到访当天已售张数门槛 `day_sold_min`（不小于 1 的整数）；值为 null 视同未填，带其他键 400 `VALIDATION_FAILED` |
 | `operator_note` | string/null | 操作说明 |
 | `evidence_attachment_ids` | string[] | 证据附件 ID |
 | `created_at` | datetime | 创建时间 |
@@ -60,7 +60,7 @@
 ```json
 {
   "idempotency_key": "dyn-create-001",
-  "operator_note": "暑期周末低库存上浮",
+  "operator_note": "暑期周末晚场上浮",
   "evidence_attachment_ids": ["att_dynamic_001"],
   "ticket_type_id": "ticket_type_1",
   "rule_name": "Summer weekend uplift",
@@ -73,7 +73,9 @@
   "min_price_cent": 9900,
   "max_price_cent": 15000,
   "condition_rule": {
-    "inventory_level": "low"
+    "time_from": "20:00",
+    "time_to": "22:00",
+    "day_sold_min": 50
   }
 }
 ```
@@ -85,6 +87,7 @@
 - 权限：`ticket.dynamic_pricing.publish`
 - 必填幂等键：`idempotency_key`
 - 仅允许从 `draft` 发布为 `published`。
+- 已上架、未挂酒吧的票种（跨域组合通票自第十八批 AS 段第 297 条起，域内票自第十八批 BP 段第 300 条起）发布草稿规则时，规则表内仍为 `draft`、存进该票种规则草稿版，返回 `status` 为 `draft`，随票种规则版本获批后才置 `published`（见票务 PRD §5）。
 
 请求示例：
 
@@ -114,7 +117,8 @@
   "visit_date": "2026-06-20",
   "sales_channel": "web",
   "context": {
-    "inventory_level": "low"
+    "at_time": "21:00",
+    "day_sold": 60
   }
 }
 ```
@@ -139,7 +143,7 @@
 - 基础价仍来自票种的平日/周末/节假日价。
 - 多条规则命中时按 `priority DESC, updated_at DESC, id` 选择第一条。
 - 模拟结果的 `explanation` 为中文：未命中时「未命中动态定价规则」，命中时「命中规则：」加规则名（18AW 收尾复核修正，PGM:287 界面全中文）。
-- `condition_rule` 采用键值完全匹配：规则中的每个键必须在模拟上下文中存在且值相同。
+- `condition_rule` 由服务端自算（第十八批 BP 段第 359 条起）：时段按下单时刻（项目所在地时间）所在的每日时段判，左闭右开，结束早于开始即跨零点；`day_sold_min` 按该单到访日该票种已售张数（未取消订单张数减已退的票，与票种限量的已售数同口径，不含本单）判；条件为空即不限。下单请求不收上下文；模拟可用 `context.at_time`（试算时刻，空＝此刻）与 `context.day_sold`（试算当天已售张数，空＝按实际统计）指定，`context` 其余键不读，格式不对 400 `VALIDATION_FAILED`。
 - `percent_delta` 使用基础价乘以百分比，四舍五入到分。
 - `fixed_delta` 使用固定金额增减。
 - `fixed_price` 命中即公开价为该固定价（与派生价固定价同口径）。

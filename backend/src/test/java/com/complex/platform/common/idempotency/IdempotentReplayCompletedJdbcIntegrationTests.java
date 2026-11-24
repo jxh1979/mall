@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -127,10 +127,13 @@ class IdempotentReplayCompletedJdbcIntegrationTests {
                 VALUES (?, ?, ?, ?, ?, ?, 'effective', '["ticketing"]'::jsonb, now(), now())
                 """, "ctr_b02_" + suffix, merchantId, "ctr_b02_subject_" + suffix, "ctr_b02_settlement_" + suffix,
                 today.minusDays(1), today.plusDays(1));
+        // 第十八批 BP 段 354-R1（商户账号只能办理本店的单一酒吧门票）：票种挂在本类商户（业态 bar）名下。
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'bar', 'active', now(), now())", merchantId, "已完成提示回归酒吧-" + suffix);
         jdbcTemplate.update("""
-                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
-                VALUES (?, ?, 'weekday_weekend_holiday', FALSE, 'published', now(), now())
-                """, ticketTypeId, "已完成提示回归票种-" + suffix);
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, bar_id, created_at, updated_at)
+                VALUES (?, ?, 'weekday_weekend_holiday', FALSE, 'published', ?, now(), now())
+                """, ticketTypeId, "已完成提示回归票种-" + suffix, merchantId);
         jdbcTemplate.update("""
                 INSERT INTO ticket_dynamic_pricing_rules (
                     id, ticket_type_id, rule_name, priority, effective_from, effective_to, adjustment_type, adjustment_rate,

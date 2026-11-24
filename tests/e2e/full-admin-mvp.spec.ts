@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -108,6 +108,8 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("ticket-policy-next").click();
     await page.getByTestId("ticket-create-template").selectOption("tpl-1");
     await page.getByTestId("ticket-publish-reason").fill("e2e 上架验证");
+    // 第十八批 BP 段 300-R2（第十八批裁决 74）：没挂酒吧的票发布须填最终审批人。
+    await page.getByTestId("ticket-final-approver").fill("usr-approver-1");
     await page.getByTestId("ticket-policy-next").click();
     await page.getByTestId("ticket-publish").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("票务规则已发布");

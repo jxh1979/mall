@@ -1,7 +1,8 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
@@ -9,11 +10,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 import org.springframework.stereotype.Service;
 import static com.complex.platform.common.Strings.trimToNull;
 import static com.complex.platform.common.Strings.requireText;
@@ -29,10 +32,13 @@ public class TicketPricingService {
     private final TicketingRepository repository;
     // 第十八批 AT 段 298-R1：节假日日历（经营参数页维护，BSM:1832），到访日在日历内取节假日价。
     private final HolidayCalendarPort holidays;
+    // 第十八批 BP 段 359-R3（第十八批裁决 75）：到访当天该票种已售张数，动态价按「到访当天已售满多少张起」判。
+    private final TicketDaySoldPort daySold;
 
-    public TicketPricingService(TicketingRepository repository, HolidayCalendarPort holidays) {
+    public TicketPricingService(TicketingRepository repository, HolidayCalendarPort holidays, TicketDaySoldPort daySold) {
         this.repository = repository;
         this.holidays = holidays;
+        this.daySold = daySold;
     }
 
     TicketDynamicPricingRuleRecord createDynamicPricingRule(TicketDynamicPricingRuleRequest request) {
@@ -60,6 +66,8 @@ public class TicketPricingService {
         if (actual.minPriceCent() != null && actual.maxPriceCent() != null && actual.minPriceCent() > actual.maxPriceCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "最低价不能高于最高价");
         }
+        // 第十八批 BP 段 359-R1、359-R3：条件只认每日时段与到访当天已售张数（空值键去掉，须在 Map.copyOf 之前）。
+        Map<String, Object> conditions = TicketDynamicPricingConditions.validate(actual.conditionRule());
         Instant now = Instant.now();
         return repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
                 "dynamic_price_rule_" + slug(actual.idempotencyKey()),
@@ -75,7 +83,7 @@ public class TicketPricingService {
                 actual.minPriceCent(),
                 actual.maxPriceCent(),
                 "draft",
-                actual.conditionRule() == null ? Map.of() : Map.copyOf(actual.conditionRule()),
+                Map.copyOf(conditions),
                 trimToNull(actual.operatorNote()),
                 evidence(actual.evidenceAttachmentIds()),
                 now,
@@ -120,12 +128,17 @@ public class TicketPricingService {
         LocalDate visitDate = actual.visitDate() == null ? today.apply(ticketType) : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         long basePrice = resolveUnitPrice(ticketType, null, visitDate);
+        // 第十八批 BP 段 359-R1、359-R3（BSM:782「可先试算再发布」）：试算可指定试算时刻 at_time（时:分，空＝此刻）与当天已售张数 day_sold（空＝按实际统计），别的键不读。
         Map<String, Object> context = actual.context() == null ? Map.of() : actual.context();
+        LocalTime at = context.get("at_time") == null ? LocalTime.now(LocalZone.ID)
+                : parsed(context.get("at_time"), LocalTime::parse, "试算时刻格式须为 时:分");
+        Long givenSold = context.get("day_sold") == null ? null : parsed(context.get("day_sold"), Long::valueOf, "试算当天已售张数须为整数");
         TicketDynamicPricingRuleRecord matched = matchDynamicPricingRule(
                 ticketType.id(),
                 visitDate,
                 salesChannel,
-                context,
+                at,
+                givenSold == null ? () -> daySold.soldOn(ticketType.id(), visitDate) : () -> givenSold,
                 Set.of("draft", "published")
         );
         // 18AW 收尾复核修正（PGM:287「展示给用户的一切文字……必须全部为中文，不得出现任何英文」）：试算说明在后台结果区上屏，用中文。
@@ -213,7 +226,7 @@ public class TicketPricingService {
     CustomerPrice resolveCustomerPrice(TicketTypeRecord ticketType, LocalDate visitDate, String salesChannel,
             Set<String> eligibleVariants) {
         long base = resolveUnitPrice(ticketType, null, visitDate);
-        DynamicPriceResult publicPrice = applyPublishedDynamicPricing(ticketType.id(), visitDate, salesChannel, base, Map.of());
+        DynamicPriceResult publicPrice = applyPublishedDynamicPricing(ticketType.id(), visitDate, salesChannel, base);
         long best = publicPrice.finalUnitPriceCent();
         TicketPriceRuleRecord selected = null;
         List<Map<String, Object>> hits = new java.util.ArrayList<>();
@@ -267,18 +280,22 @@ public class TicketPricingService {
         return lowest;
     }
 
+    /**
+     * 第十八批 BP 段 359-R1、359-R3（BSM:756「先按日期、时段、场次和容量算动态公开价」；BSM:780「时区一律取项目所在地时间」；PGM:744）：
+     * 时段按此刻（所在地时间）判，到访当天已售张数在本单落库前统计（不含本单）；条件由服务端自算，不收客户端上下文。
+     */
     DynamicPriceResult applyPublishedDynamicPricing(
             String ticketTypeId,
             LocalDate visitDate,
             String salesChannel,
-            long unitPrice,
-            Map<String, Object> context
+            long unitPrice
     ) {
         TicketDynamicPricingRuleRecord matched = matchDynamicPricingRule(
                 ticketTypeId,
                 visitDate,
                 salesChannel,
-                context == null ? Map.of() : context,
+                LocalTime.now(LocalZone.ID),
+                () -> daySold.soldOn(ticketTypeId, visitDate),
                 Set.of("published")
         );
         if (matched == null) {
@@ -292,16 +309,19 @@ public class TicketPricingService {
             String ticketTypeId,
             LocalDate visitDate,
             String salesChannel,
-            Map<String, Object> context,
+            LocalTime at,
+            LongSupplier daySold,
             Set<String> statuses
     ) {
-        Map<String, Object> actualContext = context == null ? Map.of() : context;
+        // 多条规则带已售条件时只统计一次。
+        Long[] sold = {null};
+        LongSupplier once = () -> sold[0] != null ? sold[0] : (sold[0] = daySold.getAsLong());
         return repository.listDynamicPricingRules().stream()
                 .filter(rule -> ticketTypeId.equals(rule.ticketTypeId()))
                 .filter(rule -> statuses.contains(rule.status()))
                 .filter(rule -> !visitDate.isBefore(rule.effectiveFrom()) && !visitDate.isAfter(rule.effectiveTo()))
                 .filter(rule -> rule.salesChannel() == null || rule.salesChannel().equals(salesChannel))
-                .filter(rule -> matchesCondition(rule.conditionRule(), actualContext))
+                .filter(rule -> TicketDynamicPricingConditions.matches(rule.conditionRule(), at, once))
                 .sorted((left, right) -> {
                     int priority = Integer.compare(right.priority(), left.priority());
                     return priority != 0 ? priority : right.updatedAt().compareTo(left.updatedAt());
@@ -310,15 +330,12 @@ public class TicketPricingService {
                 .orElse(null);
     }
 
-    private boolean matchesCondition(Map<String, Object> conditionRule, Map<String, Object> context) {
-        if (conditionRule == null || conditionRule.isEmpty()) {
-            return true;
+    private static <T> T parsed(Object value, java.util.function.Function<String, T> parse, String message) {
+        try {
+            return parse.apply(value.toString());
+        } catch (RuntimeException invalid) {
+            throw ApiException.badRequest("VALIDATION_FAILED", message);
         }
-        return conditionRule.entrySet().stream()
-                .allMatch(entry -> {
-                    Object actual = context.get(entry.getKey());
-                    return actual != null && String.valueOf(actual).equals(String.valueOf(entry.getValue()));
-                });
     }
 
     private long dynamicAdjustment(long basePrice, TicketDynamicPricingRuleRecord rule) {

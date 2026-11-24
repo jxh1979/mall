@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -38,7 +39,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 发布闸按每家覆盖酒吧核对赠酒杯数与平台出资杯数。
  *
  * <p>215-R2（ENUM:34、BSM:1032「后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」）：按票种配最低赠酒杯数，
- * 值与上下限同时填写；已上架通票改高下限后跌破即退回草稿。
+ * 值与上下限同时填写；第十八批 BP 段 300-R1（第十八批裁决 74）起已上架酒吧通票改最低杯数只存进票种规则草稿版、现表不变，提交审批时跌破即被发布闸拦下。
+ * 通票闸全过后由最高权限本人发布上架（BSM:576，本人提交即生效；域内票须对应域主管公司审批，见 DomainPassRuleVersion300Tests）。
  *
  * <p>真实接口与授权链：平台管理员按后台票务策略页同键（蛇形键）建票、建模板、绑定、发布、配最低杯数。不开测试事务，@AfterEach 按票种清理。
  */
@@ -92,6 +94,7 @@ class PassBarGiftFloorJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         for (String type : ticketTypes) {
+            jdbc.update("DELETE FROM ticket_type_rule_versions WHERE ticket_type_id = ?", type);
             jdbc.update("DELETE FROM ticket_type_gift_floors WHERE ticket_type_id = ?", type);
             jdbc.update("DELETE FROM ticket_type_entitlements WHERE ticket_type_id = ?", type);
             jdbc.update("DELETE FROM ticket_types WHERE id = ?", type);
@@ -120,11 +123,11 @@ class PassBarGiftFloorJdbcIntegrationTests {
 
         String platform = template("平台赠酒", "gift_drink", product);
         bind(pass, platform, 1, 1, 0L, "platform_funded");
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
     }
 
     @Test
-    void minGiftCupsConfiguredPerTicketTypeWithBoundsAndPublishedPassFallsBackToDraft() throws Exception {
+    void minGiftCupsConfiguredPerTicketTypeWithBoundsAndPublishedPassChangeWaitsInDraftVersion() throws Exception {
         String pass = createPass("k215b");
         mockMvc.perform(get("/api/v1/ticketing/ticket-types/" + pass + "/min-gift-cups").with(session()))
                 .andExpect(status().isOk())
@@ -134,7 +137,7 @@ class PassBarGiftFloorJdbcIntegrationTests {
         bind(pass, entry, 1, 1, 5000L, null);
         String gift = template("平台赠酒", "gift_drink", product);
         bind(pass, gift, 1, 1, 0L, "platform_funded");
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
 
         configure(pass, "{\"min_gift_cups\": 2, \"min_gift_cups_lower\": 1}").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
@@ -147,11 +150,11 @@ class PassBarGiftFloorJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.min_gift_cups").value(2));
         mockMvc.perform(get("/api/v1/ticketing/ticket-types/" + pass + "/min-gift-cups").with(session()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.min_gift_cups").value(2))
-                .andExpect(jsonPath("$.data.min_gift_cups_lower").value(1))
-                .andExpect(jsonPath("$.data.min_gift_cups_upper").value(3));
+                .andExpect(jsonPath("$.data.min_gift_cups").value(1));
         assertThat(jdbc.queryForObject("SELECT status FROM ticket_types WHERE id = ?", String.class, pass))
-                .as("已上架通票改到 2 杯后只赠 1 杯，退回草稿").isEqualTo("draft");
+                .as("已上架酒吧通票改最低杯数只存进草稿版，票仍在架、旧版照卖").isEqualTo("published");
+        assertThat(jdbc.queryForObject("SELECT min_gift_cups FROM ticket_type_rule_versions WHERE ticket_type_id = ? AND status = 'draft'",
+                Integer.class, pass)).isEqualTo(2);
 
         publish(pass).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT"));
@@ -206,6 +209,25 @@ class PassBarGiftFloorJdbcIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON).content("""
                         {"idempotency_key": "c215-pub-%s", "action": "publish", "reason": "通票配好赠酒上架"}
                         """.formatted(UUID.randomUUID())));
+    }
+
+    /** 最高权限本人发布：不带最终审批人，闸全过即上架。 */
+    private ResultActions masterPublish(String pass) throws Exception {
+        return mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + pass + "/publish").with(master())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key": "c215-mpub-%s", "reason": "通票配好赠酒上架"}
+                        """.formatted(UUID.randomUUID())));
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private static RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ResultActions configure(String pass, String values) throws Exception {

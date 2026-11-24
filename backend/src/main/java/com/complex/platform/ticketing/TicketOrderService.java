@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -219,12 +219,12 @@ public class TicketOrderService {
         long unitPrice = customerPrice != null ? customerPrice.baseUnitCent()
                 : pricingService.resolveUnitPrice(ticketType, priceRule, visitDate);
         DynamicPriceResult dynamicPrice = customerPrice != null ? customerPrice.publicPrice()
+                // 第十八批 BP 段 359-R1（PGM:744）：动态价条件由服务端按下单时刻与到访当天已售张数自算，不再读请求体 dynamic_pricing_context。
                 : pricingService.applyPublishedDynamicPricing(
                 ticketType.id(),
                 visitDate,
                 salesChannel,
-                unitPrice,
-                actual.dynamicPricingContext()
+                unitPrice
         );
         long baseAmount = unitPrice * quantity;
         long dynamicAdjustment = dynamicPrice.adjustmentCent() * quantity;

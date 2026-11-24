@@ -8,7 +8,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { CnDatePicker } from "../components/CnDatePicker";
-import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
+import type { AdminPageProps, TicketDynamicPricingConditionRule, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
 
 // 后端写权限码（TicketingController：/dynamic-pricing-rules/{id}/publish）
 const DYNAMIC_PUBLISH_PERMISSION = "ticket.dynamic_pricing.publish";
@@ -96,6 +96,16 @@ export function dynamicAdjustment(d: { adjustmentType?: string; adjustmentRate?:
   return `${rate < 0 ? "减价" : "加价"} ${Math.abs(rate)}%`;
 }
 
+// 第十八批 BP 段第 359 条 359-R2、359-R3（BSM:782「动态价按时段、容量等规则配置」；第十八批裁决 75「到访当天已售满多少张起」）：条件文字同后端复核单摘要
+//   （TicketDynamicPricingConditions.describe）——「时段 20:00～22:00」、跨零点「时段 22:00～次日 02:00」、「到访当天已售满 50 张起」，无条件为空串；
+//   票务策略页规则版本表共用。
+export function dynamicConditions(c?: TicketDynamicPricingConditionRule | null): string {
+  const parts: string[] = [];
+  if (c?.timeFrom && c.timeTo) parts.push(`时段 ${c.timeFrom}～${c.timeTo < c.timeFrom ? "次日 " : ""}${c.timeTo}`);
+  if (c?.daySoldMin) parts.push(`到访当天已售满 ${c.daySoldMin} 张起`);
+  return parts.join(" · ");
+}
+
 // 第 229 条 229-R7：票种下拉项（GET /api/v1/ticketing/ticket-types 的元素，本页只用 id 与票名）。
 type TicketTypeOption = { id: string; ticketName?: string };
 
@@ -116,6 +126,16 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   const [ticketTypeId, setTicketTypeId] = React.useState("");
   const [effectiveFrom, setEffectiveFrom] = React.useState("");
   const [effectiveTo, setEffectiveTo] = React.useState("");
+  // 359-R2、359-R3：条件都可空（时段空＝全天，已售空＝不论）；只在填了时随建规则发出。试算可指定试算时刻与当天已售张数（空＝此刻、按实际统计）。
+  const [timeFrom, setTimeFrom] = React.useState("");
+  const [timeTo, setTimeTo] = React.useState("");
+  const [daySoldMin, setDaySoldMin] = React.useState("");
+  const [simulateTime, setSimulateTime] = React.useState("");
+  const [simulateDaySold, setSimulateDaySold] = React.useState("");
+  const conditionRule: TicketDynamicPricingConditionRule = {
+    ...(timeFrom && timeTo ? { timeFrom, timeTo } : {}),
+    ...(daySoldMin.trim() ? { daySoldMin: Number(daySoldMin) } : {}),
+  };
   const [simulation, setSimulation] = React.useState<TicketDynamicPricingSimulationResult | null>(null);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
@@ -135,6 +155,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
         { label: "调整", value: dynamicAdjustment(rule) },
         { label: "状态", value: formatBusinessStatus(rule.status) },
         { label: "生效期", value: `${cnDate(rule.effectiveFrom)} ~ ${cnDate(rule.effectiveTo)}` },
+        { label: "条件", value: dynamicConditions(rule.conditionRule) || "无（全天、不论已售张数）" },
         { label: "规则编号", value: rule.id },
       ],
     });
@@ -216,15 +237,18 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       salesChannel,
       adjustmentType,
       ...(fixedAmount ? { adjustmentAmountCent: Math.round(Number(adjustmentYuan) * 100) } : { adjustmentRate: Number(adjustmentRate) }),
+      ...(Object.keys(conditionRule).length ? { conditionRule } : {}),
     }));
     if (result) setCreateOpen(false);
   }
 
   async function simulate() {
+    const context = { ...(simulateTime ? { atTime: simulateTime } : {}), ...(simulateDaySold.trim() ? { daySold: Number(simulateDaySold) } : {}) };
     const result = await runAction("ticket_dynamic_pricing_simulated", () => api.post<TicketDynamicPricingSimulationResult>("/api/v1/ticketing/dynamic-pricing/simulations", {
       ticketTypeId: selectedRule?.ticketTypeId,
       ...(visitDate ? { visitDate } : {}),
       salesChannel: simulateChannel,
+      ...(Object.keys(context).length ? { context } : {}),
     }), false);
     if (result) setSimulation(result as TicketDynamicPricingSimulationResult);
   }
@@ -249,7 +273,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
     // 第十八批 AS 段 297-R4（第十八批裁决 63、61）：已上架跨域组合通票的动态价只存进规则草稿版（后端回 draft），提交审批获批后生效。
     if ((result as { status?: string } | null)?.status === "draft") {
       setActionResult({ action: "ticket_dynamic_rule_staged",
-        note: "这张票是已上架的跨域组合通票：动态价已存入规则草稿版，旧版照常售卖；请到票务策略② 组合式套票配置提交审批，获批后生效" });
+        note: "这张票是已上架的未挂酒吧的票：动态价已存入规则草稿版，旧版照常售卖；请到票务策略② 组合式套票配置提交审批，获批后生效" });
     }
   }
 
@@ -277,6 +301,8 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
           <button type="button" data-testid="dynamic-pricing-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建定价规则</button>
           <select data-testid="dynamic-pricing-channel" aria-label={TEXT.channel} value={simulateChannel} onChange={(event) => setSimulateChannel(event.target.value)}>{SALES_CHANNEL_CODES.map((code) => <option key={code} value={code}>{formatBusinessStatus(code)}</option>)}</select>
           <input data-testid="dynamic-pricing-visit-date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} placeholder={TEXT.visitDate} />
+          <label><span>试算时刻（空＝此刻）</span><input type="time" data-testid="dynamic-pricing-simulate-time" aria-label="试算时刻" title="试算时刻（空＝此刻）" value={simulateTime} onChange={(event) => setSimulateTime(event.target.value)} /></label>
+          <input type="number" min={0} step={1} data-testid="dynamic-pricing-simulate-day-sold" aria-label="试算当天已售张数" value={simulateDaySold} onChange={(event) => setSimulateDaySold(event.target.value)} placeholder="试算当天已售张数（空＝按实际）" />
           <button type="button" data-testid="dynamic-pricing-simulate" disabled={busyAction !== ""} onClick={() => void simulate()}>{TEXT.simulate}</button>
           <HighRiskConfirm
             label={TEXT.publish}
@@ -314,10 +340,12 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             },
             {
               title: "调价",
-              description: "按比例或按固定金额调整（正数加价、负数减价），或按固定价（命中即卖这个价）；生效期可空，不填开始为当天，不填结束同开始日。",
+              description: "按比例或按固定金额调整（正数加价、负数减价），或按固定价（命中即卖这个价）；生效期可空，不填开始为当天，不填结束同开始日。"
+                + "时段可空（空＝全天），结束早于开始表示跨零点（如 22:00～02:00），按客人下单时刻判断；到访当天已售满多少张起可空，按该单到访日已卖出的张数判断。",
               validate: () => (fixedAmount
                 ? (adjustmentYuan.trim() && Number.isFinite(Number(adjustmentYuan)) ? null : "调整金额必须为数字。")
-                : (Number.isFinite(Number(adjustmentRate)) ? null : "调整比例必须为数字。")),
+                : (Number.isFinite(Number(adjustmentRate)) ? null : "调整比例必须为数字。"))
+                ?? ((timeFrom === "") !== (timeTo === "") ? "时段开始与结束须同时填写。" : null),
               content: (
                 <>
                   <label><span>{TEXT.adjustmentType}</span><select data-testid="dynamic-pricing-adjustment-type" value={adjustmentType} onChange={(event) => setAdjustmentType(event.target.value)}>{Object.entries(ADJUSTMENT_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -326,6 +354,9 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                     : <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>}
                   <label><span>{TEXT.effectiveFrom}</span><CnDatePicker data-testid="dynamic-pricing-effective-from" value={effectiveFrom} onChange={setEffectiveFrom} /></label>
                   <label><span>{TEXT.effectiveTo}</span><CnDatePicker data-testid="dynamic-pricing-effective-to" value={effectiveTo} onChange={setEffectiveTo} /></label>
+                  <label><span>时段开始</span><input type="time" data-testid="dynamic-pricing-time-from" value={timeFrom} onChange={(event) => setTimeFrom(event.target.value)} /></label>
+                  <label><span>时段结束</span><input type="time" data-testid="dynamic-pricing-time-to" value={timeTo} onChange={(event) => setTimeTo(event.target.value)} /></label>
+                  <label><span>到访当天已售满（张）起</span><input type="number" min={1} step={1} data-testid="dynamic-pricing-day-sold-min" value={daySoldMin} onChange={(event) => setDaySoldMin(event.target.value)} placeholder="可空" /></label>
                 </>
               ),
             },
@@ -337,6 +368,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             { label: TEXT.adjustment, value: dynamicAdjustment({ adjustmentType, adjustmentRate, adjustmentAmountCent: Math.round(Number(adjustmentYuan) * 100) }) },
             { label: TEXT.effectiveFrom, value: effectiveFrom ? cnDate(effectiveFrom) : "未填写" },
             { label: TEXT.effectiveTo, value: effectiveTo ? cnDate(effectiveTo) : "未填写" },
+            { label: "条件", value: dynamicConditions(conditionRule) || "无（全天、不论已售张数）" },
           ]}
         />
         {formError ? <div data-testid="dynamic-pricing-error" className="admin-inline-error">{formError}</div> : null}
@@ -359,7 +391,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                   <td>{rule.priority ?? "-"}</td>
                   <td>{dynamicAdjustment(rule)}</td>
                   <td>{formatBusinessStatus(rule.status)}</td>
-                  <td>{cnDate(rule.effectiveFrom)} ~ {cnDate(rule.effectiveTo)}</td>
+                  <td>{cnDate(rule.effectiveFrom)} ~ {cnDate(rule.effectiveTo)}{dynamicConditions(rule.conditionRule) ? ` · ${dynamicConditions(rule.conditionRule)}` : ""}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看动态定价规则详情" onClick={(event) => { event.stopPropagation(); openRuleDetail(rule); }}>查看详情</button></td></tr>
               ))}
             </tbody>

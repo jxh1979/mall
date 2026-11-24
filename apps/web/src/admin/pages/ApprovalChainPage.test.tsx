@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -321,8 +321,8 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(cells(`rv87_${actions.indexOf("staff.shift.publish")}`)[1]).toBe("发布排班");
     expect(cells(`rv87_${actions.indexOf("bar.bill_waiver")}`)[1]).toBe("酒吧账单免单"); // 第十八批裁决 47
     expect(cells(`rv87_${actions.indexOf("merchant.project.add")}`)[1]).toBe("商户加经营项目");
-    // 第十八批 AJ 段 236-R5⑤：跨域组合通票规则审批与票种规则版本。
-    expect(cells(`rv87_${actions.indexOf("ticket.type.rule.publish")}`)[1]).toBe("跨域组合通票规则审批");
+    // 第十八批 AJ 段 236-R5⑤：票种规则审批与票种规则版本（第十八批 BP 段 300-R2 起名称不再限定跨域组合通票）。
+    expect(cells(`rv87_${actions.indexOf("ticket.type.rule.publish")}`)[1]).toBe("票种规则审批");
     const ruleVersion = objectTypes.indexOf("ticket_type_rule_version");
     expect(cells(`rv87_${ruleVersion}`)[2]).toBe(`票种规则版本 / obj_${ruleVersion}`);
     // 第十八批 AK 段第 221 条 221-R1⑥：沽清三动作各有中文名，主管从动作名看出批的是哪一种。

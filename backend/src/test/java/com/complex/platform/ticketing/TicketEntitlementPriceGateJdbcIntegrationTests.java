@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -94,6 +95,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         for (String type : ticketTypes) {
+            jdbc.update("DELETE FROM ticket_type_rule_versions WHERE ticket_type_id = ?", type);
             jdbc.update("DELETE FROM ticket_type_entitlements WHERE ticket_type_id = ?", type);
             jdbc.update("DELETE FROM ticket_types WHERE id = ?", type);
         }
@@ -132,7 +134,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
                 .andExpect(status().isOk());
         priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
 
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
     }
 
     @Test
@@ -140,7 +142,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
         String pass = createPass("b");
         // 入场等非提供方兑付权益不查内部结算价，照常发布。
         bind(pass, template("入场", "entry", null, null), 5000L, null).andExpect(status().isOk());
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
 
         String gift = template("平台赠酒", "gift_drink", null, null, bar, product);
         bind(pass, gift, 0L, "platform_funded").andExpect(status().isConflict())
@@ -157,7 +159,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
         bind(pass, template("入场", "entry", null, null), 5000L, null).andExpect(status().isOk());
         bind(pass, template("餐饮（商户让利）", "dining", null, restaurant), 0L, "merchant_concession").andExpect(status().isOk());
 
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
     }
 
     private String createPass(String tag) throws Exception {
@@ -210,6 +212,28 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON).content("""
                         {"idempotency_key": "c236-pub-%s", "action": "publish", "reason": "通票配好权益上架"}
                         """.formatted(UUID.randomUUID())));
+    }
+
+    /**
+     * 第十八批 BP 段 300-R1（第十八批裁决 74）：通票闸全过后须对应域主管公司审批（见 DomainPassRuleVersion300Tests），本类关心的是发布闸，
+     * 由最高权限本人发布（BSM:576，本人提交即生效）。
+     */
+    private ResultActions masterPublish(String pass) throws Exception {
+        return mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + pass + "/publish").with(master())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key": "c236-mpub-%s", "reason": "通票配好权益上架"}
+                        """.formatted(UUID.randomUUID())));
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private static RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private String ticketStatus(String pass) {

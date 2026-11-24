@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,7 +52,7 @@ class TicketPriceRuleCreateWebShape198R5Tests {
                 + " VALUES (?, 'complex', '派生价形状综合体', 'active', now(), now())", project);
         jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,"
                 + " holiday_price_cent, stock_required, status, validity_days, created_at, updated_at)"
-                + " VALUES (?, '派生价形状门票', 'flat', 5000, 5000, 5000, FALSE, 'published', 1, now(), now())", ticketType);
+                + " VALUES (?, '派生价形状门票', 'flat', 5000, 5000, 5000, FALSE, 'draft', 1, now(), now())", ticketType);
         RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b52tp_" + s, "staff", project, null,
                 "ticket.price_variant.manage");
         Map<String, Object> body = new LinkedHashMap<>();

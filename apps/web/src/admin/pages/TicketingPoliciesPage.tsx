@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -13,11 +13,12 @@ import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { Tabs } from "antd";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { BarArrivalReminderSection, TicketExpiryReminderSection } from "./CustomerFacingSettingsSections";
-import { dynamicAdjustment } from "./DynamicPricingPage";
+import { dynamicAdjustment, dynamicConditions } from "./DynamicPricingPage";
 import { TicketRefundableRequest } from "./TicketRefundableRequest";
 import { priceModeLabel, priceModeValue } from "./ticketPriceModes";
 import { TICKET_SALE_STATUS_LABELS, TicketTypeSaleSettings, saleTimeLabel } from "./TicketTypeSaleSettings";
 import { ConcessionApplicationSelect } from "./TicketConcessionApplicationSelect";
+import { TicketFinalApproverField } from "./TicketFinalApproverField";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -192,7 +193,8 @@ type RuleVersionRow = {
   priceRules: Array<{ id: string; variantType: string; priceMode: string; weekdayPriceCent: number | null; weekendPriceCent: number | null;
     holidayPriceCent: number | null; discountRate: number | string | null; channelId: string | null; adjustmentAmountCent?: number | null }>;
   dynamicPricingRules: Array<{ id: string; ruleName: string; priority: number; effectiveFrom: string; effectiveTo: string; salesChannel: string | null;
-    adjustmentType: string; adjustmentRate: number | string | null; adjustmentAmountCent: number | null }>;
+    adjustmentType: string; adjustmentRate: number | string | null; adjustmentAmountCent: number | null;
+    conditionRule?: { timeFrom?: string; timeTo?: string; daySoldMin?: number } | null }>;
   reviewId: string | null;
   // 票种已上架时其未结版本的定价核算（草稿价、草稿组成）；其余为空。
   priceCheck: PriceCheckRow | null;
@@ -204,8 +206,9 @@ const FORMAT_COMPANIES: Record<string, string> = {
   bar: "entertainment_platform_company", amusement: "amusement_company", media: "media_company",
   catering: "city_project_company", retail: "city_project_company",
 };
-// 236-R5④⑩（第十八批裁决 61「审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票的改价、加权益、改最低赠酒杯数存入草稿版。
-const DRAFT_VERSION_NOTE = "已上架的跨域组合通票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版";
+// 236-R5④⑩（第十八批裁决 61「审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票的改价、加权益、改最低赠酒杯数存入草稿版；
+//   第十八批 BP 段 300-R2（第十八批裁决 74）起凡未挂酒吧的已上架票都如此。
+const DRAFT_VERSION_NOTE = "已上架的未挂酒吧的票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版";
 
 export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo, reportViewedObjects }: AdminPageProps) {
   // 第十八批 AO 段第 249 条 249-R8：持授权 U 盘密钥的最高权限本人发起的删除不需要审批（BSM:576），按钮与提示照员工档案页判最高权限。
@@ -217,6 +220,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   React.useEffect(() => reportViewedObjects?.("ticket_type", tickets), [tickets, reportViewedObjects]);
   React.useEffect(() => reportViewedObjects?.("ticket_price_rule", rules), [rules, reportViewedObjects]);
   const [merchants, setMerchants] = React.useState<MerchantRow[]>([]);
+  // 第十八批 BP 段 354-R3（ENUM:32「单一酒吧门票由对应酒吧商户定价」）：商户账号建票、建权益模板默认并锁定本店；商户列表对商户账号取不到时名称显示「本店」。
+  const ownBarName = merchants.find((m) => m.id === user.merchantId)?.merchantName ?? "本店";
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   // V260 存档/删除范式：显示已存档票种/价规开关（后端按 includeArchived 过滤）。
   const [showArchived, setShowArchived] = React.useState(false);
@@ -233,7 +238,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   const [qrRefresh, setQrRefresh] = React.useState<number>(15);
   // 结算重构批4（V230）：票种资格/定价档分类（标准/新人/学生）。仅分类与报表口径，不碰定价。
   const [ticketCategory, setTicketCategory] = React.useState("standard");
-  const [barId, setBarId] = React.useState("");
+  const [barId, setBarId] = React.useState(user.merchantId ?? "");
   // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
   const [createTemplateId, setCreateTemplateId] = React.useState("");
   // V369 建票时的票种折扣（百分数，100=不打折）。系统按「各业态票面原价合计 × 折扣」算出售价。
@@ -255,10 +260,13 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   const [createOpen, setCreateOpen] = React.useState(false);
   // 第十八批 AJ 段 236-R5⑦（第十八批裁决 62「还得改向导（先建草稿不立即上架）」）：向导先存为草稿、不立即上架。
   const [draftOnly, setDraftOnly] = React.useState(false);
+  // 第十八批 BP 段 300-R2（第十八批裁决 74）：没挂酒吧的票发布要填最终审批人（最高权限本人发起不填，BSM:576）。
+  const [finalApprover, setFinalApprover] = React.useState("");
+  const needsApprover = !draftOnly && !barId && !isMaster;
 
   // 区2 新建权益模板
   // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：提供方商户必选。
-  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: "" });
+  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "" });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "", applicationId: "" });
@@ -493,13 +501,14 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
 
   // 第十八批 AJ 段 236-R5①（关闭第 287 条）：草稿票种行「发布」——向导先存的草稿票配齐组合后、被退回草稿的票补齐后都从这里发布；跨域组合通票须填
   //   最终审批人，后端提交项目之上的平台权限审批，返回仍为草稿、获批即上架（ENUM:32；PGM:528「发起单据时只需指定该事项的最终审批人」）。
+  //   第十八批 BP 段 300-R2（第十八批裁决 74）：未挂酒吧的域内票同样要填，审批人为对应域主管公司的人。
   async function publishDraftTicket(id: string) {
     const reason = window.prompt("发布理由：");
     if (reason === null) return;
     if (!reason.trim()) { setGlobalError("发布理由必填"); return; }
     // 297-R3（BSM:576）：最高权限本人发起不要求最终审批人、提交即生效。
     const approver = window.prompt(isMaster ? "最终审批人用户编号（最高权限本人发起可不填，提交即生效）："
-      : "最终审批人用户编号（跨域组合通票必填，其余留空）：");
+      : "最终审批人用户编号（单一酒吧门票留空；酒吧通票、游乐票等填对应域主管公司的审批人；跨域组合通票填项目之上的平台审批人）：");
     if (approver === null) return;
     setGlobalError(null);
     try {
@@ -544,6 +553,10 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setError("发布理由必填。");
       return;
     }
+    if (needsApprover && !finalApprover.trim()) {
+      setError("没挂酒吧的票发布须填最终审批人用户编号。");
+      return;
+    }
     setError("");
     setBusy(true);
     try {
@@ -580,11 +593,15 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         // S11 票面原价：这张票只有这一条权益，它的票面原价就是这张票的平日价（占比 100%，钱全归这条权益的业态）。
         component_price_cent: Math.round(prices.平日价 * 100),
       });
-      const published = await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/publish`, {
+      const published = await api.post<{ status?: string }>(`/api/v1/ticketing/ticket-types/${ticketId}/publish`, {
         idempotency_key: `${createKey}-publish`,
         reason: publishReason.trim(),
+        // 300-R2：没挂酒吧的票带最终审批人，后端提交审批、返回仍为草稿（获批即上架）。
+        ...(needsApprover ? { final_approver_id: finalApprover.trim() } : {}),
       });
-      setActionResult({ action: "ticket_policy_publish", status: "published", published });
+      setActionResult(published?.status === "published"
+        ? { action: "ticket_policy_publish", status: "published", published, note: "已发布" }
+        : { action: "ticket_type_publish_submitted", ticketTypeId: ticketId, note: "已提交发布审批，审批通过后自动上架" });
       setCreateOpen(false);
       reload();
     } catch (publishError) {
@@ -614,7 +631,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         merchant_id: tplForm.merchantId,
       });
       setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
-      setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: "" });
+      setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: user.merchantId ?? "" });
       reload();
     } catch (e) { setGlobalError(e instanceof Error ? e.message : "新建权益模板失败"); }
   }
@@ -1048,7 +1065,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         amusementProjects: chosenProjects.length,
         dining: diningLines.length,
         // 236-R5④：已上架跨域组合通票的改动进草稿版（第十八批裁决 61）；其余已上架通票照 V369／215-R1 退回草稿，补齐后用票种行「发布」重新上架。
-        note: "已上架的跨域组合通票改动已存入草稿版，旧版照常售卖，提交审批获批后自动换成新版；其余已上架通票改了组成后售价对不上或赠酒不够的会退回草稿，补齐后用票种行的「发布」重新上架。",
+        // 第十八批 BP 段 300-R2（第十八批裁决 74）：未挂酒吧的已上架票都进草稿版；已上架的单一酒吧门票改了组成后售价对不上照 V369 退回草稿。
+        note: "已上架的未挂酒吧的票改动已存入草稿版，旧版照常售卖，提交审批获批后自动换成新版；已上架的单一酒吧门票改了组成后售价对不上的会退回草稿，补齐后用票种行的「发布」重新上架。",
       });
       setBarLines([]);
       setSelectedProjects({});
@@ -1138,7 +1156,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       )))],
       ["动态价规则", (v) => (v.dynamicPricingRules.length === 0 ? "无" : v.dynamicPricingRules.map((d) => (
         <div key={d.id}>{`${d.ruleName} · ${d.effectiveFrom}～${d.effectiveTo} · ${d.salesChannel ? formatBusinessStatus(d.salesChannel) : "全部渠道"} · `
-          + `${dynamicAdjustment(d)} · 优先级 ${d.priority}`}</div>
+          + `${dynamicConditions(d.conditionRule) ? `${dynamicConditions(d.conditionRule)} · ` : ""}${dynamicAdjustment(d)} · 优先级 ${d.priority}`}</div>
       )))],
       ["最低赠酒杯数", (v) => (v.minGiftCups == null ? "出厂 1 杯"
         : `${v.minGiftCups} 杯（下限 ${v.minGiftCupsLower ?? "—"} 杯、上限 ${v.minGiftCupsUpper ?? "—"} 杯）`)],
@@ -1181,7 +1199,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         <div className="admin-state" data-testid="ticketing-policies-focus">已从下钻定位到票种：{focusObjectId}（下表高亮行）</div>
       )}
       <div className="admin-preview" data-testid="ticketing-workflow-guide">
-        <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布（要做跨经营域的组合通票，新建时勾选「先存为草稿、不立即上架」）→ ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好套票权益（已上架的票只能加同一经营域的收费权益；跨经营域的组合通票配齐后在票种行点「发布」提交审批，获批即上架）→ ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
+        <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布（要做跨经营域的组合通票，新建时勾选「先存为草稿、不立即上架」）→ ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好套票权益（已上架的票只能加同一经营域的收费权益；没挂酒吧的票发布要提交审批、获批即上架，上架后的改动存入草稿版、获批换成新版）→ ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
       </div>
       <div className="admin-preview" data-testid="ticketing-qr-refresh-config">
         <strong>动态验证码刷新间隔（全场统一）：</strong>
@@ -1308,11 +1326,13 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   </select>
                 </label>
                 <label>单店票绑定酒吧（可空=通票）
-                  <select data-testid="ticket-bar-select" aria-label="单店票绑定酒吧" value={barId} onChange={(event) => setBarId(event.target.value)}>
-                    <option value="">不绑定（通票）</option>
-                    {merchants.filter((m) => m.merchantType === "bar").map((m) => (
-                      <option key={m.id} value={m.id}>{m.merchantName}</option>
-                    ))}
+                  <select data-testid="ticket-bar-select" aria-label="单店票绑定酒吧" value={barId} disabled={Boolean(user.merchantId)} onChange={(event) => setBarId(event.target.value)}>
+                    {user.merchantId ? <option value={user.merchantId}>{ownBarName}</option> : <>
+                      <option value="">不绑定（通票）</option>
+                      {merchants.filter((m) => m.merchantType === "bar").map((m) => (
+                        <option key={m.id} value={m.id}>{m.merchantName}</option>
+                      ))}
+                    </>}
                   </select>
                 </label>
                 <div data-testid="ticket-derived-preview" className="admin-preview">
@@ -1326,11 +1346,12 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
             title: "绑定权益并发布，或先存为草稿",
             description: draftOnly
               ? "只建草稿票，不绑权益、不上架：到「组合式套票配置」配齐各业态权益与价格、在「定价核算」核对售价，再在票种行点「发布」提交审批。"
-              : "公开可售的票必须能出票：至少绑定一个权益模板，填写发布理由后上架。同一经营域的分项权益可发布后在「组合式套票配置」补充；要做跨域组合通票请勾选「先存为草稿、不立即上架」。",
+              : "公开可售的票必须能出票：至少绑定一个权益模板，填写发布理由后上架；没挂酒吧的票还要填最终审批人，提交审批、获批即上架。同一经营域的分项权益可发布后在「组合式套票配置」补充；要做跨域组合通票请勾选「先存为草稿、不立即上架」。",
             validate: () => {
               if (draftOnly) return null;
               if (!createTemplateId) return "必须选择一个权益模板。";
               if (!publishReason.trim()) return "发布理由必填。";
+              if (needsApprover && !finalApprover.trim()) return "没挂酒吧的票发布须填最终审批人用户编号。";
               return null;
             },
             content: (
@@ -1350,6 +1371,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                       </select>
                     </label>
                     <label>发布理由（必填）<input data-testid="ticket-publish-reason" value={publishReason} onChange={(event) => setPublishReason(event.target.value)} placeholder="如：暑期档新票上架" aria-label="发布理由" /></label>
+                    {needsApprover ? <TicketFinalApproverField value={finalApprover} onChange={setFinalApprover} /> : null}
                   </>
                 )}
               </>
@@ -1364,7 +1386,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           { label: "限量", value: stock.trim() || "不限" },
           { label: "有效期（天）", value: validityDays },
           { label: "票种分类", value: TICKET_CATEGORY_LABELS[ticketCategory] ?? "标准票" },
-          { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
+          { label: "单店酒吧", value: barId ? (barId === user.merchantId ? ownBarName : merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
           ...(draftOnly ? [] : [
             { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
             { label: "发布理由", value: publishReason.trim() || "未填写" },
@@ -1391,7 +1413,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       {/* 第十八批 AJ 段 236-R5②（ENUM:32；BSM:754；第十八批裁决 61）：跨域组合通票规则版本——生效版与未结版本并列，提交审批、放弃草稿或撤回提交，历史版本列在下方。 */}
       <h4>规则版本</h4>
       {!comboTicketId ? null : ruleVersions.length === 0 ? (
-        <div className="admin-preview" data-testid="rule-versions-empty">这张票没有规则版本（跨域组合通票提交发布审批后才有）。</div>
+        <div className="admin-preview" data-testid="rule-versions-empty">这张票没有规则版本（未挂酒吧的票提交发布审批后才有）。</div>
       ) : (
         <>
           {currentVersions.length > 0 ? ruleVersionTable(currentVersions, "rule-versions-table") : null}
@@ -1412,7 +1434,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   </label>
                   <label>最终审批人（用户编号）
                     <input aria-label="最终审批人" data-testid="rule-version-submit-approver" value={ruleSubmitApprover}
-                      placeholder={isMaster ? "最高权限本人发起可不填，提交即生效" : "项目之上的平台权限审批人，不是登录名"}
+                      placeholder={isMaster ? "最高权限本人发起可不填，提交即生效" : "单一酒吧门票不用此处；酒吧通票、游乐票等填对应域主管公司的审批人；跨域组合通票填项目之上的平台审批人（用户编号，不是登录名）"}
                       onChange={(event) => setRuleSubmitApprover(event.target.value)} />
                   </label>
                   <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="rule-version-submit"
@@ -1710,9 +1732,11 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       </div>
       <div className="admin-inline-form" data-testid="entitlement-template-form">
         <input aria-label="模板名称" placeholder="模板名称（如 入园1次）" value={tplForm.name} onChange={(event) => setTplForm({ ...tplForm, name: event.target.value })} />
-        <select aria-label="提供方商户" data-testid="entitlement-template-merchant" value={tplForm.merchantId} onChange={(event) => setTplForm({ ...tplForm, merchantId: event.target.value })}>
-          <option value="">选择提供方商户</option>
-          {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+        <select aria-label="提供方商户" data-testid="entitlement-template-merchant" value={tplForm.merchantId} disabled={Boolean(user.merchantId)} onChange={(event) => setTplForm({ ...tplForm, merchantId: event.target.value })}>
+          {user.merchantId ? <option value={user.merchantId}>{ownBarName}</option> : <>
+            <option value="">选择提供方商户</option>
+            {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+          </>}
         </select>
         <select aria-label="权益类型" value={tplForm.entitlementType} onChange={(event) => setTplForm({ ...tplForm, entitlementType: event.target.value })}>
           {ENTITLEMENT_TYPES.map((t) => (

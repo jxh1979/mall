@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.41
+// 文件版本：V0.42
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -194,7 +194,8 @@ public class SupervisorReviewService {
                     List.of("business_review", "finance_review", "legal_review")),
             // 第十八批 AJ 段第 236 条 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；PGM:528）：
             // 跨域组合通票票种规则发布，恒阻断；提交人沿直接上级链到其指定的最终审批人，末节点须经角色持有跨域组合通票票种规则审批权限
-            // （能看全部项目由 TicketTypeRuleVersionService 提交时核）。
+            // （能看全部项目由 TicketTypeRuleVersionService 提交时核）。第十八批 BP 段 300-R1（第十八批裁决 74）起未挂酒吧的域内票同走本策略，
+            // 权限名改为票种规则审批，审批人属对应域主管公司由 TicketTypeRuleVersionService 提交时核。
             new SupervisorReviewPolicyRecord("ticket_type_rule_publish", "ticket.type.rule.publish", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.product.publish.approve"),
             // 第十八批 AW 段第 295 条 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」；PGM:528）：

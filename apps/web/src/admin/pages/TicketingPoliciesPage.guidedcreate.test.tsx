@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -83,6 +83,9 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     // 选模板+填发布理由 → 确认页 → 发布:create→bind→publish 三段依次落后端。
     fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
     fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "暑期档新票上架" } });
+    // 第十八批 BP 段 300-R2（第十八批裁决 74）：没选酒吧的票发布要填最终审批人（对应域主管公司的审批人）。
+    await waitFor(() => expect(screen.queryByTestId("ticket-final-approver")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ticket-final-approver"), { target: { value: "usr-ent-approver" } });
     fireEvent.click(screen.getByTestId("ticket-policy-next"));
     fireEvent.click(screen.getByTestId("ticket-publish"));
 
@@ -103,6 +106,7 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     // 发布载荷带必填理由。
     const publishCall = postSpy.mock.calls.find((c) => String(c[0]).includes("/publish"));
     expect(((publishCall?.[1] ?? {}) as Record<string, unknown>).reason).toBe("暑期档新票上架");
+    expect(((publishCall?.[1] ?? {}) as Record<string, unknown>).final_approver_id).toBe("usr-ent-approver");
     // 发布成功后弹窗关闭。
     await waitFor(() => expect(screen.queryByTestId("ticket-name")).toBeNull());
   });
@@ -154,6 +158,9 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     await waitFor(() => expect(screen.getByTestId("ticket-create-template")).toBeTruthy());
     fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
     fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "学生票上架" } });
+    // 第十八批 BP 段 300-R2（第十八批裁决 74）：没选酒吧的票发布要填最终审批人（对应域主管公司的审批人）。
+    await waitFor(() => expect(screen.queryByTestId("ticket-final-approver")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ticket-final-approver"), { target: { value: "usr-ent-approver" } });
     fireEvent.click(screen.getByTestId("ticket-policy-next"));
     fireEvent.click(screen.getByTestId("ticket-publish"));
     await waitFor(() => {
@@ -273,5 +280,130 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     const body = (postSpy.mock.calls[0]?.[1] ?? {}) as Record<string, unknown>;
     expect(body).toMatchObject({ ticket_name: "后台通票策略", weekday_price_cent: 19900 });
     expect(typeof body.idempotency_key).toBe("string");
+  });
+});
+
+// 第十八批 BP 段 300-R2、354-R3：真实 AdminApi（蛇形键响应经客户端转驼峰），假响应用文本体。
+type Sent = { method: string; url: string; body: Record<string, unknown> };
+
+function okBody(data: string): Response {
+  return new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+    { status: 200, headers: { "content-type": "application/json" } });
+}
+
+function renderWithBackend(sent: Sent[], user: Record<string, unknown>, options: { merchantsForbidden?: boolean; publishStatus?: string } = {}) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (method !== "GET") sent.push({ method, url, body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> });
+    if (url.includes("/platform/merchants")) {
+      return options.merchantsForbidden
+        ? new Response('{"success":false,"code":"FORBIDDEN","detail_code":"FORBIDDEN","message":"无权查看商户列表"}',
+          { status: 403, headers: { "content-type": "application/json" } })
+        : okBody('{"items":[{"id":"m-bar-1","merchant_name":"一号酒吧","merchant_type":"bar"}]}');
+    }
+    if (method === "POST" && url.endsWith("/ticketing/ticket-types")) return okBody('{"id":"tt-new","status":"draft"}');
+    if (method === "POST" && url.endsWith("/publish")) return okBody(`{"id":"tt-new","status":"${options.publishStatus ?? "draft"}"}`);
+    if (method !== "GET") return okBody("{}");
+    if (url.includes("/ticketing/entitlement-templates")) {
+      return okBody('{"items":[{"id":"tpl-1","name":"门票权益","entitlement_type":"entry","status":"active"}]}');
+    }
+    return okBody('{"items":[]}');
+  }));
+  const props = { api: new AdminApi(), user, setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS } as unknown as AdminPageProps;
+  render(<TicketingPoliciesPage {...props} />);
+  return props;
+}
+
+function fillPricesAndNext() {
+  fireEvent.change(screen.getByTestId("ticket-weekday-price"), { target: { value: "100" } });
+  fireEvent.change(screen.getByTestId("ticket-weekend-price"), { target: { value: "120" } });
+  fireEvent.change(screen.getByTestId("ticket-holiday-price"), { target: { value: "150" } });
+  fireEvent.click(screen.getByTestId("ticket-policy-next"));
+}
+
+const posts = (sent: Sent[], suffix: string) => sent.filter((c) => c.method === "POST" && c.url.endsWith(suffix));
+
+describe("TicketingPoliciesPage 第十八批 BP 段 300-R2、354-R3", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  // 300-R2（第十八批裁决 74「要审批也留版本」；PGM:528「发起单据时只需指定该事项的最终审批人」）：向导没选酒吧时发布要填最终审批人，
+  //   不填不发请求；填了随发布提交，后端回草稿即提示已提交审批。选了酒吧（单一酒吧门票）不出现该输入框、请求不带审批人，平台账号的酒吧下拉照旧可选。
+  it("300-R2 没选酒吧建通票须填最终审批人", async () => {
+    const sent: Sent[] = [];
+    const props = renderWithBackend(sent, { id: "u1", username: "admin", accountType: "platform_admin" });
+    await waitFor(() => expect(Array.from((screen.queryByTestId("entitlement-template-merchant") as HTMLSelectElement | null)?.options ?? [])
+      .map((o) => o.value)).toContain("m-bar-1"));
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    fillPricesAndNext();
+    await waitFor(() => expect(screen.queryByTestId("ticket-final-approver")).not.toBeNull());
+    await waitFor(() => expect(Array.from((screen.getByTestId("ticket-create-template") as HTMLSelectElement).options).map((o) => o.value))
+      .toContain("tpl-1"));
+    fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
+    fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "酒吧通票上架" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    expect(screen.getByTestId("ticket-policy-error").textContent).toContain("最终审批人");
+    expect(sent.length).toBe(0);
+
+    fireEvent.change(screen.getByTestId("ticket-final-approver"), { target: { value: "usr-ent-approver" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    fireEvent.click(screen.getByTestId("ticket-publish"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
+      action: "ticket_type_publish_submitted", note: "已提交发布审批，审批通过后自动上架" })));
+    expect(posts(sent, "/ticket-types/tt-new/publish")[0]?.body).toMatchObject({ reason: "酒吧通票上架", final_approver_id: "usr-ent-approver" });
+
+    // 选了酒吧：不出现最终审批人输入框，发布请求不带审批人。
+    await waitFor(() => expect(screen.queryByTestId("ticket-name")).toBeNull());
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    const bar = screen.getByTestId("ticket-bar-select") as HTMLSelectElement;
+    expect(bar.disabled).toBe(false);
+    expect(Array.from(bar.options).map((o) => o.value)).toEqual(["", "m-bar-1"]);
+    // 单页向导：三档价沿用上一次填的；选酒吧后直接看同页的权益与发布区。
+    fireEvent.change(bar, { target: { value: "m-bar-1" } });
+    await waitFor(() => expect(screen.queryByTestId("ticket-create-template")).not.toBeNull());
+    expect(screen.queryByTestId("ticket-final-approver")).toBeNull();
+    fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
+    fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "单店票上架" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    fireEvent.click(screen.getByTestId("ticket-publish"));
+    await waitFor(() => expect(posts(sent, "/ticket-types/tt-new/publish").length).toBe(2));
+    expect(posts(sent, "/ticket-types/tt-new/publish")[1]?.body).not.toHaveProperty("final_approver_id");
+    expect(posts(sent, "/ticketing/ticket-types")[1]?.body.bar_id).toBe("m-bar-1");
+  });
+
+  // 354-R3（ENUM:32「单一酒吧门票由对应酒吧商户定价、销售并确认已核销部分的收入」；PGM:429）：商户账号建票的「单店票绑定酒吧」默认并锁定本店、
+  //   没有「不绑定（通票）」；商户列表对商户账号 403 时名称显示「本店」。建权益模板的提供方商户同样默认并锁定本店。
+  it("354-R3 商户账号建票默认本店", async () => {
+    const sent: Sent[] = [];
+    renderWithBackend(sent, { id: "u-clerk", username: "clerk", accountType: "staff", merchantId: "m-bar-1" },
+      { merchantsForbidden: true, publishStatus: "published" });
+    await waitFor(() => {
+      const provider = screen.getByTestId("entitlement-template-merchant") as HTMLSelectElement;
+      expect(provider.value).toBe("m-bar-1");
+      expect(provider.disabled).toBe(true);
+      expect(Array.from(provider.options).map((o) => o.value)).toEqual(["m-bar-1"]);
+      expect(screen.getAllByText("门票权益").length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    const bar = screen.getByTestId("ticket-bar-select") as HTMLSelectElement;
+    expect(bar.value).toBe("m-bar-1");
+    expect(bar.disabled).toBe(true);
+    expect(Array.from(bar.options).map((o) => o.value)).toEqual(["m-bar-1"]);
+    expect(bar.options[0]?.textContent).toBe("本店");
+    fillPricesAndNext();
+    await waitFor(() => expect(screen.queryByTestId("ticket-create-template")).not.toBeNull());
+    expect(screen.queryByTestId("ticket-final-approver")).toBeNull();
+    fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
+    fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "本店门票上架" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    fireEvent.click(screen.getByTestId("ticket-publish"));
+    await waitFor(() => expect(posts(sent, "/ticketing/ticket-types").length).toBe(1));
+    expect(posts(sent, "/ticketing/ticket-types")[0]?.body.bar_id).toBe("m-bar-1");
+
+    const tplForm = within(screen.getByTestId("entitlement-template-form"));
+    fireEvent.change(tplForm.getByLabelText("模板名称"), { target: { value: "本店入场" } });
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => expect(posts(sent, "/ticketing/entitlement-templates").length).toBe(1));
+    expect(posts(sent, "/ticketing/entitlement-templates")[0]?.body.merchant_id).toBe("m-bar-1");
   });
 });

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -155,15 +155,18 @@ class CustomerTicketPricingEligibilityJdbcIntegrationTests {
     @Test
     void adminCreatesMemberPriceRuleThroughEntry() throws Exception {
         // 170-R2（契约 TicketPriceRuleRequest.variant_type 补 member）：后台按 TicketingPoliciesPage.createRule 的蛇形键建会员价规则。
-        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b14_rule_" + f.suffix, "staff", f.projectId, null,
+        // 第十八批 BP 段 354-R2：有价游乐通票归游乐公司，不挂商户的普通员工不能办理；操作人改为平台管理员。
+        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b14_rule_" + f.suffix, "platform_admin", f.projectId, null,
                 "ticket.price_variant.manage");
         String id = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/price-rules").with(manager)
                         .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
                                 "idempotency_key", "b14-rule-member-" + f.suffix, "ticket_type_id", f.ticketTypeId,
                                 "variant_type", "member", "price_mode", "derive_from_calendar_price", "discount_rate", 80))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.variant_type").value("member")), "$.data.id");
-        assertThat(jdbc.queryForObject("SELECT variant_type FROM ticket_price_rules WHERE id = ?", String.class, id)).isEqualTo("member");
+                .andExpect(jsonPath("$.data.variant_type").value("member"))
+                .andExpect(jsonPath("$.data.status").value("draft")), "$.data.id");
+        // 第十八批 BP 段 300-R1（第十八批裁决 74「改动先存草稿版，审批期间按旧版照卖，批准后自动换新版」）：已上架游乐通票新建会员价只进票种规则草稿版。
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_price_rules WHERE id = ?", Integer.class, id)).isZero();
     }
 
     private String rule(String variant, int discount) {

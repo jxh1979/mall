@@ -1,4 +1,4 @@
-// 文件版本：V0.62
+// 文件版本：V0.63
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -1126,6 +1126,12 @@ export const FIELD_LABELS: Record<string, string> = {
   computed_by: "计算人",
   computed_price_cent: "计算价格",
   condition_rule: "条件规则",
+  // 第十八批 BP 段第 359 条：动态价条件（每日时段、到访当天已售满多少张起）与试算上下文。
+  time_from: "时段开始",
+  time_to: "时段结束",
+  day_sold_min: "到访当天已售满（张）",
+  at_time: "试算时刻",
+  day_sold: "试算当天已售张数",
   confidence_score: "置信度",
   config: "配置",
   config_group: "配置分组",

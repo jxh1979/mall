@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 // 文件版本：V0.04
 
@@ -111,7 +111,7 @@ class TicketingServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
-        pricingService = new TicketPricingService(ticketingRepository, holidays::contains);
+        pricingService = new TicketPricingService(ticketingRepository, holidays::contains, (ticketTypeId, visitDate) -> 0L);
         TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, publishedEvents::add, null, null, null, null);
         AuthorizationService authorizationService = new AuthorizationService(null);
         bars = new java.util.HashMap<>();
@@ -2495,7 +2495,8 @@ class TicketingServiceTests {
                 null,
                 9900L,
                 15000L,
-                Map.of("inventory_level", "low")
+                // 第十八批 BP 段 359-R1：条件只认每日时段（BSM:782「动态价按时段、容量等规则配置」），试算可指定试算时刻。
+                Map.of("time_from", "20:00", "time_to", "22:00")
         ));
 
         TicketDynamicPricingSimulationResponse simulation = service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest(
@@ -2503,7 +2504,7 @@ class TicketingServiceTests {
                 ticketType.id(),
                 LocalDate.parse("2026-06-20"),
                 "web",
-                Map.of("inventory_level", "low")
+                Map.of("at_time", "21:00")
         ));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                 "dynamic-order-unaffected",
@@ -2582,35 +2583,45 @@ class TicketingServiceTests {
     }
 
     @Test
-    void publishedDynamicPricingRuleRequiresMatchingOrderContext() {
-        TicketTypeRecord ticketType = createTicketType("dynamic-order-context");
-        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
-                "dynamic-order-context-create",
-                "conditional uplift",
-                List.of(),
-                ticketType.id(),
-                "Conditional weekend uplift",
-                100,
-                LocalDate.parse("2026-06-01"),
-                LocalDate.parse("2026-06-30"),
-                "web",
-                "percent_delta",
-                new BigDecimal("20.00"),
-                null,
-                9900L,
-                15000L,
-                Map.of("inventory_level", "low")
-        ));
-        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
-                draft.id(),
-                new StatusChangeRequest("dynamic-order-context-publish", "publish", "approved for conditional order pricing", List.of())
-        );
+    void publishedDynamicPricingRuleAppliesOnlyWithinItsTimeWindow() {
+        // 第十八批 BP 段 359-R1（BSM:756「先按日期、时段、场次和容量算动态公开价」；BSM:780「时区一律取项目所在地时间」）：服务端按下单时刻
+        // （所在地时间）所在的每日时段判，下单不再带上下文——时段含此刻的规则命中，不含此刻的不命中。
+        java.time.LocalTime now = java.time.LocalTime.now(com.complex.platform.common.LocalZone.ID);
+        java.time.format.DateTimeFormatter hhmm = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
+        TicketTypeRecord outside = createTicketType("dynamic-order-window-outside");
+        TicketTypeRecord inside = createTicketType("dynamic-order-window-inside");
+        TicketDynamicPricingRuleRecord[] published = new TicketDynamicPricingRuleRecord[2];
+        TicketTypeRecord[] types = {outside, inside};
+        java.time.LocalTime[] froms = {now.plusHours(2), now.minusHours(1)};
+        for (int i = 0; i < 2; i++) {
+            TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                    "dynamic-order-window-create-" + i,
+                    "window uplift",
+                    List.of(),
+                    types[i].id(),
+                    "时段加价",
+                    100,
+                    LocalDate.parse("2026-06-01"),
+                    LocalDate.parse("2026-06-30"),
+                    "web",
+                    "percent_delta",
+                    new BigDecimal("20.00"),
+                    null,
+                    9900L,
+                    15000L,
+                    Map.of("time_from", froms[i].format(hhmm), "time_to", froms[i].plusHours(i == 0 ? 1 : 2).format(hhmm))
+            ));
+            published[i] = service.publishDynamicPricingRule(
+                    draft.id(),
+                    new StatusChangeRequest("dynamic-order-window-publish-" + i, "publish", "approved for window pricing", List.of())
+            );
+        }
 
         TicketOrderRecord unmatched = service.createTicketOrder(new TicketOrderRequest(
-                "dynamic-order-context-unmatched",
-                "create without context",
+                "dynamic-order-window-unmatched",
+                "create outside window",
                 List.of(),
-                ticketType.id(),
+                outside.id(),
                 null,
                 1,
                 LocalDate.parse("2026-06-20"),
@@ -2619,23 +2630,22 @@ class TicketingServiceTests {
                 "customer_dynamic_context"
         ));
         TicketOrderRecord matched = service.createTicketOrder(new TicketOrderRequest(
-                "dynamic-order-context-matched",
-                "create with context",
+                "dynamic-order-window-matched",
+                "create inside window",
                 List.of(),
-                ticketType.id(),
+                inside.id(),
                 null,
                 1,
                 LocalDate.parse("2026-06-20"),
                 "web",
                 "13800138000",
-                "customer_dynamic_context",
-                Map.of("inventory_level", "low")
+                "customer_dynamic_context"
         ));
 
         assertThat(unmatched.amountCent()).isEqualTo(11900L);
         assertThat(unmatched.dynamicPricingRuleId()).isNull();
         assertThat(matched.amountCent()).isEqualTo(14280L);
-        assertThat(matched.dynamicPricingRuleId()).isEqualTo(published.id());
+        assertThat(matched.dynamicPricingRuleId()).isEqualTo(published[1].id());
         assertThat(matched.baseAmountCent()).isEqualTo(11900L);
         assertThat(matched.dynamicAdjustmentCent()).isEqualTo(2380L);
     }
@@ -2880,7 +2890,7 @@ class TicketingServiceTests {
                 -1000L,
                 6900L,
                 15000L,
-                Map.of("member_level", "gold")
+                Map.of()
         ));
 
         TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
@@ -2892,7 +2902,7 @@ class TicketingServiceTests {
                 ticketType.id(),
                 LocalDate.parse("2026-07-01"),
                 "app",
-                Map.of("member_level", "gold")
+                Map.of()
         ));
 
         assertThat(published.status()).isEqualTo("published");

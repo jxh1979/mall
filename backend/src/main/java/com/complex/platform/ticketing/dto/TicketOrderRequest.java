@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing.dto;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +17,7 @@ public record TicketOrderRequest(
         String salesChannel,
         String buyerPhone,
         String customerId,
+        // 第十八批 BP 段 359-R1 起不参与定价（动态价条件由服务端自算，PGM:744）；组件保留只为不动各构造调用点，契约已不列该字段。
         Map<String, Object> dynamicPricingContext,
         // AUD-076 单店票挂酒吧：客人下单选中的酒吧商户 id；服务端据票种 bar_id 校验并快照，客户端值仅作核对。
         // TK-06（BSM:843「不设需要人脸照的票种；购票和转赠均不要求录入人脸照」）：下单不再收人脸照与人脸同意。

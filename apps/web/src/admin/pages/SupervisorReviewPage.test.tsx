@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -502,16 +502,17 @@ describe("M043 真实审批信封与既有规则", () => {
     expect(row).not.toContain("未识别类型");
   });
 
-  // 第十八批 AJ 段第 236 条 236-R5⑤（PGM:287「界面全中文（所有终端零英文）」）：跨域组合通票规则审批的动作类型与对象显示中文。
-  it("跨域组合通票规则审批的动作类型与对象显示中文", async () => {
+  // 第十八批 AJ 段第 236 条 236-R5⑤（PGM:287「界面全中文（所有终端零英文）」）：票种规则审批的动作类型与对象显示中文
+  //   （第十八批 BP 段 300-R2 起域内票也走这道审批，名称不再限定跨域组合通票）。
+  it("票种规则审批的动作类型与对象显示中文", async () => {
     const pending = [{ decision: { review_id: "review_tr1", policy_code: "ticket_type_rule_publish", action_type: "ticket.type.rule.publish", object_type: "ticket_type_rule_version", object_id: "rv-1", initiated_by: "u-t", approval_level: "specific_role", required_level: 1, review_status: "pending_review" }, schedule: null }];
     const policies = [{ policy_code: "ticket_type_rule_publish", action_type: "ticket.type.rule.publish", required_evidence_types: ["reason"], status: "active", blocks_by_default: true }];
     renderPage(ADMIN_PERMS, { policies, pending });
-    await waitFor(() => expect(screen.queryByTestId("supervisor-review-pending-review_tr1")?.textContent ?? "").toContain("跨域组合通票规则审批"));
+    await waitFor(() => expect(screen.queryByTestId("supervisor-review-pending-review_tr1")?.textContent ?? "").toContain("票种规则审批"));
     const row = screen.getByTestId("supervisor-review-pending-review_tr1").textContent ?? "";
     expect(row).toContain("票种规则版本 / rv-1");
     expect(row).not.toContain("未识别类型");
-    expect(screen.getByTestId("supervisor-review-row-ticket_type_rule_publish").textContent).toContain("跨域组合通票规则审批");
+    expect(screen.getByTestId("supervisor-review-row-ticket_type_rule_publish").textContent).toContain("票种规则审批");
   });
 
   it("第三人不能按用户编号转交给直接受益人", async () => {
