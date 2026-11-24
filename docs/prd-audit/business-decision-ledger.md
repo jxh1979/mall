@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.43
+文档版本：V1.44
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13109,3 +13109,108 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 校验：`node tools/verify-full-admin-page-matrix.mjs` 通过。
 - 18CB 合并前变基（2026-11-24）：本段自 0ed7c377 变基到 origin/main 955ea1ba；迁移按原序顺延改号 V752→V762、V753→V763、V754→V764；合并时 OpenAPI 共 1419 个操作（主干 1420）、info.version V1.14、决策台账 V1.43，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CB 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 f53867dd 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7407 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2116；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 14:10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CJ 落地位置补记（2026-11-20）：第十八批 CJ 段（batch108）按 18CJ 只读设计实现待开发清单第 416、417 条（排班员工与点位选择组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CJ 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CJ 段，batch108）实现待开发清单第 416、417 条（18CJ 只读设计 b108-audit/d6-cj.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 416-R1、416-R2、416-R3、417-R1、416-R4（顺序照 batching）。本段在 18BL（第 390 条排班点位清单 listStaffShiftPointOptions、第 388 条空间维护）合并后的主干上做，按现码定位。设计旁见（考勤核时页手填编号、员工状态变更等审批原件露英文与 UTC）已登记待开发清单第 445、446 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 9d6a781c 开工（第六轮 13 段并行），变基到 0ed7c377 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CJ 落地位置补记（第十八批 CJ 段，batch108，第 416、417 条，无迁移，新增操作 1 个）：
+  【第 416 条 416-R1】改法：
+  - 新增操作 listStaffShiftStaffOptions（GET /api/v1/staff/shift-staff-options），列排班可选员工，每项含 user_id、name（档案姓名，为空时为编号），按姓名、再按编号排序。
+  - 范围与提交排班、按周批量排班、安排顶班同一判定：逐人调 StaffService.requireUserInScope（staff.shift.manage 可触及范围），被拒的不列。
+  - 商户账号另含派驻到本商户、结束日为空或不早于本店今日营业日的员工，按 BusinessDayResolver.merchantBusinessDate 判；未开始的派驻也列。
+  - 不列停岗、离职、已存档的，也不列未通过登记、没有账号的档案。
+  - 最高权限与平台管理员看全部。
+  - 属性：权限码 staff.shift.manage；x-data-scope platform；审计 not_applicable。
+  - 代码位置：
+    - StaffController.listShiftStaffOptions、StaffShiftStaffOptionService.options。
+    - StaffService 的 reachOf、staffMerchantScope、requireUserInScope 改为包内可见，逻辑不动。
+    - 页面矩阵 ADM-STF-001 行加该接口与「员工从可排员工清单选」。
+  - 依据：
+    - BSM:1474「主管排班：排到几点几分……主管在手机上也能排。」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」。
+    - BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」
+    - 第十八批裁决 46 选项原文「凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。」
+    - 第十八批裁决 71（操作员追加原话「既然是最高权限，不应该什么都能看到吗？」）。
+  - 测试：StaffShiftStaffOptionsJdbcIntegrationTests 六例（companySupervisorListsOwnCompanySchedulableStaffOnly、barAccountListsOwnStaffAndDispatchedStaffWithinDispatch、masterAuthorityListsStaffOfEveryCompany、callerWithoutShiftManageIsForbidden、listedStaffCanBeScheduledAndExcludedStaffCannot、dispatchEndingOnTheBarsBusinessDayIsListedWhileItDiffersFromTheCalendarDay）；barAccount 一例含结束日即今日营业日、下周才开始的派驻；新增一例把本店营业日起点配在此刻之后，结束日为本店今日营业日（自然日的昨天）的派驻照列。
+  【第 416 条 416-R2】改法：
+  - 排班发布审批原件（复核单 reason，审批链页「提交时原始内容与凭证」原样显示）的起止由 UTC 原值改为北京时间到分钟（yyyy-MM-dd HH:mm）。
+  - 点位由空间编号改为空间名：经 PlatformRepository.findSpaceById 取，单次提交内缓存；取不到的照写编号；未选写「未指定」。
+  - 夜班职责由「项目 编号」改为「承担所属项目本日夜班值班经理职责」。
+  - 单条与按周批量同经一处。不改已生成的旧审批单（UD-07）。
+  - 代码位置：StaffApprovalService.submitShifts。
+  - 依据：
+    - BSM:1474「主管排班：排到几点几分……排班表最终发布须经该主管的上一级审批后生效。」
+    - PGM:287「展示给用户的一切文字……日期时间等，必须全部为中文，不得出现任何英文」。
+    - 点位写空间名、夜班不写项目编号按常理定（上一级审批须看懂所批内容）。
+  - 测试：StaffShiftApprovalSummaryJdbcIntegrationTests 四例（singleShiftOriginalShowsBeijingMinutesAndSpaceName、nightDutyOriginalStatesTheDutyWithoutProjectId、batchOriginalShowsBeijingMinutes、editOriginalShowsBeijingMinutesOnBothSides（申请修改：原时段与新时段都是北京时间到分钟））。
+  【第 416 条 416-R3】改法：
+  - 后台「排班与考勤」页的单条排班、按周批量排班、安排顶班，员工改从 listStaffShiftStaffOptions 选，原为手填编号。批量为多选；顶班下拉去掉原班次员工；申请修改时被锁定的原员工不在清单里也保留为选项。
+  - 排班表员工列、明细、顶班处、顶班记录与确认摘要显示姓名，清单里没有的显示编号。
+  - 考勤与核时区不动。
+  - 代码位置：StaffShiftAttendancePage（staffOptions、staffName、staffChoices）。
+  - 依据：BSM:1474「主管排班……」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」。
+  - 测试：
+    - 新增 StaffShiftAttendancePage.staffpick.test.tsx 四例。
+    - 改 guidedcreate、batchshift、cover、points 四个文件的员工输入为选择。
+  【第 417 条 417-R1】改法：
+  - 私人手机功能 shift_manage 放行 GET /api/v1/staff/shift-staff-options 与 GET /api/v1/staff/shift-point-options。
+  - 安卓主管排班屏：员工改为下拉（首项「请选择员工」，未选不提交），点位改为按空间名勾选（可不选）。
+  - listStaffShiftPointOptions 的终端声明补私人手机、工作手机（契约代理）。
+  - 代码位置：
+    - StaffAppFunctions（PRIVATE_PHONE 的 shift_manage）。
+    - TerminalModels 的 StaffShiftStaffOption、StaffShiftPointOption。
+    - 共享核与 android-app 两份 TerminalApiClient 的 staffShiftStaffOptions、staffShiftPointOptions。
+    - MainActivity.showShiftManage。
+  - 依据：
+    - BSM:1474「主管在手机上也能排。」
+    - BSM:1077「主责服务提供人按当日该场次排班指派到该卡座，同一卡座在不同场次可以更换。」
+    - PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发」。
+  - 测试：
+    - StaffAppFunctionsTests.privatePhoneAllowsLowRiskOffSiteCalls 加两条。
+    - StaffPrivatePhoneFunctionsJdbcIntegrationTests.privatePhoneShiftManagerReadsPointAndStaffOptions。
+    - 安卓 ShiftManageOptionsApiTest.readsStaffAndPointOptionsFromTheTwoLists。
+  【第 416 条 416-R4】PRD §12B.1、终端页面 PRD §8.5 的现状句与修订表由文档组按本段要点补写。
+  【范围外旁见】考勤核时页手填编号已登记为待开发清单第 445 条；员工状态变更等审批原件出现英文与 UTC 已登记为第 446 条。本段未改。
+- 416-R1 / 417-R1 契约部分
+  - 改法：
+    - 新增操作 listStaffShiftStaffOptions（GET /api/v1/staff/shift-staff-options，排班可选员工），tags staff，无参数。
+    - x-permission staff.shift.manage；x-data-scope platform；x-auth-context staff-token。
+    - x-terminal-allowed：web、staff_private_phone、staff_work_phone（同 upsertStaffShift）。
+    - x-idempotency-required false；成功和失败审计事件都是 not_applicable。
+    - 200 引 components/responses/Page，每项 user_id、name；403、500 引 components/responses/Error。
+    - 说明写明：
+      - 范围与 upsertStaffShift、batchUpsertStaffShifts、coverStaffShift 同一判定。
+      - 商户账号另含派驻到本商户、结束日为空或不早于本店今日营业日的员工（第十八批裁决 46；未开始的派驻也列）。
+      - 不列停岗、离职、已存档、未通过登记或没有账号的档案。
+      - 最高权限与平台管理员看全部（第十八批裁决 71）。
+      - 缺权限 403 PERMISSION_DENIED。
+    - 既有操作 listStaffShiftPointOptions 的 x-terminal-allowed 补 staff_private_phone、staff_work_phone，供安卓员工端主管排班屏选点位（第 417 条）。
+  - 落地位置：OpenAPI 契约 operationId listStaffShiftStaffOptions（新增）和 listStaffShiftPointOptions（改终端）。对应代码：StaffController.listShiftStaffOptions → StaffShiftStaffOptionService.options；StaffAppFunctions 私人手机功能 shift_manage。
+  - 依据：
+    - BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）；主管在手机上也能排。」
+    - BSM:1474「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」
+    - BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」
+    - 第十八批裁决 46、71。
+  - 本段增量：新增 1 个操作，改 1 个既有操作的终端列表；无迁移。
+  - 校验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部通过；yaml 与 json 深比较一致。
+- 18CJ 汇合（J）：
+  - e2e 没有改。tests/e2e 里只有 full-admin-remaining 的 ADM-STF-001 用到排班页 StaffShiftAttendancePage，断言排班表显示员工编号。listStaffShiftStaffOptions 在 e2e mock 里没有桩，回空列表时页面回退显示编号，断言仍成立。没有用例用到原「员工编号」「顶班员工」输入框。四张视觉基线都不含排班页，没有重拍。
+  - 门禁全绿：后端全量（真库、--fresh，本段无迁移；按时段前提跳过的 BarBusinessDayWindowsJdbcIntegrationTests 已在整点后补跑通过），前端 typecheck 与 vitest 全量，客人三个工作区单测，安卓员工端单测与 android-app 编译，chromium 五份后台 e2e spec，以及在镜像里重生成四份生成物后的 verify:p0-contract。
+  - 契约 yaml 与 json 深比较一致，本段新增 1 个操作 listStaffShiftStaffOptions；改动既有操作 listStaffShiftPointOptions，只是终端放行补了私人手机、工作手机；schema 没有改动。
+- 18CJ 文档同步（第 416 条 416-R4、第 417 条 417-R1 文档部分，无迁移，本组不新增操作）：
+  - 改法：
+    - docs/platform-governance-prd-v0.1.md §12B.1 在第 390 条实现现状段之后，补第 416、417 条实现现状一段，写的是：
+      - 后台「排班与考勤」页（ADM-STF-001）的新增排班、按周批量排班、安排顶班，员工改从可排员工清单选，原为手填员工编号。
+      - 清单经 listStaffShiftStaffOptions（StaffController.listShiftStaffOptions → StaffShiftStaffOptionService.options），与提交排班、按周批量排班、安排顶班同一范围判定。最高权限与平台管理员看全部；商户账号另含派驻到本商户、结束日为空或不早于本店今日营业日的员工；不列停岗、离职、已存档与没有账号的档案；按姓名再按编号排序。
+      - 排班表、明细、顶班处与确认摘要显示姓名，清单里没有的显示编号；顶班下拉不含原班次员工。
+      - 排班发布审批原件（StaffApprovalService.submitShifts）写员工姓名、北京时间到分钟的起止、点位空间名（未选写「未指定」）；夜班职责写「承担所属项目本日夜班值班经理职责」，不写项目编号。
+      - 员工手机「主管排班」屏同用该清单。
+      - 修订表加一行。
+    - docs/terminal-page-product-prd-v0.1.md §8.5「主管排班」行补三点：员工从可排员工下拉选；点位从可选点位（listStaffShiftPointOptions）勾选，显示空间名、可不选；私人手机放行提交排班与这两个清单接口（StaffAppFunctions 的 shift_manage）。修订表加一行。
+  - 落地位置：platform-governance-prd §12B.1、terminal-page-product-prd §8.5，两份各自的变更日志。
+  - 依据：
+    - BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）；主管在手机上也能排。排班表最终发布须经该主管的上一级审批后生效。」「由领班直接安排其他工作人员顶班并在系统中记录顶班人员」。
+    - BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」
+    - PGM:287（日期时间等必须全部为中文）；PGM:747（能做什么由后台按设备类型统一下发）。
+    - 第十八批裁决 46、71。
+  - 测试：文档中引用 StaffShiftStaffOptionsJdbcIntegrationTests、StaffShiftApprovalSummaryJdbcIntegrationTests、StaffShiftAttendancePage.staffpick.test.tsx；校验 verify-full-admin-page-matrix 通过。
+- 18CJ 合并前变基（2026-11-24）：本段自 0ed7c377 变基到 origin/main bb2df36a；合并时 OpenAPI 共 1420 个操作（主干 1419）、info.version V1.15、决策台账 V1.44，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -178,6 +178,26 @@ class StaffPrivatePhoneFunctionsJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value(order))
                 .andExpect(jsonPath("$.data.items[0].work_order_type").value("repair"));
+    }
+
+    /**
+     * 第十八批 CJ 段第 417 条 417-R1（BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）；主管在手机上也能排。」；
+     * PGM:747「能做什么由后台按设备类型统一下发」）：主管在私人手机「主管排班」读可选点位与可排员工两个清单，按真实登录、绑定与私人手机请求头放行。
+     * 修复前 403 TERMINAL_NOT_ALLOWED（私人手机 shift_manage 只放行提交排班）。
+     */
+    @Test
+    void privatePhoneShiftManagerReadsPointAndStaffOptions() throws Exception {
+        String manager = "usr_b108pf_shf_" + suffix;
+        String profile = "sp_b108pf_shf_" + suffix;
+        String bar = "mch_b108pf_shf_" + suffix;
+        // 主管挂一家酒吧：清单只取本商户档案（本类按 prod 配置跑，个人信息密钥与默认配置不同，不去解共享库里别的档案）。
+        account(manager, bar, "staff.device.bind", "staff.shift.manage");
+        profile(profile, manager, bar, "私人手机主管排班");
+        String token = login(manager);
+        String fingerprint = bind(token, profile);
+        for (String url : List.of("/api/v1/staff/shift-point-options", "/api/v1/staff/shift-staff-options")) {
+            mockMvc.perform(phone(get(url), token, fingerprint)).andExpect(status().isOk());
+        }
     }
 
     /**

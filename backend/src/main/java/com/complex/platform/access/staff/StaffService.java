@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.35
+// 文件版本：V0.36
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -1624,7 +1624,7 @@ public class StaffService {
     }
 
     /** P0 租户隔离(V214):主管/后台列表按调用方项目 scope 过滤;平台管理员/无组织全局员工=null 见全量。 */
-    private String staffMerchantScope() {
+    String staffMerchantScope() {
         AccessActor actor = authorizationService.currentActor();
         return authorizationService.isPlatformAdmin(actor) ? null : trimToNull(actor.merchantId());
     }
@@ -1636,7 +1636,7 @@ public class StaffService {
     }
 
     /** 第十八批 E 段 19-R1（移植 M738）：按入口权限码算可触及范围（M736 补记⑤）；在取行锁、进入幂等之前调用。 */
-    private AuthorizationService.ProjectReach reachOf(String permissionCode) {
+    AuthorizationService.ProjectReach reachOf(String permissionCode) {
         return authorizationService.projectReach(authorizationService.currentActor(), permissionCode);
     }
 
@@ -1692,7 +1692,7 @@ public class StaffService {
 
     /** 清单 P1(2026-07-03 审计):按项目 scope 守卫写/审批——项目主管只可操作本综合体员工;
      * 平台管理员放行。第十八批 E 段 19-R1（移植 M738）：范围按调用方传入的入口权限码可触及范围（由 token 派生，不取请求体）。 */
-    private void requireUserInScope(String userId, AuthorizationService.ProjectReach reach) {
+    void requireUserInScope(String userId, AuthorizationService.ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         StaffProfileRecord target = repository.findProfileByUserId(userId).orElse(null);
         if (target != null && target.companyId() != null) {

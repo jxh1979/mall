@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,6 +33,8 @@ function makeApi(): AdminApi {
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
       return Promise.resolve(raw({ id: "sh-new", review_id: "review-single", publication_status: "pending_review" }));
     }
+    // 第十八批 CJ 段第 416 条 416-R3：排班可排员工。
+    if (url.includes("/staff/shift-staff-options")) return Promise.resolve(listEnvelope([{ user_id: "staff-9", name: "员工九" }]));
     // 第十八批 BL 段第 390 条 390-R2：排班可选点位。
     if (url.includes("/staff/shift-point-options")) return Promise.resolve(listEnvelope([{ id: "sp-a", space_name: "A 区" }, { id: "sp-b", space_name: "B 区" }]));
     if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope(existingShifts));
@@ -69,7 +71,7 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
   it("页面默认只留入口按钮，不展示排班字段", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("shift-create-open")).toBeTruthy());
-    expect(screen.queryByTestId("shift-user-input")).toBeNull();
+    expect(screen.queryByTestId("shift-user-select")).toBeNull();
     expect(screen.queryByTestId("shift-create-guided")).toBeNull();
   });
 
@@ -78,7 +80,8 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
     await waitFor(() => expect(screen.getByTestId("shift-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("shift-create-open"));
 
-    fireEvent.change(screen.getByTestId("shift-user-input"), { target: { value: "staff-9" } });
+    await waitFor(() => expect((screen.getByTestId("shift-user-select") as HTMLSelectElement).options.length).toBe(2));
+    fireEvent.change(screen.getByTestId("shift-user-select"), { target: { value: "staff-9" } });
     fireEvent.change(screen.getByTestId("shift-start-input"), { target: { value: "2026-07-05T09:00" } });
     fireEvent.change(screen.getByTestId("shift-end-input"), { target: { value: "2026-07-05T18:00" } });
     await waitFor(() => expect((screen.getByTestId("shift-points-select") as HTMLSelectElement).options.length).toBe(2));
