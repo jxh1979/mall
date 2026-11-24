@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 /**
  * CG-09 铺位租赁状态推导共用 SQL 片段（PGM「合同运营细则」：「铺位租赁状态随意向与合同自动联动并在平面图着色（洽谈中、已租、即将到期等），
@@ -19,6 +19,7 @@ package com.complex.platform.contract;
  *   <li>空置：结算单已落账（押金抵扣中/欠费追缴中/已结清——第三轮控制席约定「铺位转空置……保持在终审落账时，不随新状态推迟」）或从未绑约；
  *       只有已签约未生效合同的铺位不算已退租。</li>
  * </ul>
+ * 已签约未交付的铺位另带「已签待交」标注（{@link #SIGNED_PENDING_LATERAL}，第十八批 CE 段 403-R1），不改上述六态。
  */
 public final class SpaceRentalDerivationSql {
 
@@ -52,4 +53,21 @@ public final class SpaceRentalDerivationSql {
     public static final String IS_MOVED_OUT = """
             (l.contract_id IS NOT NULL AND (l.settlement_open
                 OR (NOT l.settlement_settled AND NOT (l.lifecycle_status = 'effective' AND l.expiry_date >= :as_of))))""";
+
+    /**
+     * 第十八批 CE 段 403-R1「已签待交」标注（ENUM:259「看板对已签合同但尚未交付的铺位另加「已签待交」标注并关联合同与交付依据，
+     * 不新增第七种铺位租赁状态，不混作空置或已交付」；BSM:1829「看板单列「已签待交」标注，展示合同已签约但尚未交付的铺位」；
+     * PGM:540「已签约未交付的铺位在看板单独标注「已签待交」，不另增铺位租赁状态」；PGM:502「合同审批全部通过、生效后转为已签约」）。
+     * 已签待交＝绑定该铺位、已审批通过待生效，或已生效但未到生效日的合同；交付依据取合同生效日（BSM:1347「交付日（即起租日）」，
+     * 本系统租金与免租自生效日起算）。它只是标注，不参与六态推导；多份时取生效日最早的一份。
+     * LATERAL 子查询体：铺位别名 s；参数 :as_of。铺位看板用 {@code LEFT JOIN LATERAL (<本片段>) sp ON true}，经营看板用 {@code EXISTS (<本片段>)}。
+     */
+    public static final String SIGNED_PENDING_LATERAL = """
+            SELECT c.id AS contract_id, c.effective_date
+              FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
+             WHERE cs.space_id = s.id
+               AND (c.lifecycle_status = 'pending_effective'
+                    OR (c.lifecycle_status = 'effective' AND c.effective_date > :as_of))
+             ORDER BY c.effective_date, c.id
+             LIMIT 1""";
 }

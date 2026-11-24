@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
@@ -20,7 +20,7 @@ type RentToSales = { period?: string; byMerchant?: RentToSalesRow[]; byMerchantT
 
 const TEXT = {
   title: "出租与到期",
-  description: "铺位出租率按已租面积除以全部商铺和摊位面积，包含不可租；车位单列，已签未生效单列「已签待交」，不算已租。",
+  description: "铺位出租率按已租面积除以全部商铺和摊位面积，包含不可租；车位单列，已签约未交付的单列「已签待交」，不算已租。",
   loadFailed: "出租分析读取失败",
   focusClear: "清除筛选，返回全部",
 };
@@ -298,7 +298,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
             <div className="admin-kpi-grid" data-testid="occupancy-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(rate)}</button><small>已租 {sqm(leased)} / 铺位总面积 {sqm(totalArea)}，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>空置面积</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-vacant" onClick={() => enterKpiFocus("vacant")}>{sqm(vacantArea)}</button><small>可招商,查看空置铺位</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已签待交</span><button type="button" className="admin-kpi-value" data-testid="occupancy-signed-pending" onClick={() => navigateTo?.("ADM-LEASE-002")}>{sqm(signedPending)}</button><small>签约未生效,不计已租，查看租赁状态看板</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已签待交</span><button type="button" className="admin-kpi-value" data-testid="occupancy-signed-pending" onClick={() => navigateTo?.("ADM-LEASE-002")}>{sqm(signedPending)}</button><small>已签约未交付,不计已租，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>90 天内到期</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-expiring" onClick={() => enterKpiFocus("expiring")}>{expiring90 === null ? "—" : expiring90}</button><small>生效合同,查看到期预警</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>车位出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-parking-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(parkingRate)}</button><small>单列口径,不与铺位混算（月租车位与在职员工登记车辆计入），查看租赁状态看板</small></div>
               {/* HP-P01（BSM「停车场」章「连接经营看板」）：停车场五项与车位出租率并列。 */}

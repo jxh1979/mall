@@ -1,4 +1,4 @@
-// 文件版本：V0.59
+// 文件版本：V0.60
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2457,6 +2457,8 @@ export const FIELD_LABELS: Record<string, string> = {
   show_group_id: "演出组",
   signature_valid: "签名有效",
   signed_at: "签署时间",
+  signed_pending_contract_id: "已签待交合同",
+  signed_pending_effective_date: "约定起租日",
   single_use: "单次有效",
   size: "大小",
   skipped: "已跳过",

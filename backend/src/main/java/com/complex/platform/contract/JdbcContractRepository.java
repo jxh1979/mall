@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -501,8 +501,11 @@ class JdbcContractRepository implements ContractRepository {
     public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
         // CG-09：推导片段与经营看板出租率/空置明细共用（SpaceRentalDerivationSql），退租结算完成即转空置。
         // 第十八批 BW 段 386-R1：即将到期按铺位所在综合体自己的在用着色分类（一条都没有时按平台默认）判定，命中最紧一档（rc）。
+        // 第十八批 CE 段 403-R1：另带所属项目、空间类型、面积与「已签待交」标注（sp，与经营看板已签待交面积共用 SIGNED_PENDING_LATERAL）。
         String sql = """
                 SELECT s.id AS space_id, s.space_name, COALESCE(s.status, '') AS space_status,
+                       s.project_id, s.space_type, s.area_square_meter,
+                       sp.contract_id AS signed_pending_contract_id, sp.effective_date AS signed_pending_effective_date,
                        (l.expiry_date - :as_of) AS days_to_expiry,
                        COALESCE(__IS_LET__, false) AS is_let,
                        COALESCE(__IS_MOVED_OUT__, false) AS is_moved_out,
@@ -515,11 +518,13 @@ class JdbcContractRepository implements ContractRepository {
                                         AND (r.project_id = s.project_id OR (r.project_id IS NULL AND NOT EXISTS (
                                              SELECT 1 FROM space_expiry_color_rules o WHERE o.active AND o.project_id = s.project_id)))
                                       ORDER BY r.threshold_days, r.seq, r.id LIMIT 1) rc ON true
+                  LEFT JOIN LATERAL (__SIGNED_PENDING__) sp ON true
                  WHERE (CAST(:pid AS text) IS NULL OR s.project_id = :pid)
                  ORDER BY s.id LIMIT 1000
                 """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
                 .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET)
-                .replace("__IS_MOVED_OUT__", SpaceRentalDerivationSql.IS_MOVED_OUT);
+                .replace("__IS_MOVED_OUT__", SpaceRentalDerivationSql.IS_MOVED_OUT)
+                .replace("__SIGNED_PENDING__", SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL);
         return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
             // 6 态（PGM「合同运营细则」/ ENUM「铺位租赁状态」）：不可租(人工 status=unavailable) > 已退租(最近一份合同结算未完)
             //   > 已租(生效合同在租期内且无开立中结算单；即将到期按铺位所在综合体自己的着色分类（没有则平台默认）在本查询内判定)
@@ -540,7 +545,9 @@ class JdbcContractRepository implements ContractRepository {
             } else {
                 status = "vacant";
             }
-            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"), status, color, days);
+            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"), status, color, days,
+                    rs.getString("project_id"), rs.getString("space_type"), rs.getBigDecimal("area_square_meter"),
+                    rs.getString("signed_pending_contract_id"), rs.getObject("signed_pending_effective_date", LocalDate.class));
         });
     }
 

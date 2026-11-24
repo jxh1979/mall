@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.36
+文档版本：V1.37
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12489,3 +12489,82 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18CG 文档组（D-docs）：两份 PRD 按现码写成现状。①docs/bar-business-operations-product-prd-v0.1.md：§7.5A「损耗率阈值」条末尾补「调整只由最高权限本人办理（DEC-CFG-2026-08-03-01；第十八批 CG 段第 408 条），提交即生效；其他账号（含平台管理员）403 MASTER_APPROVAL_REQUIRED，不保存，记 merchant.pour_loss_rate_config_failed」，对应 PlatformService.configurePercentParam 的范围闸与契约 configureMerchantPourLossRate 的说明；修订表加一行。依据：BSM:2015「（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」②docs/building-operations-prd-v1.0.md：§1 枚举表 abnormal_mode 行的中文名改为「「轻记录/重转整改工单」分级 / 全部转整改工单」；§4 异常记录条改写为：分级模式（light，不挂模板的任务同此）下，提交异常记录与上报异常须带 abnormal_level（light 轻记录、heavy 重转整改工单，由巡检人选），缺或非法 400 VALIDATION_FAILED；light 记录后直接关闭、不建工单；heavy 与 to_work_order 同走 rectifying 并自动建整改工单，之后照旧复检、主管确认闭环。后台楼宇运营工作台巡检记录区与外包巡检任务页在分级模式下选轻重。对应 FacilityInspectionService.abnormalToWorkOrder 与 applySubmitTransition、schema FacilityInspectionRecordSubmitRequest、submitFacilityInspectionRecord 与 reportInspectionException 的 abnormal_level；变更日志加一行。依据：PGM:846「发现异常支持「轻记录/重转整改工单」分级与「全部转整改工单」两种模式，整改后复检、主管确认闭环」。本组没有测试改动；本组新增操作 0、迁移 0。
 - 18CG 合并前变基（2026-11-24）：本段自 2bd98895 变基到 origin/main 593bdf7b；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.07、决策台账 V1.36，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CG 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 937645bb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7329 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2083；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 10:35 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CE 落地位置补记（2026-11-20）：第十八批 CE 段（batch103）按 18CE 只读设计实现待开发清单第 403 条（租赁状态看板组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CE 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CE 段，batch103）实现待开发清单第 403 条（18CE 只读设计 b103-audit/d6-ce.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 403-R1、403-R2。本段工作树已快进到 18BW 合并后的主干 7a19a646：18BW 改过 JdbcContractRepository.listSpaceRentalRaw（着色按综合体），403-R1 在其之上按现码定位改，不回退 18BW 的着色逻辑。设计旁见（经营分析空置面积把已签待交算进空置、铺位看板把楼栋楼层等列成空置、出租率快照只出全平台、合同缺装修截止日、空间取前 1000 个）已登记为待开发清单第 437～441 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 7a19a646 开工（第六轮 13 段并行），变基到 7a19a646 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CE 落地位置补记（第 403 条，E1-d6-ce）：
+  403-R1（看板接口带面积、类型、项目与「已签待交」，已签待交口径共用）
+  - 改法：
+    - SpaceRentalDerivationSql 新增 SIGNED_PENDING_LATERAL。已签待交＝绑定该铺位、已审批通过待生效（pending_effective），或已生效但生效日晚于统计日的合同；多份时按生效日、合同号取最早一份；交付依据取合同生效日（本系统租金与免租自生效日起算）。它只是标注，不参与六态推导。
+    - SpaceRentalStatusRecord 末尾追加 projectId、spaceType、areaSqm、signedPendingContractId、signedPendingEffectiveDate。
+    - JdbcContractRepository.listSpaceRentalRaw 在 18BW 的着色 LATERAL 之后接已签待交 LATERAL，带出上述 5 列；六态与着色判定不动。
+    - JdbcAnalyticsRepository.occupancyAreas 的已签待交面积改用同一片段（原来只认待生效），商铺、摊位与非不可租的过滤保留。
+    - AnalyticsRepository.occupancyAreas、ContractController.spaceRentalStatus 的注释同步。
+  - 落地位置：
+    - 代码：SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL；SpaceRentalStatusRecord；JdbcContractRepository.listSpaceRentalRaw；JdbcAnalyticsRepository.occupancyAreas；FieldLabels 与前端 fieldLabels.ts。
+    - 契约：只改 operationId listSpaceRentalStatus 的 summary 与 description。响应新增 5 个蛇形键 project_id、space_type、area_sqm、signed_pending_contract_id、signed_pending_effective_date，没有标注时后两键为 null；仍是通用 Success 响应，没有新 schema。
+  - 依据：
+    - ENUM:259「看板对已签合同但尚未交付的铺位另加「已签待交」标注并关联合同与交付依据，不新增第七种铺位租赁状态，不混作空置或已交付」
+    - BSM:1829「铺位出租率＝已租铺位面积 ÷ 本项目拥有的铺位总面积」「看板单列「已签待交」标注，展示合同已签约但尚未交付的铺位」
+    - PGM:540「已签约未交付的铺位在看板单独标注「已签待交」，不另增铺位租赁状态」
+    - PGM:502「合同审批全部通过、生效后转为已签约」
+    - BSM:1347「交付日（即起租日）」
+    - 裁决 docs/decisions/2026-10-18-cg-pending-decisions.md 第 9 项现行确认规则「看板增加“已签待交”标注，合同已签未交付单独呈现，不改现有六种铺位租赁状态。」
+  - 测试：SpaceRentalBoardSignedPendingJdbcIntegrationTests 的 boardRowsCarryProjectTypeAreaAndSignedPendingMark、occupancySignedPendingAreaSharesBoardDefinition。红实验：去掉「已生效且未到生效日」一支，两条都红。
+  403-R2（看板页六态中文、按项目按面积的出租率、已签待交列）
+  - 改法：
+    - LeasingRentalStatusPage 的状态码表换成六键（空置、洽谈中、已租、即将到期、已退租、不可租），删掉死键 available。
+    - 出租率只算商铺和摊位，按项目分组、按面积算，分母含不可租；多于一个项目时加项目前缀。
+    - 表格新增「已签待交」列：合同号下钻 ADM-CONT-001，接「约定起租」日期。行明细抽屉加同样字段。
+    - OccupancyAnalyticsPage 两处「未生效」改为 PGM:540 原词「已签约未交付」。
+    - 页面矩阵 ADM-LEASE-002 行的 key_fields、status_flow、validation_and_edge_cases 同步（只改这一行）。
+  - 落地位置：LeasingRentalStatusPage 的 STATUS_LABEL、occupancyByProject、signedPending；OccupancyAnalyticsPage 的 TEXT.description 与已签待交卡片小字；页面矩阵 ADM-LEASE-002 行。
+  - 依据：
+    - PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文」
+    - BSM:1829、ENUM:259、PGM:540、BSM:1347（同上）
+    - 裁决 docs/decisions/2026-10-18-cg-pending-decisions.md 第 10 项现行确认规则「出租率分母包含本项目拥有的全部铺位面积，包含不可租，不因铺位状态变更增减」
+  - 测试：
+    - LeasingRentalStatusPage.test.tsx：「六态各一行全部显示中文，不含英文状态码」「出租率按面积：只算商铺和摊位、分母含不可租，不按行数；只有一个项目时不带项目前缀」「多个项目分行各算各的，并带项目前缀」「已签待交列关联合同与约定起租日，合同号可下钻且不打开抽屉；无标注显示 —；行明细抽屉含同样内容」
+    - OccupancyAnalyticsPage.test.tsx：「已签待交说明用「已签约未交付」，不写「未生效」」
+  本条增量：新增 0 个操作（只改 listSpaceRentalStatus 的说明）；无迁移（预留的 V764～V767 本条未用）；无新权限码；新增 2 个响应字段键中文名：signed_pending_contract_id「已签待交合同」、signed_pending_effective_date「约定起租日」（FieldLabels 与前端 fieldLabels.ts 同键同名）。
+- 403-R1（契约部分）
+  - 改法：既有操作 listSpaceRentalStatus（GET /api/v1/contracts/space-rental-status）。summary 改为「铺位平面图与租赁状态看板数据源(六态＋已签待交)」（同一接口也供合同工作台平面图）。description 在第十八批 BW 段 386-R1 句之后追加 403-R1 一句：每行另带 project_id、space_type、area_sqm、signed_pending_contract_id、signed_pending_effective_date 五个蛇形键；已签待交＝绑定该铺位的待生效合同（pending_effective），或已生效但未到生效日的合同，多份取生效日最早一份；后两键为该合同 id 与其生效日（yyyy-MM-dd，作交付依据）；只作标注、不改六态，没有时为 null。
+  - 落地位置：OpenAPI 操作 listSpaceRentalStatus 的 summary 与 description。响应仍引用通用 Success，未建专用 schema。x-permission contract.draft.manage、x-data-scope platform、x-terminal-allowed web、x-auth-context staff-token、x-audit-event-success 与 x-audit-event-failure（not_applicable）、错误码均不变。对应代码：SpaceRentalStatusRecord 末尾 projectId、spaceType、areaSqm、signedPendingContractId、signedPendingEffectiveDate；JdbcContractRepository.listSpaceRentalRaw 用 SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL；ContractController.spaceRentalStatus。
+  - 本段增量：新增操作 0 个，迁移 0 个。
+  - 依据：ENUM:259「看板对已签合同但尚未交付的铺位另加「已签待交」标注并关联合同与交付依据，不新增第七种铺位租赁状态，不混作空置或已交付」；BSM:1829「本项目拥有的铺位总面积」、看板单列「已签待交」；PGM:540「已签约未交付的铺位在看板单独标注「已签待交」，不另增铺位租赁状态」；PGM:502「合同审批全部通过、生效后转为已签约」；BSM:1347「交付日（即起租日）」。
+  - 测试：SpaceRentalBoardSignedPendingJdbcIntegrationTests（E1 新增，经真实 HTTP、蛇形键断言五个新键）。契约门禁 verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload 全部通过。
+- 18CE 汇合段 J（e2e 与门禁结论）
+  - e2e 改动：无。tests/e2e 里涉及租赁状态看板（ADM-LEASE-002）的只有 full-admin-remaining.spec.ts ADM-REM-01 的页标题断言「租赁状态看板」。mock-api 中 listSpaceRentalStatus 的三行模拟数据没有 projectId、spaceType、areaSqm；LeasingRentalStatusPage 的 occupancyByProject 对这三行跳过、汇总显示「出租率：—」，signedPending 显示「—」，页面不报错，标题断言不受影响。按设计 not_doing，模拟数据里的 available 不改。出租与到期（ADM-ANA-005）的断言 occupancy-rate、occupancy-summary、空置表、到期表都不受 OccupancyAnalyticsPage 文案改动（「签约未生效」改为「已签约未交付」）的影响。上述结论为读码所得，E1 前端落地后未重跑 e2e。
+  - 段间核对：契约（K）与代码（E1）一致。SpaceRentalStatusRecord 的 projectId、spaceType、areaSqm、signedPendingContractId、signedPendingEffectiveDate 序列化后为 project_id、space_type、area_sqm、signed_pending_contract_id、signed_pending_effective_date，与 listSpaceRentalStatus 说明逐键对应；JdbcContractRepository.listSpaceRentalRaw 与 JdbcAnalyticsRepository.occupancyAreas 共用 SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL，口径与契约说明一致。没有段间波及问题需要修。
+  - 门禁：在镜像里重生成 docs:operation-matrix、docs:openapi-closure、docs:data-isolation-spec、docs:domain-ownership-scope 后，verify:p0-contract 八项全部通过（no-legacy-api-prototype、openapi、openapi-examples、operation-matrix、openapi-closure、client-routes、client-openapi、client-payload）。重生成后只有 p0-openapi-operation-acceptance-matrix 与 p0-openapi-contract-closure-appendix 两份变化，各只变 listSpaceRentalStatus 一行 summary。yaml 与 json 深比较一致，本段新增操作 0 个、迁移 0 个，只改既有操作 listSpaceRentalStatus。
+- 18CE 文档组 D-docs（第 403 条文档现状）
+  - 改法：
+    - 地产全链业务域 PRD §2「铺位平面图 + 租赁状态着色看板」条，接在 18BW 第 386 条那句之后补 403 现状句：
+      - 租赁状态看板六态全部显示中文。
+      - 出租率按项目分行、按面积算。已租面积＝已租、即将到期的商铺和摊位面积；分母＝本项目全部商铺和摊位面积，含不可租；项目多于一个时每行带项目号。
+      - 已签约未交付的铺位在「已签待交」列与行明细标注，关联合同（可下钻合同工作台）与约定起租日（合同生效日），不改六态。
+      - 已签待交＝绑定该铺位的待生效合同，或已生效但未到生效日的合同，多份取生效日最早一份。
+      - 看板接口 listSpaceRentalStatus 每行另带所属项目、空间类型、面积与已签待交合同号、生效日。
+      - 已签待交口径与经营看板共用 SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL。
+      - 修订表加一行。
+    - 经营看板指标产品 PRD：
+      - §2A.2 新增「已签待交口径（实现现状）」一条：已签待交面积＝绑定待生效合同、或已生效但未到生效日合同的商铺和摊位面积，人工不可租的除外，不计入已租；与租赁状态看板（ADM-LEASE-002）的「已签待交」标注共用 SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL；出租与到期页（ADM-ANA-005）的页头说明与已签待交卡片文案用「已签约未交付」。
+      - 文首加一条同步记。
+    - 页面矩阵 ADM-ANA-005 行 validation_and_edge_cases 一格，「已签待交(pending_effective)不算已租」改为「已签待交(待生效或已生效未到生效日的合同、与租赁状态看板同口径)不算已租」。只改这一格，不加行。
+  - 落地位置：
+    - 地产全链业务域 PRD §2 看板条与修订表
+    - 经营看板指标产品 PRD §2A.2 与文首同步记
+    - 页面矩阵 ADM-ANA-005 行
+    - 对应代码：SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL、JdbcContractRepository.listSpaceRentalRaw、JdbcAnalyticsRepository.occupancyAreas、LeasingRentalStatusPage（occupancyByProject、signedPending）、OccupancyAnalyticsPage
+  - 依据：
+    - ENUM:259「看板对已签合同但尚未交付的铺位另加「已签待交」标注并关联合同与交付依据，不新增第七种铺位租赁状态，不混作空置或已交付」
+    - BSM:1829「铺位出租率＝已租铺位面积 ÷ 本项目拥有的铺位总面积」「看板单列「已签待交」标注，展示合同已签约但尚未交付的铺位」
+    - PGM:540「已签约未交付的铺位在看板单独标注「已签待交」，不另增铺位租赁状态」
+    - PGM:502「合同审批全部通过、生效后转为已签约」
+    - BSM:1347「交付日（即起租日）」
+    - PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文」
+  - 测试：本段只改文档。现状句对应的测试见 E1 补记：SpaceRentalBoardSignedPendingJdbcIntegrationTests、LeasingRentalStatusPage.test.tsx、OccupancyAnalyticsPage.test.tsx。核对用 verify-full-admin-page-matrix 通过。
+  本段增量：新增 0 个操作，无迁移。
+- 18CE 合并前变基（2026-11-24）：本段自 7a19a646 变基到 origin/main e936ab4a；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.08、决策台账 V1.37，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CE 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 891e085c 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7331 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 11:15 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

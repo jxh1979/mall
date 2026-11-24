@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.07
+# P0 OpenAPI Operation 验收矩阵 V1.08
 
 ## 1. 文档定位
 
@@ -769,7 +769,7 @@
 | contract | `POST` | `/api/v1/contracts/deposit-refund-wait` | `saveContractDepositRefundWait` | 配置押金退还等待期及上下限(按项目) | `DepositRefundWaitSettingRequest` | `contract.deposit_refund_wait.manage` | `staff-token` | `project` | web | 是 | `contract.deposit_refund_wait_configured` | `contract.deposit_refund_wait_config_failed` |
 | contract | `GET` | `/api/v1/contracts/expiry-color-rules` | `listSpaceExpiryColorRules` | 查到期着色分类(按综合体) | `-` | `contract.space.color.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | contract | `POST` | `/api/v1/contracts/expiry-color-rules` | `saveSpaceExpiryColorRule` | 配置到期着色分类(按综合体，颜色+提前天数，可改可移除) | `SpaceExpiryColorRuleRequest` | `contract.space.color.manage` | `staff-token` | `project` | web | 是 | `contract.color_rule_saved` | `contract.color_rule_save_failed` |
-| contract | `GET` | `/api/v1/contracts/space-rental-status` | `listSpaceRentalStatus` | 铺位平面图着色数据源(可租/已租/即将到期) | `-` | `contract.draft.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
+| contract | `GET` | `/api/v1/contracts/space-rental-status` | `listSpaceRentalStatus` | 铺位平面图与租赁状态看板数据源(六态＋已签待交) | `-` | `contract.draft.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | contract | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | `generateContractRentBill` | 生成某期合同租金应收(base+递增−免租) | `ContractRentBillRequest` | `finance.ar_ap.manage` | `staff-token` | `platform` | web | 是 | `contract.rent_billed` | `contract.rent_bill_failed` |
 | contract | `POST` | `/api/v1/contracts/settlements/{settlement_id}/documents-check` | `checkContractSettlementDocuments` | 退租结算齐单核对（缺单保持待处理） | `ContractResolveDisputeRequest` | `contract.settlement.manage` | `staff-token` | `platform` | web | 是 | `contract.settlement_documents_checked` | `contract.settlement_documents_check_failed` |
 | contract | `POST` | `/api/v1/contracts/{contract_id}/attachments` | `addContractAttachments` | 追加合同附件(电子签章扫描件归档) | `ContractAttachmentRequest` | `contract.draft.manage` | `staff-token` | `platform` | web | 是 | `contract.attachments_added` | `contract.attachments_add_failed` |

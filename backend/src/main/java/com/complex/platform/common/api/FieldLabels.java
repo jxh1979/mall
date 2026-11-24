@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.58
+// 文件版本：V0.59
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -503,6 +503,8 @@ public final class FieldLabels {
         p("space_ids", "空间");
         p("space_name", "空间名称");
         p("space_type", "空间类型");
+        p("signed_pending_contract_id", "已签待交合同");
+        p("signed_pending_effective_date", "约定起租日");
         p("floor_no", "楼层");
         p("floor_plan_id", "平面图");
         p("point_id", "点位");

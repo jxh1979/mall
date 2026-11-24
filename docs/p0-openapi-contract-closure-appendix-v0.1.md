@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.07
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.08
 
 ## 1. 文档定位
 
@@ -4394,7 +4394,7 @@
 | P0-待归类 | `listSiteEntryHistory` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}/history` | 查看各轮施工材料与验收记录 | `facility.site_entry.view_assigned` | `facility.site_entry.history_viewed` / `facility.site_entry.history_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSiteEntryReports` | `GET` | `/api/v1/facility/site-entry-reports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `facility.site_entry.view_assigned` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listSpaceExpiryColorRules` | `GET` | `/api/v1/contracts/expiry-color-rules` | 查到期着色分类(按综合体) | `contract.space.color.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| P0-待归类 | `listSpaceRentalStatus` | `GET` | `/api/v1/contracts/space-rental-status` | 铺位平面图着色数据源(可租/已租/即将到期) | `contract.draft.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listSpaceRentalStatus` | `GET` | `/api/v1/contracts/space-rental-status` | 铺位平面图与租赁状态看板数据源(六态＋已签待交) | `contract.draft.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listStaffAppFunctions` | `GET` | `/api/v1/terminals/staff-app-functions` | 员工 App 本端可用功能（按设备类型下发） | `not_applicable` | `not_applicable` / `not_applicable` | staff_work_phone, staff_private_phone, tablet | operation 级补充 |
 | P0-待归类 | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | 机构管理员查看本机构下属工作完成情况 | `partner.subordinate.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listTicketPointsBillingRules` | `GET` | `/api/v1/loyalty/ticket-points-billing/rules` | 查看全国积分账期规则 | `ticket.points.billing.view` | `ticket.points.billing.rules.viewed` / `ticket.points.billing.rules.viewed.failed` | web | operation 级补充 |

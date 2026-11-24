@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -150,7 +150,8 @@ public interface AnalyticsRepository {
     /**
      * S3:出租面积盘(as-of 时点)。分母口径(2026-07-02 拍板):商铺+摊位(shop/booth)且非人工不可租;
      * 车位(parking)单列不与铺位混算;容器类(楼栋/楼层/区块)与公共区域面积重叠/不出租,不进分母。
-     * 已租=有生效合同覆盖当日;已签待交=pending_effective 绑定(不算已租,单列)。
+     * 已租=有生效合同覆盖当日;已签待交=绑定待生效合同、或已生效但未到生效日的合同(SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL,
+     * 与铺位看板同口径,第十八批 CE 段 403-R1;不算已租,单列)。
      */
     AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf);
 

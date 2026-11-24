@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -1081,6 +1081,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platfo
     public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("as_of", asOf);
         // CG-09：已租口径与铺位看板共用 SpaceRentalDerivationSql（开立中退租结算单的铺位＝已退租，不计入已租面积）。
+        // 第十八批 CE 段 403-R1：已签待交口径同样与铺位看板共用（SIGNED_PENDING_LATERAL：待生效，或已生效但未到生效日）。
         String sql = """
                 SELECT
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')), 0) AS total,
@@ -1089,9 +1090,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platfo
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
                       AND s.status <> 'unavailable' AND __IS_LET__), 0) AS leased,
                   COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')
-                      AND s.status <> 'unavailable' AND EXISTS (
-                      SELECT 1 FROM contract_spaces cs2 JOIN contracts c2 ON c2.id = cs2.contract_id
-                       WHERE cs2.space_id = s.id AND c2.lifecycle_status = 'pending_effective')), 0) AS signed_pending,
+                      AND s.status <> 'unavailable' AND EXISTS (__SIGNED_PENDING__)), 0) AS signed_pending,
                   COUNT(*) FILTER (WHERE s.space_type = 'parking' AND s.status <> 'unavailable') AS parking_rentable,
                   COUNT(*) FILTER (WHERE s.space_type = 'parking' AND s.status <> 'unavailable' AND __IS_LET__)
                       -- HP-P01（第十二批操作员裁决补充第 5 条）：员工按已登记且在职的员工车辆数计入，一辆算一个车位。
@@ -1100,7 +1099,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platfo
                   FROM spaces s
                   LEFT JOIN LATERAL (__LATEST__) l ON true
                 """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
-                .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET);
+                .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET)
+                .replace("__SIGNED_PENDING__", SpaceRentalDerivationSql.SIGNED_PENDING_LATERAL);
         return jdbcTemplate.queryForObject(sql, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
                 rs.getBigDecimal("rentable"), rs.getBigDecimal("leased"), rs.getBigDecimal("signed_pending"),
                 rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased"), rs.getBigDecimal("total")));

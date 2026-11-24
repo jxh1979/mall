@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -81,6 +81,15 @@ describe("OccupancyAnalyticsPage KPI 聚焦视图", () => {
     await waitFor(() => expect(screen.getByTestId("occupancy-rate")).toBeTruthy());
     expect(screen.getByTestId("occupancy-rate").parentElement?.textContent).toContain("铺位总面积 12,000");
     expect(screen.getByTestId("occupancy-kpi-vacant").textContent).toContain("1,800");
+  });
+
+  // 第十八批 CE 段 403-R2：已签待交口径含已生效未到生效日的合同，说明改用 PGM:540 原词「已签约未交付」，不再写「未生效」。
+  it("已签待交说明用「已签约未交付」，不写「未生效」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("occupancy-summary")).not.toBeNull());
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("已签约未交付");
+    expect(text).not.toContain("未生效");
   });
 
   // HP-P01（BSM「停车场」章「连接经营看板，车位使用率、日周转次数、停车收入、抵免占比、平均停留时长与车位出租率并列」）：
