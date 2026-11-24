@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-11-24T09:02:12.041Z
+更新时间：2026-11-24T09:54:22.796Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -23,7 +23,7 @@
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 7313 | `backend/target/surefire-reports` |
+| 后端测试 | 7321 | `backend/target/surefire-reports` |
 | Web 单元测试定义 | 2079 | `apps/web/src/**/*.test.*` |
 | Playwright 常规 UI | 47 | `playwright-report/index.html` |
 | Playwright 真实后端 UI | 3（报告缺失，未跑） | `playwright-report-real-backend/index.html` |
