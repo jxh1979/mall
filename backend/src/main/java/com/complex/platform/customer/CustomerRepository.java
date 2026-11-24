@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -300,9 +300,16 @@ public interface CustomerRepository {
 
     // ---------- TK-19 充值批次 / 消费分摊 / 退款恢复；TK-20 消费退款回原卡（V517）。default 供内存测试双子零改动兼容：读返回空、写不落 ----------
 
-    /** 通路费率：按 (项目, 支付通路) 取 channel_fee_configs 生效配置（项目特例优先），未配置 = 0。 */
-    default int findStoredValueChannelFeeBps(String projectId, String channel) {
-        return 0;
+    /**
+     * 通路费：按 (项目, 支付通路) 取 channel_fee_configs 生效配置（项目特例优先）的配置行、费率与版本号；未配置＝(null, 0, null)。
+     * 第十八批 CB 段第 396 条 396-R1（BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」；第十八批裁决 72「每单记录所用版本号」）。
+     */
+    default StoredValueRouteFee findStoredValueRouteFee(String projectId, String channel) {
+        return new StoredValueRouteFee(null, 0, null);
+    }
+
+    /** 396-R1：充值所用通路费配置行、费率（万分比）与版本号；未配置通路为 (null, 0, null)。 */
+    record StoredValueRouteFee(String configId, int feeBps, Integer configVersion) {
     }
 
     default void saveStoredValueTopupBatch(StoredValueTopupBatchRecord batch) {

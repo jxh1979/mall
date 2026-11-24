@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.42
+文档版本：V1.43
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3985,6 +3985,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 78 | **第 264 条 免费权益记为「商户让利」时系统要不要收商户的申请确认**（题面：「【第 264 条】把一项免费权益记成「商户让利」（核销后不给商户结算）时，系统要不要收商户的申请确认材料？ 前因：业务地图与枚举速查原句「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；另写「商户签约参加平台活动的其折扣即属后者」。只写了前提，没写申请和书面确认放进系统还是线下存档。最接近的是合同运营细则「合同签署先线下签纸质、系统上传扫描件归档」，但那句管的是商户合同。 现状：后台「票务策略」页配票种权益时，免费权益的「成本承担方」下拉直接选「商户让利型」就能保存发布；系统不收任何材料，也不记商户有没有申请确认，留痕只有谁什么时候绑了这项权益。 分歧：系统要不要承载这份申请与确认；要的话是运营代传商户纸面确认，还是商户自己在系统里申请确认。组合通票搭餐饮零售免费券、酒吧加送赠饮、商户参加平台活动，都是日常会遇到的。」）—— 操作员选「商户在系统里申请确认」：商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。（未选：「运营上传确认材料（推荐）」「线下存档系统不管」）（2026-11-20 弹窗；来由：18BV 只读设计第 264 条待裁题。控制席说明：设计原按推荐项写，按所选选项重做只读设计后再实现。） | 待开发清单第 264 条（18BV） |
 | 80 | **自定事项第 49 条复议：有价的餐饮零售权益能不能标成「商户让利」**（题面：「【自定第 49 条·有价的餐饮零售权益能不能标成「商户让利」】前因：第 264 条（你选了「商户在系统里申请确认」）的设计顺带发现：票务策略页配通票时，餐饮、零售的「专属直付」权益就算有价格，出资方下拉也能选「商户让利型」，后端照存；核销时只看「商户让利」不看票面价，结算记 0，商户收不到这项有价权益的直付款。ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；BSM:751「商户让利的零元免费权益不结算」——原句把让利限在零元免费权益。我定的：不登记。理由是第 264 条做完后，要标商户让利必须先有该商户为这张票提交并确认的申请，我判断正常业务碰不到。重新看一遍后：商户仍可能对有价权益提交申请（误点或以为是活动折扣），而原句让利只管零元权益，拦一下成本很小。所以这次我改为推荐「登记并随第 264 条一并拦」。」）—— 操作员选「只零元权益能选让利（推荐）」：登记并随第 264 条（18BV）一并做：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益。（未选：「维持不登记」）（2026-11-21 弹窗；来由：操作员要求复议控制席自定事项。控制席说明：待开发清单第 420 条，随 18BV 第 264 条修复阶段一并做。） | 控制席自定事项（18BV） |
 | 81 | **第 387 条 已存档内容页要不要显示每条记录当初的存档理由**（题面：「【第 387 条】「已存档内容」页要不要显示每条记录当初的存档理由？前因：BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」BSM:576、577 写「存档及删除都需要填写理由」。删除另有 BSM:574「谁在什么时候、以什么理由删了什么，都有记录可查」，存档没有这样一句。现状：各类存档时都必须填理由、也存进了库；但本页 15 个分类只有服务项目、游乐项目权益绑定两类能显示理由，其余只显示存档时间和存档人；空间类型连时间和存档人也没存。设施设备、商户服务工单、员工档案等几类必填的理由在界面上任何地方都看不到。分歧：HTML 没写本页要显示哪些内容，属「属实但无依据」，按 11-19 规矩要问你。」）—— 操作员选「显示存档理由（推荐）」：每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由。（未选：「不显示，维持现状」）（2026-11-21 弹窗；来由：18BY 只读设计第 387 条待裁题。控制席说明：随 18BY 做 387-R1～R3） | 待开发清单第 387 条（18BY） |
+| 82 | **第 395 条 涉钱配置批准追溯适用后范围内已出单据怎么处理**（题面：「【第 395 条】涉钱配置经批准「追溯适用到生效日之前」后，范围内已经出过的单据怎么处理？前因：BSM:521「……确需追溯适用到生效日之前的，属于例外，必须单独申请、说明追溯范围与理由，经最高权限审批后才可执行，追溯的范围与影响金额逐笔留痕。」同句还写「重新月结只重算金额、不改动单据上已锁定的版本」。定了申请、审批、留痕，没写执行时已出单据的钱怎么动。现状：系统没有任何追溯申请入口；各涉钱配置（渠道费、卡座提成、综合服务费、赠送权益预估成本、内部结算价等）只能从今天以后生效；也没有重算已出账单的功能。例：卡座提成比例 15 日才谈定、约定自当月 1 日起执行。分歧：批准后是系统自己改算并多退少补，还是系统只列明细、财务手工调，还是影响金额由申请人填。工作量差一个量级。」）—— 操作员选「系统重算并自动多退少补（推荐）」：申请时系统按新版本逐笔重算、列出逐笔影响金额；最高权限批准后（本人提交不需审批）自动补记调整、多退少补；原单锁定版本不改，另记追溯记录。（未选：「系统列明细、财务手工调」「只做申请审批与留痕」）（2026-11-21 弹窗；来由：18CB 只读设计第 395 条待裁题。控制席说明：随 18CB 做，工作量大、分段） | 待开发清单第 395 条（18CB） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -12982,3 +12983,128 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ⑥（控制席补充）OpenAPI bindTicketTypeEntitlement、configureTicketTypeMinGiftCups 说明里第十八批 AH 段 215-R1「已上架的通票跌破最低赠酒杯数即退回草稿」一句改准：300-R1（第十八批裁决 74）起已上架的未挂酒吧的票加权益、改最低赠酒杯数一律存入草稿版，不再退回草稿，草稿赠酒够不够数在 publishTicketType 提交审批时由发布闸点名；单一酒吧门票（bar_id 非空）不套赠酒下限。yaml 与 json 同改，操作数不变；security-scans 两份只按最终 openapi-p0.json 改 OpenAPI SHA-256 行；operation-matrix 与 openapi-closure 生成物 --check 通过。依据：ENUM:34「低于该下限的票种不得发布上架」；第十八批裁决 74「改动先存草稿版，审批期间按旧版照卖，批准后自动换新版」。
 - 18BP 合并前变基（2026-11-24）：本段自 efd57257 变基到 origin/main 20afb524；迁移按原序顺延改号 V741→V761；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.13、决策台账 V1.42，Flyway 最新 V761（共 633 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BP 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 98b8d02c 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7392 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2114；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 13:39 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CB 落地位置补记（2026-11-20）：第十八批 CB 段（batch100）按 18CB 只读设计实现待开发清单第 394、395、396、397、398 条（结算配置审批与版本组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CB 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CB 段，batch100）实现待开发清单第 394、395、396、397、398 条（18CB 只读设计 b100-audit/d6-cb.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计 batching 做第一段：394-R1、394-R2、396-R1、397-R1、397-R2、398-R1、398-R2。第 395 条已由第十八批裁决 82 定为「系统重算并自动多退少补」（裁决表第 82 行已插入本工作树决策台账），按设计 batching 另作第二段（工作量大），本段合并后在同一工作树续做，本段不做 395-R1、395-R2。本段工作树已快进到 18BQ（第 360、371 条结算配置生效日期）合并后的主干，按现码定位，不回退 18BQ 的草案、待生效、到日转正口径。设计旁见（服务目录管理费草案转正对最高权限本人也 403、最高权限本人发起要进最高权限审批的动作只能转给别人）已登记待开发清单第 433、434 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 9d6a781c 开工（第六轮 13 段并行），变基到 0ed7c377 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CB 落地位置补记·控制席判定：本段（第十八批 CB 段，batch100）按 18CB 只读设计 b100-audit/d6-cb.json 实现待开发清单第 394、396、397、398 条（394-R1、394-R2、396-R1、397-R1、397-R2、398-R1、398-R2）。第 395 条已由第十八批裁决 82 定为「系统重算并自动多退少补」，按设计分段另作第二段，本段不做（395-R1、395-R2）。本段增量：迁移 V762、V763、V764；新增操作 0 个，删除操作 1 个（settlementConfigUpsertPointsAccrualRate），改既有操作的说明与结构若干；新增测试类 4 个；删除类 1 个（PointsAccrualRateConfigPort）。V764 为实现中发现的库约束（V508 chk_ipdr_sod），设计未计入，按 394-R1 意图补；第二段改用 V755。
+- 18CB 落地位置补记·第 394 条（394-R1、394-R2）。
+  394-R1 结算配置中心各转正、下线、审批闸放行最高权限本人。
+  改法：
+  - 差人守卫改为「执行人等于起草人、且不是最高权限本人」才 403 SELF_ACTIVATION_FORBIDDEN。最高权限本人起草或批准的，可本人转正、下线；下线闸比的是该生效行最后更新人，即批准转正的人。覆盖单行配置（含待生效分支）、收入流业态归因、营业额抽成规则、内部结算价、排名档位整体转正与下线。
+  - 同页同根的还有四处，一并放开：收入归因规则转正、通票分账方案转正、短期经营激励审批、付账日配置审批（SELF_APPROVAL_FORBIDDEN）。
+  - 付账日配置表的库约束「审批人≠提交人」改为放行最高权限账号。
+  - 普通结算配置管理人员仍须他人复核。前端不改（复核转正、下线、审批按钮本来对所有人显示）。
+  落地位置：
+  - SettlementConfigWriteService.requireDifferentActor；SettlementConfigWriteService.activateDraft 的 attribution_rule 分支传入是否最高权限。
+  - OperatingParamsService.activateRevenueAttributionRuleDraft 加参数 masterAuthority。
+  - DistributionSchemeService 构造器注入 AuthorizationService，activate、decideIncentive 守卫加最高权限判断。
+  - InternalPayDayService.decide。
+  - 迁移 V764__internal_pay_day_rule_master_self_approval 重建 internal_pay_day_rules.chk_ipdr_sod。
+  - 契约：settlementConfigActivateDraft、settlementConfigArchive、settlementConfigActivateRankTiers、settlementConfigActivateAttributionRuleAlias、settlementConfigActivateDistributionScheme、settlementConfigApprovePassIncentive、settlementConfigRejectPassIncentive、decideInternalPayDayRule 说明补「最高权限本人起草或提交的除外」。
+  依据：BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71。
+  测试：SettlementConfigMasterSelfApproval394Tests 的 masterActivatesOwnChannelFeeDraft、nonMasterStillCannotActivateOwnDraft、masterArchivesOwnCommissionRate、masterActivatesOwnDistributionScheme、masterDecidesOwnIncentiveApplication、masterApprovesOwnPayDayRule、masterActivatesOwnAttributionRule。
+  394-R2 高价值判定阈值：最高权限本人提交即批准，不进最高权限复核单。
+  改法：
+  - 最高权限本人提交的，落草案后同一事务批准为待生效（status=scheduled），到生效起始日期由系统转正。
+  - 提交留痕不带 review_id；另记 settlement.config.draft.activated，元数据 config_group=high_value_thresholds、effective_from、master_self_initiated=true。
+  - 其他人提交的照旧进最高权限审批。
+  - 前端最高权限本人提交时，提交按钮为「提交（最高权限本人提交即批准）」，确认页「生效方式」为「最高权限本人提交即批准，按生效起始日期生效」。
+  落地位置：SettlementConfigWriteService.saveHighValueThreshold（调 SettlementConfigScheduledActivationService.schedule）；SettlementConfigPage 的 isMaster、submitLabel、summaryFields；契约 settlementConfigUpsertHighValueThreshold 说明。
+  依据：ENUM:164「调整须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」。
+  测试：SettlementConfigMasterSelfApproval394Tests.masterHighValueThresholdNeedsNoReview；SettlementConfigPage.test.tsx「394-R2：最高权限本人提交高价值判定阈值，确认页写明提交即批准」。
+- 18CB 落地位置补记·第 396 条（396-R1）充值批次记所用通路费配置行与版本号。
+  改法：
+  - 通用卡每笔充值入账时，按（项目、支付通路）用同一条查询取出生效的通路费配置行、费率与版本号（项目特例优先），一并写进充值批次。
+  - 未配置的通路，费率为 0，配置行与版本号为空，不拒绝入账。
+  - 不回填既有批次；储值台账展示与审计明细不变。
+  落地位置：
+  - 迁移 V762__stored_value_topup_batch_route_fee_version：stored_value_topup_batches 加 fee_config_id、fee_config_version。
+  - CustomerRepository.findStoredValueRouteFee 与记录 CustomerRepository.StoredValueRouteFee（取代 findStoredValueChannelFeeBps）。
+  - JdbcCustomerRepository 的 findStoredValueRouteFee、saveStoredValueTopupBatch、listOpenStoredValueTopupBatchesForUpdate、mapTopupBatch。
+  - StoredValueTopupBatchRecord 加 feeConfigId、feeConfigVersion。
+  - StoredValueService.topup。
+  依据：BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」；ENUM:86「通道费以每笔充值支付成功时平台与该支付通路的生效合同费率为准，随该笔充值一并固化」；第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」。
+  测试：StoredValueBatchAllocationJdbcIntegrationTests 的 topupBatchRecordsRouteFeeConfigRowAndVersion、unconfiguredChannelLeavesConfigEmpty；StoredValueTopupRouteFeeVersion396Tests.settledTopupBatchRecordsTheRouteFeeConfigRowAndVersionInForce。
+- 18CB 落地位置补记·第 397 条（397-R1、397-R2）结算配置中心撤下积分累计率。
+  改法：
+  - 撤下积分累计率的写入口、转正与下线分支、待复核队列分支、总览展示和票务端口。
+  - 对该配置类型转正报 400 UNKNOWN_CONFIG_TYPE，下线报 400 UNSUPPORTED_ARCHIVE，写入口路径 404 NOT_FOUND。
+  - points_accrual_rate_configs 表与 parc_default 种子留库、无读写，审计中文名保留，不加迁移。
+  - 总览两条卡座提成项分组改为「卡座提成」。
+  - 前端删积分累计率块；页签「提成与积分」改名「卡座提成」，导语改为「卡座销售提成的口径」。BarCommissionsPage 页头说明、StaffProfilesPage 页头说明与注释、StaffService 注释里的路径同步改为「结算配置中心 → 卡座提成」。
+  落地位置：
+  - SettlementConfigController（删 savePointsAccrualRate）；SettlementConfigWriteRequests（删 PointsAccrualRateRequest）。
+  - SettlementConfigWriteService：删 savePointsAccrualRate，archive 白名单与 DEFAULT_SEED_IDS 去掉积分累计率。
+  - JdbcSettlementConfigWriteRepository：删 upsertPointsAccrualRateDraft 与 SingleRowConfig.POINTS_ACCRUAL_RATE，listPendingConfigDrafts 去掉该分支。
+  - SettlementConfigService.overview。
+  - JdbcCommissionPointsConfigRepository：删 findAmountCentPerPoint，不再实现该端口；删 ticketing.PointsAccrualRateConfigPort；TicketOrderService 删 pointsAccrualRateConfigPort 字段。
+  - tools/verify-audit-labels.mjs 的 DECLARED。
+  - SettlementConfigPage 的 COMMISSION_POINTS_BLOCKS、EditKey、GROUP_LABELS、ARCHIVABLE、Form、页签。
+  - 契约删除 settlementConfigUpsertPointsAccrualRate，settlementConfigActivateDraft、settlementConfigArchive 的 config_type 说明去掉积分累计率。
+  依据：BSM:822「商户消费按商户所属业态的全国有效规则计算，可配置“每消费多少元产生一积分”（业务参数，按商户业态可配，须同时配置上下限）」。
+  测试：SettlementConfigPointsAccrualRetired397Tests 的 savingPointsAccrualRateIsNoLongerAnEndpoint、overviewNoLongerShowsPointsAccrualRate、activatingPointsAccrualRateIsUnknownConfigType；SettlementConfigPage.test.tsx「397：结算配置中心不再有积分累计率」「卡座提成栏目渲染卡座提成配置块 + 概览展示其当前生效值」；CommissionPointsConfigJdbcIntegrationTests.draftsAppearInPendingQueue（只含卡座提成）。
+- 18CB 落地位置补记·第 398 条（398-R1、398-R2）通票分账通告期与非积分商户账单异议期按版本生效。
+  改法：
+  - 两项改动只落草案：通告期全平台一个草案槽；异议期每项目一个草案槽，出厂行仍不能在页面改。再存会覆盖草案。
+  - 生效起始日期必填，须晚于该范围当前营业日。异议期的顺序复核起算日改为生效起始日期。
+  - 在结算配置中心他人复核转正（config_type 为 distribution_notice_period、objection_period；394-R1 之后最高权限本人可本人转正）后待生效，到日由系统转正，原生效行下线留库。批准时日期已到返回 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED。
+  - 读取方只认现行生效行：方案转正时推算生效日、付款时点推算与异议截止日。异议期上限复核只算生效与待生效行。
+  - 前端两个表单加生效起始日期，没填时提示「生效起始日期必填。」；按钮改为「保存通告期草案」「保存异议期草案」并加说明句；存完刷新本页待复核队列，草案组名显示「通票分账通告期」「非积分商户账单异议期」。
+  落地位置：
+  - 迁移 V763__notice_and_objection_period_versioned。
+  - JdbcSettlementConfigWriteRepository：SingleRowConfig 加 NOTICE_PERIOD、OBJECTION_PERIOD；改 datedColumns、listPendingConfigDrafts。
+  - SettlementConfigScheduledActivationService.DATED。
+  - DistributionSchemeService 的 saveNoticePeriod 与 noticePeriod（构造器注入 SettlementConfigScheduledActivationService）；SettlementConfigWriteRequests.NoticePeriodRequest 加 effectiveFrom。
+  - InternalPayDayService 的 saveObjectionPolicy、objectionPolicy、maxObjectionDays，ObjectionPolicyRequest 加 effectiveFrom（构造器注入 SettlementConfigScheduledActivationService）。
+  - audit-labels.json 的 business_types 加 distribution_notice_period、objection_period；tools/verify-audit-labels.mjs 的 DECLARED 两处加这两个码。
+  - DistributionSchemePanel、InternalPayDaysPanel 的生效起始日期与 onChanged；SettlementConfigPage 的 GROUP_LABELS 与 reload 传入。
+  - 契约：settlementConfigSaveDistributionNoticePeriod、saveSettlementObjectionPeriod 请求体加必填 effective_from 并改说明；settlementConfigActivateDraft 的 config_type 说明补这两类。
+  依据：BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」；ENUM:52「通告期为业务参数，后台可配，出厂默认一个月，须同时配置上下限。」；BSM:1597「异议期长度由后台配置（业务参数，按项目可配，出厂默认 10 个工作日，须同时配置上下限）」。
+  测试：SettlementNoticeObjectionVersioning398Tests 的 noticePeriodChangeWaitsForApprovalAndItsDate、objectionPeriodChangeWaitsForApprovalAndItsDate、effectiveFromRequired；SettlementDistributionSchemeJdbcIntegrationTests 的 noticePeriodNeedsBoundsAndDrivesEffectiveDate、schemeTakesEffectAtTheStartOfTheEffectiveBusinessDay（改走新流程）；InternalPayDayJdbcIntegrationTests.objectionPolicyRequiresBoundsAroundValue；SettlementConfigPage.test.tsx「398：通告期与异议期须填生效起始日期并以蛇形键提交」「保存草案、复核转正与通告期请求体为蛇形键（tiers/first_segment/period_value…）」。
+- 18CB 契约落地（K-contract，OpenAPI yaml 与 json 同值）：本段新增操作 0 个、删除 1 个，权限码、x-data-scope、x-auth-context、x-terminal-allowed 都不变。
+  - 第 397 条 397-R1（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：
+    - 删除 settlementConfigUpsertPointsAccrualRate（POST /api/v1/settlement/config/points-accrual-rate）整条路径。内联请求体与 x-audit-event-success/failure（settlement.config.points_accrual_rate_configs.updated / update_failed）随删，现请求该路径返回 404。
+    - settlementConfigActivateDraft 说明补「configType=points_accrual_rate 已撤下，400 UNKNOWN_CONFIG_TYPE」。
+    - settlementConfigArchive 说明的白名单照 SettlementConfigWriteService.archive 现码写全（merchant_rate、revenue_stream_attribution、commission_rate、turnover_rent_rule、pass_gift_cost、internal_price_item），并注明去掉 points_accrual_rate、现 400 UNSUPPORTED_ARCHIVE。
+    - settlementConfigOverview 说明补：platform_defaults 不再有 points_amount_cent_per_point；commission_rate_sales、commission_rate_non_sales 两项 group 改「卡座提成」；草案队列不再有 config_group=points_accrual_rate。
+  - 第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：以下 8 个操作说明补「最高权限本人起草或提交的除外」，结构不变。
+    - settlementConfigActivateDraft、settlementConfigActivateRankTiers、settlementConfigActivateAttributionRuleAlias、settlementConfigActivateDistributionScheme
+    - settlementConfigApprovePassIncentive、settlementConfigRejectPassIncentive、decideInternalPayDayRule
+    - settlementConfigArchive：比的是该生效行最后更新人，最高权限本人起草或批准的可本人下线。
+    - 对应代码 SettlementConfigWriteService.requireDifferentActor、OperatingParamsService.activateRevenueAttributionRuleDraft、DistributionSchemeService.activate 与 decideIncentive、InternalPayDayService.decide。
+  - 第 394 条 394-R2（ENUM:164「调整须最高权限审批并留痕」；BSM:576 同句）：settlementConfigUpsertHighValueThreshold 说明补以下内容（SettlementConfigWriteService.saveHighValueThreshold）。
+    - 最高权限本人提交即批准，不进最高权限复核单、不回写 review_id，同一事务置待生效、按生效起始日期由系统转正。
+    - 提交留痕 settlement.config.high_value_thresholds.updated 不带 review_id，另记 settlement.config.draft.activated（config_group=high_value_thresholds、effective_from、master_self_initiated=true）。
+  - 第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：
+    - settlementConfigSaveDistributionNoticePeriod（DistributionSchemeService.saveNoticePeriod）：请求体加必填 effective_from（date）。说明改为落全平台一个草案槽、经 settlementConfigActivateDraft（config_type=distribution_notice_period）他人复核批准后待生效、到生效起始日期（按平台默认营业日）由系统转正，返回现行通告期；补缺填、非有效日期、不晚于营业日的三种 400 VALIDATION_FAILED；成功留痕 business_id 为草案 id、元数据加 effective_from。
+    - saveSettlementObjectionPeriod（InternalPayDayService.saveObjectionPolicy）：请求体加必填 effective_from。说明改为落本项目草案、经 config_type=objection_period 复核转正后按本项目营业日生效，顺序复核自生效起始日期起算，返回现行异议期；失败码同上；成功留痕元数据加 effective_from。
+    - settlementConfigActivateDraft 说明补这两类 configType：批准后待生效；批准时日期已到 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED；成功事件 settlement.config.draft.activated 的业务类型与 config_group 为该 configType。到日留痕 settlement.config.version.effective，业务类型为表名，元数据 config_group 照 SettlementConfigScheduledActivationService.activateDue 现码为 notice_period、objection_period。
+    - settlementConfigOverview 说明补草案队列新增 config_group=distribution_notice_period、objection_period，并写明两者的 summary 格式。
+    - settlementConfigDistributionScheme 的 notice_period 与 getSettlementObjectionPeriod 都写明只返回现行生效值。
+  - 第 396 条 396-R1 不动契约（版本号不出现在接口里）。
+- 18CB 落地位置补记·汇合段 J（e2e 与门禁）：tests/e2e 不用改，按 B1-d6-cb 的 e2e 要点，再自己 grep 了本段改动页面的文字与选择器（提成与积分、积分累计率、points-accrual、保存通告期、保存异议期、notice-period、objection-period、卡座提成等），都没命中。full-admin-remaining 的 ADM-STL-001 只核结算配置中心主表、「通票分账」页签和综合服务费块，本段都没改。视觉基线不涉及本段页面，没有重拍。门禁结论：后端先删 target，再在空库 --fresh 真迁本段迁移 V762、V763、V764 后跑全量，0 红。前端 typecheck 0 错；vitest 全量只有 TicketingPoliciesPage.combo.test.tsx 一条负载偶发红（本段没动这个文件），单独重跑全过。客人三个工作区单测、安卓员工端 gradle test 与 android-app 编译、chromium 五份后台 spec 都过。镜像里重生成四份生成物后 verify:p0-contract 全过。yaml 与 json 深比较一致；本段新增 0 个操作、删 1 个（settlementConfigUpsertPointsAccrualRate），其余 14 个既有操作只改说明、结构或失败码，components 下的 schemas 与 responses 没动。git diff --check 只报 BarCommissionsPage 一处 CRLF 行尾，原因是该文件在主干整份 CRLF。
+- 文档同步（第 394、396、397、398 条；本组不加迁移、不改接口，所引迁移为本段 V762、V763、V764）：
+  - `settlement-rebuild-prd-v1.0.md`
+    - §9 配置表族卡座提成栏改名「卡座提成」，`points_accrual_rate_configs` 行改为已撤下（表与种子留库、无读写）。
+    - 第 371 条实现现状补通票分账通告期与非积分商户账单异议期同样落草案、必填生效起始日期、复核转正后待生效、到日由同一作业转正。
+    - 批1「双人复核」补最高权限本人起草或批准的可本人转正、下线（`SettlementConfigWriteService.requireDifferentActor`；同页 `OperatingParamsService.activateRevenueAttributionRuleDraft`、`DistributionSchemeService.activate`、`DistributionSchemeService.decideIncentive`、`InternalPayDayService.decide` 同此）。
+    - V340 段栏目改名，软删白名单撤出积分累计率（转正 400 `UNKNOWN_CONFIG_TYPE`、下线 400 `UNSUPPORTED_ARCHIVE`）。
+    - 高价值判定阈值落地记录与配置页补最高权限本人提交即批准（`SettlementConfigWriteService.saveHighValueThreshold`，另记 `settlement.config.draft.activated`，`master_self_initiated=true`）。
+    - §5.1 落地记录⑥通告期补落草案、复核转正（`config_type=distribution_notice_period`）、按生效起始日期生效（`DistributionSchemeService.saveNoticePeriod`，`SettlementConfigScheduledActivationService.DATED`）。
+  - `finance-settlement-product-prd-v0.1.md`
+    - §3A 补通用卡充值批次记所用通路费配置行与版本号（`CustomerRepository.findStoredValueRouteFee`、`StoredValueTopupBatchRecord`，V762）。
+    - §3B.4 草案闸与 §4B.1 付账日配置审批补最高权限本人例外（V764）。
+    - §4B.1 非积分商户账单异议期补版本化（`InternalPayDayService.saveObjectionPolicy`，`config_type=objection_period`，V763）。
+  - `supply-chain-inventory-product-prd-v0.1.md`：§10 已确认第 9 条与 §10.1 高价值行补最高权限本人提交即批准。
+  - `member-loyalty-and-stored-value-development-design-v0.1.md`：三处积分累计率现状句改为商户消费积分按业态积分规则计算、该表已撤下（`TicketOrderService` 不再有该端口）。
+  - `bar-operations-development-design.md`：卡座提成维护入口改为「结算配置中心 → 卡座提成 → 卡座销售提成费率」。
+  - `requirement-traceability-matrix-v0.1.md`：REQ-12 补第 397 条更正。
+  - 页面矩阵 ADM-STL-001：状态流与校验补通告期、异议期两类与最高权限本人例外，接口与权限码不变。
+  - 依据：
+    - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「每一笔单据在生成时就把所用配置版本固化在单上」「无法判断是否涉及钱的，一律按涉及钱处理。」
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - BSM:822「商户消费按商户所属业态的全国有效规则计算」
+    - ENUM:164；第十八批裁决 71、72
+  - 校验：`node tools/verify-full-admin-page-matrix.mjs` 通过。
+- 18CB 合并前变基（2026-11-24）：本段自 0ed7c377 变基到 origin/main 955ea1ba；迁移按原序顺延改号 V752→V762、V753→V763、V754→V764；合并时 OpenAPI 共 1419 个操作（主干 1420）、info.version V1.14、决策台账 V1.43，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

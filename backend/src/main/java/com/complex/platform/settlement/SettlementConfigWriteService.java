@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
@@ -25,7 +25,6 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.Distributio
 import com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
@@ -48,8 +47,10 @@ import static com.complex.platform.common.Strings.requireText;
  *
  * <p>资金级:所有碰数据的参数从配置表来(零硬编码);编辑权限与转正权限均 {@code settlement.config.manage}(高敏),
  * 权限/平台 scope 由 {@link SettlementConfigController} 前置校验,本服务只收 actorId(照 batch0 写法)。
- * <p>治理:转正/软删走<b>差人复核</b>(执行人 ≠ 起草人 updated_by,否则 403)=HTML「审批通过后才生效」落地。
- * <p>第十八批第 24 条:高价值判定阈值例外——ENUM:164「调整须最高权限审批并留痕」,提交即进统一审批的最高权限策略,批准才转正。
+ * <p>治理:转正/软删走<b>差人复核</b>(执行人 ≠ 起草人 updated_by,否则 403)=HTML「审批通过后才生效」落地;第十八批 CB 段第 394 条
+ * (BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」;第十八批裁决 71):最高权限本人起草或批准的可本人转正、下线。
+ * <p>第十八批第 24 条:高价值判定阈值例外——ENUM:164「调整须最高权限审批并留痕」,提交即进统一审批的最高权限策略,批准才转正;
+ * 394-R2:最高权限本人提交的提交即批准,不进最高权限复核单。
  */
 @Service
 public class SettlementConfigWriteService {
@@ -59,7 +60,7 @@ public class SettlementConfigWriteService {
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
     /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。V373:pgc_default(G 预扣全局默认)。 */
     private static final Set<String> DEFAULT_SEED_IDS =
-            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "pgc_default");
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "pgc_default");
     /** 第十八批第 24 条:高价值判定阈值调整的统一审批策略(SupervisorReviewService 同名策略,最高权限)。 */
     public static final String HIGH_VALUE_THRESHOLD_ACTION = "settlement.high_value_threshold.configure";
     public static final String HIGH_VALUE_THRESHOLD_OBJECT = "high_value_threshold";
@@ -306,28 +307,6 @@ public class SettlementConfigWriteService {
     }
 
     /**
-     * V340(P0-D/CFG-01)积分累计率落草案:项目 × 商户,每积 1 分所需消费金额(分)。
-     * 出厂种子 100(= 改造前每元 1 分);须 &gt;0(0 会致除零,DB CHECK 亦挡)。
-     */
-    public void savePointsAccrualRate(PointsAccrualRateRequest request, String actorId) {
-        PointsAccrualRateRequest req = requireRequest(request);
-        String idem = requireText(req.idempotencyKey(), "idempotency_key");
-        rejectSentinel(req.projectId(), "project_id");
-        rejectSentinel(req.merchantId(), "merchant_id");
-        Long unit = req.amountCentPerPoint();
-        if (unit == null || unit <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "每积分金额（amount_cent_per_point）必须大于 0");
-        }
-        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
-        String landedId = writeRepository.upsertPointsAccrualRateDraft(draftId("parc_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), unit, actorId);
-        audit("settlement.config.points_accrual_rate_configs.updated",
-                "points_accrual_rate_configs", landedId, idem,
-                Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
-                        "amount_cent_per_point", String.valueOf(unit)));
-    }
-
-    /**
      * S6(V373)赠送权益预扣规则落草案:项目 × 票种。两模式二选一(镜像 chk_pgc_amount):
      * by_item 按件计=票面推导、不许带整额(带了也没人读=必然口径漂);by_ticket_amount 按票计=整额必填 ≥0
      * (0=预扣关闭态,合法)。封顶可选 ≥0;差额处理规则三选一,留空=platform_absorb(S7 消费,本刀只落快照)。
@@ -383,6 +362,8 @@ public class SettlementConfigWriteService {
      * （{@link #highValueThresholdDecided}），不走差人复核转正。已有一条在审草案时再提交 409。
      * 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期……按指定日期生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：
      * 生效起始日期必填，须晚于平台默认当前营业日。
+     * 第十八批 CB 段第 394 条 394-R2（ENUM:164「调整须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：
+     * 最高权限本人提交的不进最高权限复核单（发起人不能复核自己发起的单），同一事务批准为待生效、按生效起始日期生效，留痕带 master_self_initiated。
      */
     @Transactional
     public void saveHighValueThreshold(HighValueThresholdRequest request, String actorId) {
@@ -403,6 +384,18 @@ public class SettlementConfigWriteService {
             if (landedId == null) {
                 throw ApiException.conflict("HIGH_VALUE_THRESHOLD_REVIEW_PENDING",
                         "已有一条高价值判定阈值调整在最高权限审批中，审批结束后再提交");
+            }
+            if (auth.isMasterAuthority(auth.currentActor())) {
+                scheduledActivation.schedule(SingleRowConfig.HIGH_VALUE_THRESHOLD, landedId, actorId, Instant.now());
+                audit("settlement.config.high_value_thresholds.updated", "high_value_thresholds", landedId, idem,
+                        Map.of("high_value_threshold_cent", String.valueOf(threshold),
+                                "high_value_threshold_min_cent", String.valueOf(min),
+                                "high_value_threshold_max_cent", String.valueOf(max),
+                                "reason", reason, "effective_from", effectiveFrom.toString()));
+                audit("settlement.config.draft.activated", "high_value_thresholds", landedId, null,
+                        Map.<String, Object>of("config_group", "high_value_thresholds", "effective_from", effectiveFrom.toString(),
+                                "master_self_initiated", true));
+                return landedId;
             }
             String snapshot = reason + "\n" + encode(Map.of(
                     "previous_versions", writeRepository.listActiveHighValueThresholds(),
@@ -657,8 +650,8 @@ public class SettlementConfigWriteService {
         String draftId = requireText(id, "id");
         Instant now = Instant.now();
         switch (type) {
-            case "attribution_rule" -> // 差人守卫 + Path 2 转正在 batch0 OperatingParamsService 内(待主会话协调 batch0)。
-                    operatingParamsService.activateRevenueAttributionRuleDraft(draftId, actorId);
+            case "attribution_rule" -> // 差人守卫 + Path 2 转正在 batch0 OperatingParamsService 内;394-R1 最高权限本人起草的可本人转正。
+                    operatingParamsService.activateRevenueAttributionRuleDraft(draftId, actorId, auth.isMasterAuthority(auth.currentActor()));
             case "revenue_stream_attribution" -> {
                 requireDifferentActor(attributionRepository.draftUpdatedBy(draftId), actorId);
                 requireActivated(attributionRepository.activateDraft(draftId, actorId, now));
@@ -709,10 +702,10 @@ public class SettlementConfigWriteService {
 
     /**
      * 软删:status→inactive + archive_reason;差人守卫。
-     * 白名单 = merchant_rate / revenue_stream_attribution(批1)+ commission_rate / points_accrual_rate(V340)
+     * 白名单 = merchant_rate / revenue_stream_attribution(批1)+ commission_rate(V340;积分累计率第十八批 CB 段第 397 条已撤下)
      * + turnover_rent_rule(V346·P0-E 营业额抽成规则)。
      *
-     * <p>V340 两类必须可软删的理由:提成率/积分累计率一旦落了<b>商户级特例</b>行,该商户就永久被特例遮挡、
+     * <p>V340 提成率必须可软删的理由:提成率一旦落了<b>商户级特例</b>行,该商户就永久被特例遮挡、
      * 再也回落不到项目/全局默认口径(改回同值只是又一条特例行)。软删 = 该特例下线、商户回落默认,且留档可追溯。
      */
     public void archive(String configType, String id, ArchiveRequest request, String actorId) {
@@ -734,13 +727,13 @@ public class SettlementConfigWriteService {
                 requireDifferentActor(attributionRepository.activeUpdatedBy(targetId), actorId);
                 rows = attributionRepository.softDelete(targetId, reason, actorId, now);
             }
-            // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
+            // V340:提成费率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
             // 第十八批第 24 条:高价值判定阈值全平台只一行、只经最高权限审批调整,不再可软删。
             // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
             // S6(V373):赠送权益预扣规则的项目/票种特例条目可下线(回落上层默认);全局默认种子 pgc_default 受守卫保护
             //   (种子被删 → findPassGiftCostConfig 对全部核销结算 fail-loud)。
             // 批10/E:目录条目下线归档(软删留库):历史引用照旧可追溯;后续核销/结算解析不到生效价 → fail-closed。
-            case "commission_rate", "points_accrual_rate", "turnover_rent_rule",
+            case "commission_rate", "turnover_rent_rule",
                     "pass_gift_cost", "internal_price_item" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
@@ -802,9 +795,13 @@ public class SettlementConfigWriteService {
         }
     }
 
-    /** 差人守卫:执行人 = 草案起草人 → 403(不能自行转正/软删自己的改动,须另一高权限人复核)。起草人 null 交给后续前态守卫。 */
+    /**
+     * 差人守卫:执行人 = 草案起草人 → 403(不能自行转正/软删自己的改动,须另一高权限人复核)。起草人 null 交给后续前态守卫。
+     * 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：
+     * 最高权限本人起草或批准的可本人转正、下线（下线比的是该生效行最后更新人，即批准转正的人）。
+     */
     private void requireDifferentActor(String drafter, String actor) {
-        if (drafter != null && drafter.equals(actor)) {
+        if (drafter != null && drafter.equals(actor) && !auth.isMasterAuthority(auth.currentActor())) {
             throw ApiException.forbidden("SELF_ACTIVATION_FORBIDDEN",
                     "不能自行转正/软删自己起草的改动,须另一高权限人复核批准");
         }

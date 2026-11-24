@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -17,7 +17,6 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.IncentiveDe
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.NoticePeriodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
@@ -130,17 +129,6 @@ public class SettlementConfigController {
         auditFailure("settlement.config.bar_commission_rate_configs.update_failed", "settlement.config.manage", "bar_commission_rate_configs",
                 null, request == null ? null : request.idempotencyKey(), () -> {
                     writeService.saveCommissionRate(request, requireManageActor());
-                    return null;
-                });
-        return ApiResponse.ok(null);
-    }
-
-    /** V340(P0-D/CFG-01):积分累计率(项目 × 商户)落草案。 */
-    @PostMapping("/points-accrual-rate")
-    public ApiResponse<Void> savePointsAccrualRate(@RequestBody PointsAccrualRateRequest request) {
-        auditFailure("settlement.config.points_accrual_rate_configs.update_failed", "settlement.config.manage", "points_accrual_rate_configs",
-                null, request == null ? null : request.idempotencyKey(), () -> {
-                    writeService.savePointsAccrualRate(request, requireManageActor());
                     return null;
                 });
         return ApiResponse.ok(null);

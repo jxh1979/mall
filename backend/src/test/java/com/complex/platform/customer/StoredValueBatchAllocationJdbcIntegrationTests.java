@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -111,6 +111,40 @@ class StoredValueBatchAllocationJdbcIntegrationTests {
         topupViaCounter(null, merchantId, 5_000L, "pos");
         assertThat(account(null, merchantId).get("principal_cent")).isEqualTo(5_000L);
         assertThat(batches(null, merchantId)).isEmpty();
+    }
+
+    /**
+     * 第十八批 CB 段第 396 条 396-R1（BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」；第十八批裁决 72「每单记录所用版本号」）：充值批次记下
+     * 充值支付成功时所用的通路费配置行与版本号；该通路换成下一版后再充值，新批次记新版，旧批次不变。修复前批次没有配置行与版本号，断言红。
+     */
+    @Test
+    void topupBatchRecordsRouteFeeConfigRowAndVersion() {
+        String v3 = seedChannelFee("pos", 150);
+        jdbcTemplate.update("UPDATE channel_fee_configs SET version_no = 3 WHERE id = ?", v3);
+        String first = topupViaCounter(projectId, null, 30_000L, "pos");
+        jdbcTemplate.update("UPDATE channel_fee_configs SET status = 'inactive' WHERE id = ?", v3);
+        String v4 = seedChannelFee("pos", 180);
+        jdbcTemplate.update("UPDATE channel_fee_configs SET version_no = 4 WHERE id = ?", v4);
+        String second = topupViaCounter(projectId, null, 70_000L, "pos");
+
+        assertThat(batchFeeConfig(first)).containsEntry("fee_config_id", v3).containsEntry("fee_config_version", 3)
+                .containsEntry("fee_bps", 150);
+        assertThat(batchFeeConfig(second)).containsEntry("fee_config_id", v4).containsEntry("fee_config_version", 4)
+                .containsEntry("fee_bps", 180);
+    }
+
+    /** 396-R1：该支付通路没有配置通路费时，批次费率为 0，配置行与版本号都为空（不拒绝入账）。 */
+    @Test
+    void unconfiguredChannelLeavesConfigEmpty() {
+        String txn = topupViaCounter(projectId, null, 10_000L, "pos");
+
+        assertThat(batchFeeConfig(txn)).containsEntry("fee_config_id", null).containsEntry("fee_config_version", null)
+                .containsEntry("fee_bps", 0);
+    }
+
+    private Map<String, Object> batchFeeConfig(String batchId) {
+        return jdbcTemplate.queryForMap("SELECT fee_config_id, fee_config_version, fee_bps FROM stored_value_topup_batches WHERE id = ?",
+                batchId);
     }
 
     // ---------- TK-19-R2 消费分摊 ----------
@@ -288,9 +322,11 @@ class StoredValueBatchAllocationJdbcIntegrationTests {
 
     // ---------- helpers ----------
 
-    private void seedChannelFee(String channel, int feeBps) {
+    private String seedChannelFee(String channel, int feeBps) {
+        String id = "cfc_tk19_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         jdbcTemplate.update("INSERT INTO channel_fee_configs (id, project_id, fee_layer, channel, fee_bps, status, is_draft) VALUES (?, ?, 'route', ?, ?, 'active', FALSE)",
-                "cfc_tk19_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12), projectId, channel, feeBps);
+                id, projectId, channel, feeBps);
+        return id;
     }
 
     /** 复核 money m1：卡已关闭后收到消费退款——本金登记待退本人，不再把本金加回原充值批次。 */

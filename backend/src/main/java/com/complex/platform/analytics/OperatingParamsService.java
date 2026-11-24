@@ -22,7 +22,7 @@ import static com.complex.platform.common.Strings.requireText;
  * {@code operating_params.changed}。幂等：repository 按 project_id ON CONFLICT DO UPDATE。</p>
  */
 @Service
-// 文件版本：V0.03
+// 文件版本：V0.04
 public class OperatingParamsService {
 
     private final AnalyticsRepository repository;
@@ -194,11 +194,13 @@ public class OperatingParamsService {
     /**
      * 结算配置中心批0:把一条收入归因规则草案(is_draft=TRUE)复核转正为正式生效口径(FALSE)。
      * 差人守卫(项5):执行人 = 草案起草人 → 403;前态守卫:仅草案态可转正(行数0=不存在/已是正式)。
+     * 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：masterAuthority＝执行人是最高权限本人，
+     * 本人起草的可本人转正（由结算配置中心转正入口传入）。
      */
-    public void activateRevenueAttributionRuleDraft(String id, String actorId) {
+    public void activateRevenueAttributionRuleDraft(String id, String actorId, boolean masterAuthority) {
         String ruleId = requireText(id, "id");
         String drafter = repository.attributionRuleDraftUpdatedBy(ruleId);
-        if (drafter != null && drafter.equals(actorId)) {
+        if (drafter != null && drafter.equals(actorId) && !masterAuthority) {
             throw ApiException.forbidden("SELF_ACTIVATION_FORBIDDEN",
                     "不能自行转正自己起草的改动,须另一高权限人复核批准");
         }

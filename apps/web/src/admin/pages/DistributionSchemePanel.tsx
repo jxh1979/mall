@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { PermissionButton, useCan } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -65,13 +65,15 @@ const rowValid = (row: Row) => rowTotal(row) === 10000
 const firstValid = (f: FirstRow) => f.merchantId.trim() !== "" && f.amountYuan.trim() !== ""
   && Number.isFinite(Number(f.amountYuan)) && Number(f.amountYuan) >= 0;
 
-export function DistributionSchemePanel({ api, effectivePermissions }: Pick<AdminPageProps, "api" | "effectivePermissions">) {
+// 第十八批 CB 段第 398 条 398-R2（BSM:521「必须填写生效起始日期」）：onChanged＝通告期草案存完通知所在页刷新待复核队列。
+export function DistributionSchemePanel({ api, effectivePermissions, onChanged }:
+  Pick<AdminPageProps, "api" | "effectivePermissions"> & { onChanged?: () => void }) {
   const [scheme, setScheme] = React.useState<Scheme | null>(null);
   const [projectId, setProjectId] = React.useState("");
   const [rows, setRows] = React.useState<Row[]>([]);
   const [first, setFirst] = React.useState<FirstRow[]>([]);
   const [newCount, setNewCount] = React.useState("");
-  const [notice, setNotice] = React.useState({ value: "", unit: "month", min: "", max: "" });
+  const [notice, setNotice] = React.useState({ value: "", unit: "month", min: "", max: "", effectiveFrom: "" });
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [trialFailed, setTrialFailed] = React.useState<string[]>([]);
@@ -95,7 +97,7 @@ export function DistributionSchemePanel({ api, effectivePermissions }: Pick<Admi
     }
     const np = data.noticePeriod;
     setNotice({ value: String(np.periodValue), unit: np.periodUnit, min: np.minValue == null ? "" : String(np.minValue),
-      max: np.maxValue == null ? "" : String(np.maxValue) });
+      max: np.maxValue == null ? "" : String(np.maxValue), effectiveFrom: "" });
   }, [api]);
   React.useEffect(() => { void reload(true).catch((e) => setError(e instanceof Error ? e.message : "通票分账方案读取失败")); }, [reload]);
 
@@ -170,10 +172,15 @@ export function DistributionSchemePanel({ api, effectivePermissions }: Pick<Admi
   }
 
   function saveNotice() {
-    void run(() => api.post(`${BASE}/notice-period`, {
-      idempotencyKey: `stl-distribution-notice-${Date.now()}`,
-      periodValue: Number(notice.value), periodUnit: notice.unit, minValue: Number(notice.min), maxValue: Number(notice.max),
-    }));
+    if (notice.effectiveFrom.trim() === "") { setError("生效起始日期必填。"); return; }
+    void run(async () => {
+      await api.post(`${BASE}/notice-period`, {
+        idempotencyKey: `stl-distribution-notice-${Date.now()}`,
+        periodValue: Number(notice.value), periodUnit: notice.unit, minValue: Number(notice.min), maxValue: Number(notice.max),
+        effectiveFrom: notice.effectiveFrom,
+      });
+      onChanged?.();
+    });
   }
 
   const missing = scheme?.missingRows ?? [];
@@ -332,6 +339,7 @@ export function DistributionSchemePanel({ api, effectivePermissions }: Pick<Admi
       </div>
 
       <h4>通告期（全平台）</h4>
+      <p className="admin-muted-action">改动落草案，在待复核草案里复核转正后按生效起始日期生效。</p>
       <div className="admin-form-row">
         <label>通告期<input data-testid="distribution-scheme-notice-value" type="number" min={1} value={notice.value}
           onChange={(e) => setNotice({ ...notice, value: e.target.value })} /></label>
@@ -343,8 +351,10 @@ export function DistributionSchemePanel({ api, effectivePermissions }: Pick<Admi
           onChange={(e) => setNotice({ ...notice, min: e.target.value })} /></label>
         <label>上限<input data-testid="distribution-scheme-notice-max" type="number" min={1} value={notice.max}
           onChange={(e) => setNotice({ ...notice, max: e.target.value })} /></label>
+        <label>生效起始日期<input data-testid="distribution-scheme-notice-effective-from" type="date" value={notice.effectiveFrom}
+          onChange={(e) => setNotice({ ...notice, effectiveFrom: e.target.value })} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="distribution-scheme-notice-save"
-          disabled={busy} onClick={saveNotice}>保存通告期</PermissionButton>
+          disabled={busy} onClick={saveNotice}>保存通告期草案</PermissionButton>
       </div>
       {error ? <div className="admin-inline-error" data-testid="distribution-scheme-error">{error}</div> : null}
     </div>

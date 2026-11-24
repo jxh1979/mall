@@ -61,13 +61,12 @@ public class SettlementConfigService {
         // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
         defaults.add(new ConfigItem("通票分账", "rounding_allowed_endings", "通票凑整允许尾数",
                 String.join("、", combo.roundingAllowedEndings().split(""))));
-        // V340(P0-D/CFG-01):提成/积分两条原写死口径纳入总览「当前生效值」,与其它配置同源(只读生效行)。
-        defaults.add(new ConfigItem("提成与积分", "commission_rate_sales", "卡座提成率·销售人员(万分比)",
+        // V340(P0-D/CFG-01):卡座提成原写死口径纳入总览「当前生效值」,与其它配置同源(只读生效行)。
+        // 第十八批 CB 段第 397 条（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：积分累计率业务不读，总览不再展示；分组名改「卡座提成」。
+        defaults.add(new ConfigItem("卡座提成", "commission_rate_sales", "卡座提成率·销售人员(万分比)",
                 String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "sales"))));
-        defaults.add(new ConfigItem("提成与积分", "commission_rate_non_sales", "卡座提成率·非销售人员(万分比)",
+        defaults.add(new ConfigItem("卡座提成", "commission_rate_non_sales", "卡座提成率·非销售人员(万分比)",
                 String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "non_sales"))));
-        defaults.add(new ConfigItem("提成与积分", "points_amount_cent_per_point", "积分累计率(每积1分所需消费·分)",
-                String.valueOf(commissionPointsConfigRepository.findAmountCentPerPoint(null, null))));
         // 第十八批第 24 条:全平台统一「高价值物品」判定阈值(退酒/报损/盘点差异/存酒作废共用一个值,比的是最近一次实际到货价)。
         // 未配置时不报错、如实显示「未配置」——判定侧此时一律按高价值拦下走审批(业务HTML 口径),
         // 概览页照常打开,运营看得见「现在是未配置状态、所有单子都在被拦」才知道要去补。

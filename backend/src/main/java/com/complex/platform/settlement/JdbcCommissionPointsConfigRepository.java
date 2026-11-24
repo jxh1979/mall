@@ -2,7 +2,6 @@ package com.complex.platform.settlement;
 
 import com.complex.platform.bar.BarCommissionRateConfigPort;
 import com.complex.platform.common.api.ApiException;
-import com.complex.platform.ticketing.PointsAccrualRateConfigPort;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -24,12 +23,13 @@ import org.springframework.stereotype.Repository;
  * __DEFAULT__」——一旦哨兵与真实 project_id 撞名,哨兵写法会让该行对<b>所有</b>调用方可见=跨租户读。
  * 现写法不依赖任何哨兵约定,且与本类 merchant_id 谓词同形。)
  *
- * <p>实现 bar / ticketing 两侧声明的端口(依赖倒置):两域不感知配置表,配置中心单点承接作用域与草案闸。
+ * <p>实现 bar 侧声明的端口(依赖倒置):不感知配置表,配置中心单点承接作用域与草案闸。第十八批 CB 段第 397 条撤下积分累计率端口
+ * (BSM:822 商户消费积分按业态积分规则计算,该表业务不读)。
  */
 // ponytail: 单读取面仓储,无额外抽象;两张表 payload 各异故各写一条显式 SQL(与 JdbcSettlementBillRepository 一致)。
 @Repository
 public class JdbcCommissionPointsConfigRepository
-        implements BarCommissionRateConfigPort, PointsAccrualRateConfigPort {
+        implements BarCommissionRateConfigPort {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -58,26 +58,6 @@ public class JdbcCommissionPointsConfigRepository
                 .addValue("role_type", roleType),
                 rs -> rs.next() ? rs.getInt("rate_bp") : null);
         return requireConfigured(bp, "bar_commission_rate_configs.rate_bp / role_type=" + roleType, projectId);
-    }
-
-    /**
-     * 积分累计率:每积 1 基础分所需消费金额(分)。种子 __DEFAULT__=100(= 改造前 POINTS_PER_YUAN_CENT,零行为改变)。
-     */
-    @Override
-    public long findAmountCentPerPoint(String projectId, String merchantId) {
-        Long unit = jdbcTemplate.query("""
-                SELECT amount_cent_per_point FROM points_accrual_rate_configs
-                 WHERE status = 'active' AND is_draft = FALSE
-                   AND (project_id IS NULL OR project_id = :project_id)
-                   AND (merchant_id IS NULL OR merchant_id = :merchant_id)
-                 ORDER BY (project_id IS NOT NULL) DESC,
-                          (merchant_id IS NOT NULL) DESC
-                 LIMIT 1
-                """, new MapSqlParameterSource()
-                .addValue("project_id", projectId)
-                .addValue("merchant_id", merchantId),
-                rs -> rs.next() ? rs.getLong("amount_cent_per_point") : null);
-        return requireConfigured(unit, "points_accrual_rate_configs.amount_cent_per_point", projectId);
     }
 
     /**

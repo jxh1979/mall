@@ -5,7 +5,7 @@ package com.complex.platform.ticketing;
  *
  * <p>依赖方向 ticketing → 本端口 ← settlement（实现方 {@code JdbcSettlementBillRepository}）：
  * 票务域只声明「我要一个可配的允许误差」，作用域优先级/草案闸/复核转正由结算配置中心统一承接，
- * 与 {@link PointsAccrualRateConfigPort} 同范式。
+ * 与 {@link com.complex.platform.bar.BarCommissionRateConfigPort} 同范式。
  *
  * <p>值取自结算配置中心「通票凑整参数」全平台一行（{@code ticket_combo_discount_configs}，第十八批 AW 段 339-R1；
  * 293-R1 起该表不再有套票折扣归属，折扣与凑整差额按份额由各域承担）。

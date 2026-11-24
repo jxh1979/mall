@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.13
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.14
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1420 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1419 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 446 | 人工权限矩阵正文未覆盖 345 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2840 | 人工事件矩阵正文未覆盖 2791 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1420 | 人工任务映射正文未逐项覆盖 1414 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 870 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2838 | 人工事件矩阵正文未覆盖 2789 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1419 | 人工任务映射正文未逐项覆盖 1413 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 869 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -406,7 +406,7 @@
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.special_approve` | staff-token | platform | 2 | settlementConfigApprovePassIncentive, settlementConfigRejectPassIncentive | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform, project | 22 | settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme, settlementConfigActivateDistributionScheme ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform, project | 21 | settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme, settlementConfigActivateDistributionScheme, settlementConfigSubmitPassIncentive ... | OpenAPI 补充，以本附录为准 |
 | `settlement.config.view` | staff-token | platform, project, project-provider | 5 | settlementConfigOverview, settlementConfigDistributionScheme, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.internal_price.submit` | staff-token | provider-self | 1 | settlementConfigUpsertInternalPriceItem | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.export` | staff-token | platform | 1 | exportSettlementInvoiceItems | OpenAPI 补充，以本附录为准 |
@@ -2856,8 +2856,6 @@
 | `settlement.config.pass_incentive.rejected` | success | `settlementConfigRejectPassIncentive` | `POST` | `/api/v1/settlement/config/incentive-applications/{id}/reject` | P0-待归类 | `settlement.bill.special_approve` | 接口级事件，以本附录为准 |
 | `settlement.config.pass_incentive.submit_failed` | failure | `settlementConfigSubmitPassIncentive` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/incentive-applications` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.pass_incentive.submitted` | success | `settlementConfigSubmitPassIncentive` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/incentive-applications` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.points_accrual_rate_configs.update_failed` | failure | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.points_accrual_rate_configs.updated` | success | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.revenue_stream_attribution.update_failed` | failure | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.revenue_stream_attribution.updated` | success | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.ticket_combo_discount_configs.update_failed` | failure | `settlementConfigUpsertComboDiscount` | `POST` | `/api/v1/settlement/config/combo-discount` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -4516,7 +4514,6 @@
 | P0-待归类 | `settlementConfigUpsertInternalPriceItem` | `POST` | `/api/v1/settlement/config/internal-price-item` | 维护内部结算SKU目录条目(草案) | `settlement.internal_price.submit` | `settlement.config.internal_price_catalog.updated` / `settlement.config.internal_price_catalog.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | 维护每客单价/固定额(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_merchant_rates.updated` / `settlement.config.ticket_distribution_merchant_rates.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | 维护赠送权益预估成本预扣规则(草案) | `settlement.config.manage` | `settlement.config.pass_gift_cost_configs.updated` / `settlement.config.pass_gift_cost_configs.update_failed` | web | operation 级补充 |
-| P0-待归类 | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | 维护积分累计率(草案) | `settlement.config.manage` | `settlement.config.points_accrual_rate_configs.updated` / `settlement.config.points_accrual_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | 维护排名档位梯子(草案·整套替换) | `settlement.config.manage` | `settlement.config.ticket_distribution_rank_tiers.updated` / `settlement.config.ticket_distribution_rank_tiers.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | 维护业态收入归属(草案) | `settlement.config.manage` | `settlement.config.revenue_stream_attribution.updated` / `settlement.config.revenue_stream_attribution.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | 开票清单按主体汇总 | `settlement.invoice.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |

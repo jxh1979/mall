@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.13
+# P0 OpenAPI Operation 验收矩阵 V1.14
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1420 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1419 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1152,7 +1152,6 @@
 | settlement | `POST` | `/api/v1/settlement/config/combo-discount` | `settlementConfigUpsertComboDiscount` | 维护通票凑整参数（全平台，草案） | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_combo_discount_configs.updated` | `settlement.config.ticket_combo_discount_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/channel-fee` | `settlementConfigUpsertChannelFee` | 维护渠道费用(通路费/销售渠道费,草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.channel_fee_configs.updated` | `settlement.config.channel_fee_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/commission-rate` | `settlementConfigUpsertCommissionRate` | 维护卡座销售提成费率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.bar_commission_rate_configs.updated` | `settlement.config.bar_commission_rate_configs.update_failed` |
-| settlement | `POST` | `/api/v1/settlement/config/points-accrual-rate` | `settlementConfigUpsertPointsAccrualRate` | 维护积分累计率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.points_accrual_rate_configs.updated` | `settlement.config.points_accrual_rate_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/rank-tiers` | `settlementConfigUpsertRankTiers` | 维护排名档位梯子(草案·整套替换) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_rank_tiers.updated` | `settlement.config.ticket_distribution_rank_tiers.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | `settlementConfigUpsertRevenueStreamAttribution` | 维护业态收入归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.revenue_stream_attribution.updated` | `settlement.config.revenue_stream_attribution.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | `settlementConfigActivateRankTiers` | 复核转正:排名档位梯子整体换梯 | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |

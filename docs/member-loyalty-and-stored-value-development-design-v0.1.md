@@ -1,4 +1,4 @@
-# 会员忠诚度 · 储值开发设计 V0.06（付费会员已废止）
+# 会员忠诚度 · 储值开发设计 V0.07（付费会员已废止）
 
 > 生成日期：2026-06-24。性质：**据当前实现回填（source-driven）**——`LoyaltyService` 与 `StoredValueService` 已有部分后端能力，但与现行 HTML 仍有明确差距；`MembershipService` 已不存在，付费会员表已由 V290 删除。本文只记录当前代码事实和待改造差距，业务口径以三份 HTML 和现行会员、积分、储值 PRD 为准。
 
@@ -47,7 +47,7 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 |---|---|---|---|
 | **成长值这本账在代码里根本不存在** | 速查表§二"成长值与可用积分是两套独立账，积分兑换不扣成长值" | 全仓 `成长值`/`growth_value`/`growthValue` 零命中；`LoyaltyService` 把**本次积分**直接累加进 `keep_threshold_progress`（`earnPoints`/`earnPointsPending`/确认路径三处），且该数值**已经吃过等级倍率和生日倍率** | 等级由"加了倍率的积分"决定，高等级会自我加速升级；PRD §9"等级倍率不得放大成长值"被违反 |
 | **保级窗口不是滚动十二个月**（**已由第十四批 OBS-13-01（V543）闭合**：按滚动统计周期内的成长值定级） | 速查表§二/PRD §7"评估时点向前滚动后台配置的统计周期（全平台统一可配，出厂默认 12 个月）内的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
-| **票务积分未按票种规则算** | 速查表§二"票务订单不读取商户业态规则，而按票种或票务产品已审批生效的积分规则、成长值规则分别计算" | `TicketOrderService` 走项目×受理商户的通用积分累计率 | 票种差异化积分/成长值无法配置 |
+| **票务积分未按票种规则算** | 速查表§二"票务订单不读取商户业态规则，而按票种或票务产品已审批生效的积分规则、成长值规则分别计算" | `TicketOrderService` 不读项目×受理商户的通用积分累计率（第十八批 CB 段第 397 条已删除该端口，`points_accrual_rate_configs` 表留库、无读写） | 票种差异化积分/成长值无法配置 |
 | **票务积分确认与成长值确认未拆开** | 票务积分在退款期结束且对应票款未退款时确认，未使用或到期未用仍有积分；票务成长值只按实际核销人次确认 | 支付成功只写 `pending`；`LoyaltyPointsConsumer` 仍在核销事件上按 `verifiedUnits/totalUnits` 确认积分并同步增加 `keep_threshold_progress`；到期作废任务不终结未核销订单的 `pending` 积分 | 已支付未退款但未核销的票无法按期获得可用积分，核销又把积分值混入成长进度 |
 | **签到奖励错误进入保级进度**（**已由第十四批 OBS-13-01（V543）闭合**：等级只读成长值流水，签到不再推动等级） | 签到按连续天数阶梯奖励积分，不产生成长值 | `LoyaltyService.checkIn` 同时增加 `balance` 与 `keep_threshold_progress` | 签到会错误推动等级 |
 | **生日月仍可配置** | 生日加倍只限生日当天 | `birthdayMultiplierBasisPoints` 和后台配置仍接受 `birthday_month` | 非生日当天也可能命中生日倍率 |
@@ -60,7 +60,7 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 
 落 `customer_points_ledger`（V100/V025，幂等 `uq_customer_points_ledger_source_doc`）。
 > ⚠️ 更正（2026-07-28，V352）：本节原写「+ `customer_points_rules`（V060 规则）」，与代码不符——引擎从未读过该表。
-> 积分累计率读 `points_accrual_rate_configs`（V340），等级读 `customer_member_levels`，签到读 `customer_check_in_tiers`，
+> 商户消费积分按业态积分规则计算（原积分累计率表 `points_accrual_rate_configs`（V340）业务不读，第十八批 CB 段第 397 条已从结算配置中心撤下，表留库、无读写），等级读 `customer_member_levels`，签到读 `customer_check_in_tiers`，
 > 生日读 `customer_birthday_rules`。`customer_points_rules` 与后台页 ADM-CUS-003 已停用下线（表留库不物删）。
 - `earnPoints` / `earnPointsPending`：获取/挂起（pending）；按消费金额或按核销张数等规则。
 - `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**；退款按已确认份额冲减（reversed）。 **AUD-014（2026-07-20）：算 delta 前对 earn 行加 `FOR UPDATE` 行锁（锁序 earn→account），串行化同一订单的并发确认/冲正 → 后到事务读到已提交的已确认份额，delta=0 幂等，杜绝两事务基于同一旧值重复给账户加钱（余额>明细的账实分叉）。**
@@ -136,7 +136,7 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 
 - **UI 验收**：`full-admin-ui-acceptance-matrix` 与客人端 UI 验收矩阵须核对会员、储值和签到能力；付费会员已废止，不得列为待补页面。
 - **客人端页面**：须核对签到页、储值充值/余额页与现行 API 的映射；不得补回付费会员开通或权益页。
-- 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径；细则以各真身配置表为准——累计率 `points_accrual_rate_configs`（ADM-STL-001 结算配置中心）、等级 `customer_member_levels`、签到 `customer_check_in_tiers`、生日 `customer_birthday_rules`（均在 ADM-CUS-004）。原文此处写的 `customer_points_rules` 已于 2026-07-28 停用（V352）。
+- 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径；细则以各真身配置表为准——商户消费积分按业态积分规则计算（原累计率表 `points_accrual_rate_configs` 已于第十八批 CB 段第 397 条撤下，表留库、无读写）、等级 `customer_member_levels`、签到 `customer_check_in_tiers`、生日 `customer_birthday_rules`（均在 ADM-CUS-004）。原文此处写的 `customer_points_rules` 已于 2026-07-28 停用（V352）。
 
 
 ## 重构切片（2026-07-28）

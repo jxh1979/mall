@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -348,7 +348,7 @@ public class StaffService {
 
     /**
      * V349 销售岗维护：人事在「员工档案」页给员工设/撤销「销售岗」标识——卡座提成按岗位判档的唯一依据
-     * （销售岗按销售人员费率、其余按非销售人员费率；费率仍在「结算配置中心 → 提成与积分」配，见 V340）。
+     * （销售岗按销售人员费率、其余按非销售人员费率；费率仍在「结算配置中心 → 卡座提成」配，见 V340）。
      *
      * <p>沿用 staff.profile.review（高敏·需审批）而不新增权限点：审员工注册与定这人是不是销售岗同属人事权，
      * 拆两个权限只会多一处要分配、少一处对得上。改动必留审计（改前/改后 + 事由），提成对账时可回溯是谁哪天改的。

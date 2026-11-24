@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.util.List;
 
@@ -11,7 +11,7 @@ import java.util.List;
  * <p>第十八批 BQ 段第 371 条 371-R1、371-R3（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」）：
  * 分配方式、门票综合服务费、通票凑整参数、渠道费用、卡座提成费率、赠送权益预估成本与高价值判定阈值的请求收 effectiveFrom（生效起始日期，年-月-日，
  * 必填、须晚于该配置范围当前营业日）；批准后待生效，到日由 {@link SettlementConfigScheduledActivationService} 转正，读侧 finder 仍只认生效行。
- * effective_to 不启用（旧版由新版到日替换）；积分累计率、收入流业态归因与商户每客单价不收该字段。
+ * effective_to 不启用（旧版由新版到日替换）；收入流业态归因与商户每客单价不收该字段。
  */
 public final class SettlementConfigWriteRequests {
 
@@ -98,14 +98,6 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * V340(P0-D/CFG-01)points_accrual_rate_configs:积分累计率。
-     * amountCentPerPoint=每积 1 基础分所需消费金额(分),须&gt;0(出厂默认 100=每 1 元积 1 分);merchantId 留空=通用。
-     */
-    public record PointsAccrualRateRequest(String idempotencyKey, String projectId, String merchantId,
-                                           Long amountCentPerPoint) {
-    }
-
-    /**
      * 第十八批第 24 条 high_value_thresholds：全平台统一「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用，ENUM:164）。
      * highValueThresholdCent＝物品最近一次实际到货价大于或等于本值即高价值，单位分；须同时配置下限与上限（0 ≤ 下限 ≤ 阈值 ≤ 上限）；
      * 出厂默认 500000（5000 元）；reason 必填，提交后进最高权限审批，批准后按生效起始日期（effectiveFrom，371-R3）生效。
@@ -154,9 +146,12 @@ public final class SettlementConfigWriteRequests {
     public record IncentiveDecisionRequest(String idempotencyKey, String note) {
     }
 
-    /** 第十八批第 2 条:档位表与第一段变更共用的通告期(periodUnit ∈ {day, month}),数值与上下限同时必填。 */
+    /**
+     * 第十八批第 2 条:档位表与第一段变更共用的通告期(periodUnit ∈ {day, month}),数值与上下限同时必填。
+     * 第十八批 CB 段第 398 条 398-R1（BSM:521「必须填写生效起始日期」）：effectiveFrom 生效起始日期（年-月-日）必填、须晚于今天（按营业日）。
+     */
     public record NoticePeriodRequest(String idempotencyKey, Integer periodValue, String periodUnit, Integer minValue,
-                                      Integer maxValue) {
+                                      Integer maxValue, String effectiveFrom) {
     }
 
     /**

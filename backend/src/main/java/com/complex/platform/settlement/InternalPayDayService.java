@@ -1,11 +1,12 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.Hashing;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -82,8 +83,9 @@ public class InternalPayDayService {
     public record ObjectionPolicy(String projectId, int workingDays, Integer minDays, Integer maxDays) {
     }
 
+    /** 第十八批 CB 段第 398 条 398-R1（BSM:521「必须填写生效起始日期」）：effectiveFrom 生效起始日期（年-月-日）必填、须晚于本项目今天（按营业日）。 */
     public record ObjectionPolicyRequest(String idempotencyKey, String projectId, Integer workingDays, Integer minDays,
-                                         Integer maxDays, String reason) {
+                                         Integer maxDays, String reason, String effectiveFrom) {
     }
 
     /** 一笔往来固化的付款时点。 */
@@ -97,14 +99,17 @@ public class InternalPayDayService {
     private final AuthorizationService auth;
     private final IdempotencyService idem;
     private final AuditEventService audit;
+    private final SettlementConfigScheduledActivationService scheduledActivation;
 
     public InternalPayDayService(JdbcTemplate jdbc, WorkingDayCalendar calendar, AuthorizationService auth,
-                                 IdempotencyService idem, AuditEventService audit) {
+                                 IdempotencyService idem, AuditEventService audit,
+                                 SettlementConfigScheduledActivationService scheduledActivation) {
         this.jdbc = jdbc;
         this.calendar = calendar;
         this.auth = auth;
         this.idem = idem;
         this.audit = audit;
+        this.scheduledActivation = scheduledActivation;
     }
 
     // ─── 付款时点推算 ───────────────────────────────────────────
@@ -245,7 +250,8 @@ public class InternalPayDayService {
                     throw ApiException.conflict("PAY_DAY_RULE_ALREADY_DECIDED", "该配置已审批：" + rule.status());
                 }
                 String actor = auth.currentActor().id();
-                if (actor.equals(rule.submittedBy())) {
+                // 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交的可本人审批。
+                if (actor.equals(rule.submittedBy()) && !auth.isMasterAuthority(auth.currentActor())) {
                     throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "付账日配置的提交人不能审批自己提交的配置");
                 }
                 LocalDate today = LocalDate.now(LocalZone.ID);
@@ -283,17 +289,24 @@ public class InternalPayDayService {
         return objectionPolicy(requireProject(projectId, VIEW));
     }
 
-    /** 项目无自有行即用出厂 10 个工作日。 */
+    /** 项目无自有行即用出厂 10 个工作日。398-R1：只认现行生效行（草案与待生效版本不读）。 */
     public ObjectionPolicy objectionPolicy(String projectId) {
         return jdbc.query("""
-                SELECT * FROM settlement_objection_period_policy WHERE project_id=?::text OR project_id='__global__'
+                SELECT * FROM settlement_objection_period_policy WHERE (project_id=?::text OR project_id='__global__')
+                   AND is_draft = FALSE AND status = 'active'
                  ORDER BY (project_id='__global__') LIMIT 1
                 """, (rs, n) -> new ObjectionPolicy(rs.getString("project_id"), rs.getInt("working_days"),
                 rs.getObject("min_days", Integer.class), rs.getObject("max_days", Integer.class)), projectId).stream().findFirst()
                 .orElseThrow(() -> ApiException.conflict("PAY_DAY_NOT_CONFIGURED", "异议期未配置出厂行"));
     }
 
-    /** BSM L1597「按项目可配，出厂默认 10 个工作日，须同时配置上下限」：工作日数与上下限同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限；保存时按上限复核顺序。 */
+    /**
+     * BSM L1597「按项目可配，出厂默认 10 个工作日，须同时配置上下限」：工作日数与上下限同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限；保存时按上限复核顺序。
+     * 第十八批 CB 段第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批
+     * 通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：改动只落本项目一个草案槽（再存覆盖），生效起始日期必填、
+     * 须晚于本项目当前营业日，顺序复核自生效起始日期起算；在结算配置中心他人复核转正（config_type＝objection_period）后待生效，到日由
+     * {@link SettlementConfigScheduledActivationService#activateDue} 转正（本项目原生效行下线留库）。返回现行异议期。
+     */
     @Transactional
     public ObjectionPolicy saveObjectionPolicy(ObjectionPolicyRequest request) {
         String key = request == null ? null : request.idempotencyKey();
@@ -307,17 +320,20 @@ public class InternalPayDayService {
             if (days == null || min == null || max == null || min < 0 || days < min || days > max) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "异议期须同时填写工作日数及上下限，下限不小于 0，工作日数须在上下限内");
             }
+            LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(r.effectiveFrom(), project, null);
             return idem.execute("saveSettlementObjectionPeriod", key, r, () -> {
-                LocalDate today = LocalDate.now(LocalZone.ID);
-                requireOrder(effective("pay_days", null, today).payDays(), statementDays(today), today, max);
+                requireOrder(effective("pay_days", null, effectiveFrom).payDays(), statementDays(effectiveFrom), effectiveFrom, max);
                 jdbc.update("""
-                        INSERT INTO settlement_objection_period_policy(project_id,working_days,min_days,max_days,updated_by)
-                        VALUES(?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET working_days=EXCLUDED.working_days,
-                            min_days=EXCLUDED.min_days, max_days=EXCLUDED.max_days, updated_by=EXCLUDED.updated_by, updated_at=now()
-                        """, project, days, min, max, auth.currentActor().id());
+                        INSERT INTO settlement_objection_period_policy(id,project_id,working_days,min_days,max_days,effective_from,status,
+                            is_draft,updated_by)
+                        VALUES(?,?,?,?,?,?,'active',TRUE,?) ON CONFLICT (project_id, is_draft) WHERE status = 'active' DO UPDATE SET
+                            working_days=EXCLUDED.working_days, min_days=EXCLUDED.min_days, max_days=EXCLUDED.max_days,
+                            effective_from=EXCLUDED.effective_from, updated_by=EXCLUDED.updated_by, updated_at=now()
+                        """, "sopp_d_" + Hashing.idempotencyCode(project + "|" + key), project, days, min, max, effectiveFrom,
+                        auth.currentActor().id());
                 audit.recordSuccess("settlement.objection_period.configured", MANAGE, "settlement_objection_period_policy", project,
                         null, key, Map.of("working_days", days, "min_days", min, "max_days", max,
-                                "reason", r.reason() == null ? "" : r.reason()));
+                                "reason", r.reason() == null ? "" : r.reason(), "effective_from", effectiveFrom.toString()));
                 return objectionPolicy(project);
             }, ObjectionPolicy.class);
         } catch (RuntimeException exception) {
@@ -379,7 +395,8 @@ public class InternalPayDayService {
 
     private int maxObjectionDays() {
         return jdbc.queryForObject(
-                "SELECT max(GREATEST(working_days, COALESCE(max_days, working_days))) FROM settlement_objection_period_policy",
+                "SELECT max(GREATEST(working_days, COALESCE(max_days, working_days))) FROM settlement_objection_period_policy"
+                        + " WHERE is_draft = FALSE AND status IN ('active', 'scheduled')",
                 Integer.class);
     }
 

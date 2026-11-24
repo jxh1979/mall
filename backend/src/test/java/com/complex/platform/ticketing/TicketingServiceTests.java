@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 // 文件版本：V0.04
 
@@ -66,8 +66,6 @@ class TicketingServiceTests {
     // P0-D/CFG-01（V340）：单独收集 TicketOrderService 发布的事件（积分入账事件断言用），
     // 与 publishedEvents 分开以免影响既有核销/退款事件用例的计数。
     private final List<Object> orderEvents = new ArrayList<>();
-    // 积分累计率配置端口测试双子：默认 100 分/分 = 出厂种子 = 改造前写死的「每元 1 分」。
-    private StubPointsAccrualRateConfigPort pointsRateStub;
 
     // V369：票种目录服务（凑整误差闸测试要往它上挂允许误差端口测试双子）。
     private TicketCatalogService catalogService;
@@ -87,18 +85,6 @@ class TicketingServiceTests {
         @Override
         public ComboRounding findComboRounding() {
             return new ComboRounding(toleranceCent, allowedEndings);
-        }
-    }
-
-    /** P0-D/CFG-01（V340）积分累计率配置端口测试双子。 */
-    private static final class StubPointsAccrualRateConfigPort implements PointsAccrualRateConfigPort {
-        private long amountCentPerPoint = 100L;
-        private String lastMerchantId;
-
-        @Override
-        public long findAmountCentPerPoint(String projectId, String merchantId) {
-            lastMerchantId = merchantId;
-            return amountCentPerPoint;
         }
     }
 
@@ -128,10 +114,6 @@ class TicketingServiceTests {
                 authorizationService,
                 null
         );
-        // P0-D/CFG-01（V340）：积分累计率改后台可配。注入「出厂种子等值」测试双子（100 分 = 每 1 元 1 分），
-        // 令既有出票/支付用例行为一字不变 = 本次改造【零行为改变】的单测侧证据。
-        pointsRateStub = new StubPointsAccrualRateConfigPort();
-        orderService.pointsAccrualRateConfigPort = pointsRateStub;
         toleranceStub = new StubComboPriceToleranceConfigPort();
         // 🔴 用例隔离(2026-07-28 修):本类此前【没有】统一的登录主体准备,靠「先跑的用例里 TestSecurityActors.asMerchantUser(...)
         // 未清理、后跑的用例捡漏」跑通——JUnit 方法顺序一变(例如本类新增/删除任一 @Test)就整片 "Api authentication is required"。
@@ -175,51 +157,6 @@ class TicketingServiceTests {
                 "issued-fact-issue", "issue", "paid offline", List.of()));
 
         assertThat(orderEvents).contains(new TicketRewardFacts.Issued(order.id()));
-    }
-
-    @Test
-    void issuedTicketsDoNotReadMerchantConsumptionAccrualRate() {
-        // P0-D/CFG-01（V340）：基础分 = 实付 ÷ 后台可配的「每积 1 分所需消费金额」，不再写死每元 1 分。
-        TicketTypeRecord ticketType = createTicketType("points-rate");
-        EntitlementTemplateRecord template = createTemplate("points-rate", 1, 9900L);
-        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "points-rate-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default", 1, 9900L));
-        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
-                "points-rate-order", "create", List.of(), ticketType.id(), null, 1,
-                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_points_rate"));
-        service.issueTicketOrder(order.id(), new StatusChangeRequest(
-                "points-rate-issue", "issue", "paid offline", List.of()));
-
-        // 出厂默认 100（每元 1 分）：99.00 元 → 99 基础分（与改造前 amountCent/100 逐字等价）。
-        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
-
-        // 改配置为 50 分/分（每元 2 分）→ 同样金额基础分翻倍，证明累计率不再写死。
-        orderEvents.clear();
-        pointsRateStub.amountCentPerPoint = 50L;
-        TicketOrderRecord order2 = service.createTicketOrder(new TicketOrderRequest(
-                "points-rate-order-2", "create", List.of(), ticketType.id(), null, 1,
-                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_points_rate"));
-        service.issueTicketOrder(order2.id(), new StatusChangeRequest(
-                "points-rate-issue-2", "issue", "paid offline", List.of()));
-        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
-    }
-
-    @Test
-    void ticketIssueDoesNotRequireMerchantConsumptionAccrualConfig() {
-        // fail-closed（对齐结算配置中心 requireConfigured）：配置端口不可用时响亮报错，
-        // 不静默回落硬编码「每元 1 分」、也不静默把会员该得的积分吞掉。
-        TicketTypeRecord ticketType = createTicketType("points-rate-missing");
-        EntitlementTemplateRecord template = createTemplate("points-rate-missing", 1, 9900L);
-        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "points-missing-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default", 1, 9900L));
-        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
-                "points-missing-order", "create", List.of(), ticketType.id(), null, 1,
-                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_points_missing"));
-        orderService.pointsAccrualRateConfigPort = null;
-
-        service.issueTicketOrder(order.id(), new StatusChangeRequest(
-                "points-missing-issue", "issue", "paid offline", List.of()));
-        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
     }
 
     /** 取本轮唯一一条积分入账事件（orderEvents 仅收 TicketOrderService 发布的事件）。 */

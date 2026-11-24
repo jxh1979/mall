@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.13
+  version: V1.14
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -49519,7 +49519,7 @@ paths:
         - settlement
       operationId: settlementConfigOverview
       summary: 结算配置中心总览
-      description: 平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1：platform_defaults 不再有 combo_discount_bearer（套票折扣归属）；key 为 rounding_tolerance_cent 的一项 label 为「通票凑整允许误差」，value 为「x 元（下限 a 元～上限 b 元）」，上下限未配置时为「x 元（上下限未配置）」；草案队列 config_group 为 combo_discount 的 summary 为「project=__DEFAULT__ 凑整允许误差 N分（下限 a分～上限 b分） 允许尾数 …」，上下限未配置处显示 —。 第十八批 BQ 段第 371 条 371-R1、371-R3：草案队列 config_group 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost、high_value_threshold 的 summary 末尾另带「 生效起=YYYY-MM-DD」（该草案的生效起始日期）；响应结构不变。
+      description: 平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1：platform_defaults 不再有 combo_discount_bearer（套票折扣归属）；key 为 rounding_tolerance_cent 的一项 label 为「通票凑整允许误差」，value 为「x 元（下限 a 元～上限 b 元）」，上下限未配置时为「x 元（上下限未配置）」；草案队列 config_group 为 combo_discount 的 summary 为「project=__DEFAULT__ 凑整允许误差 N分（下限 a分～上限 b分） 允许尾数 …」，上下限未配置处显示 —。 第十八批 BQ 段第 371 条 371-R1、371-R3：草案队列 config_group 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost、high_value_threshold 的 summary 末尾另带「 生效起=YYYY-MM-DD」（该草案的生效起始日期）；响应结构不变。 第十八批 CB 段第 397 条 397-R1（BSM:822「商户消费按商户所属业态的全国有效规则计算」）：platform_defaults 不再有 points_amount_cent_per_point（积分累计率），草案队列不再有 config_group=points_accrual_rate；key 为 commission_rate_sales、commission_rate_non_sales 的两项 group 由「提成与积分」改为「卡座提成」。第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：草案队列新增 config_group=distribution_notice_period（通票分账通告期，summary 为「通告期 N 天（下限 a，上限 b） 生效起=YYYY-MM-DD」，单位为月时写「N 个月」）与 objection_period（非积分商户账单异议期，summary 为「project=项目 异议期 N 个工作日（下限 a，上限 b） 生效起=YYYY-MM-DD」），pending_draft_count 同源。
       x-auth-context: staff-token
       x-permission: settlement.config.view
       x-data-scope: platform
@@ -49887,49 +49887,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/points-accrual-rate:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertPointsAccrualRate
-      summary: 维护积分累计率(草案)
-      description: 结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 配置「每积 1 基础分所需消费金额(分)」;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.points_accrual_rate_configs.updated
-      x-audit-event-failure: settlement.config.points_accrual_rate_configs.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                merchant_id:
-                  type: string
-                amount_cent_per_point:
-                  type: integer
-              required:
-                - idempotency_key
-                - amount_cent_per_point
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/rank-tiers:
     post:
       tags:
@@ -50035,7 +49992,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateRankTiers
       summary: 复核转正:排名档位梯子整体换梯
-      description: 差人复核(执行人≠起草人否则403)+转正前区间覆盖复校。
+      description: 差人复核(执行人≠起草人否则403)+转正前区间覆盖复校。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：差人复核对最高权限本人起草的除外，可本人转正。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50069,7 +50026,7 @@ paths:
         - settlement
       operationId: settlementConfigDistributionScheme
       summary: 通票分账方案:版本、通告期与缺档位行待办
-      description: 第十八批第 2 条(ENUM:52):通票分账方案各版本(状态 draft/pending/effective/superseded/incentive_expired、通告日、生效日、参与家数档位表 tiers、第一段名单 first_segment)、通告期 notice_period,以及按(项目,第二段参与家数)聚合的缺档位行暂挂待办 missing_rows(份数 units、暂挂金额 amount_cent)。第 75 条:另带短期经营激励申请 incentive_applications(版本、类型 initial/renewal、状态 pending/approved/rejected、理由、期限、最大超出额 max_excess_cent、逐票种试算 trial_result、提交与审批人及时间、审批意见、有效期 valid_from/valid_until)。18C 核对后操作员裁决补充第 12 条:state=incentive_expired 为凭短期经营激励转正、最后一笔已批准激励已到期(当前营业日不早于到期营业日)的版本,到期营业日起新售出的票改按此前在用的方案(本项目上一版,没有就用全平台版),已售出的票照售票时固化的结果结算,此类版本不再算现行版。
+      description: 第十八批第 2 条(ENUM:52):通票分账方案各版本(状态 draft/pending/effective/superseded/incentive_expired、通告日、生效日、参与家数档位表 tiers、第一段名单 first_segment)、通告期 notice_period,以及按(项目,第二段参与家数)聚合的缺档位行暂挂待办 missing_rows(份数 units、暂挂金额 amount_cent)。第 75 条:另带短期经营激励申请 incentive_applications(版本、类型 initial/renewal、状态 pending/approved/rejected、理由、期限、最大超出额 max_excess_cent、逐票种试算 trial_result、提交与审批人及时间、审批意见、有效期 valid_from/valid_until)。18C 核对后操作员裁决补充第 12 条:state=incentive_expired 为凭短期经营激励转正、最后一笔已批准激励已到期(当前营业日不早于到期营业日)的版本,到期营业日起新售出的票改按此前在用的方案(本项目上一版,没有就用全平台版),已售出的票照售票时固化的结果结算,此类版本不再算现行版。 第十八批 CB 段第 398 条 398-R1：notice_period 只返回现行生效值，未转正的草案与已批准待生效的版本不读（草案在 settlementConfigOverview 的待复核队列，config_group=distribution_notice_period）。
       x-auth-context: staff-token
       x-permission: settlement.config.view
       x-data-scope: platform
@@ -50166,7 +50123,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateDistributionScheme
       summary: 复核转正:通票分账方案草案通告
-      description: 差人复核(执行人≠起草人否则 403 SELF_ACTIVATION_FORBIDDEN)+转正前复校每行合计 10000。操作员裁决第十八批第 1 条:复核转正当日系统在受影响酒吧的商户专区逐家挂出通告即视为送达(18B 复核后裁决第 10 条;短信只是提醒,发不发、成不成功都不影响送达与生效),生效日=转正日+通告期;已售出的票按售出时生效的方案结算。第 75 条(ENUM:52「第一段的固定金额或固定单价在配置生效之前，必须先按该票种在当前各项配置下的最低可能可分配池金额试算……试算不通过的配置无效、不得生效」):转正前对本版第一段名单覆盖的每个可售通票按最不利的一张票试算(当前最低实付价、费率最高的支付通路、扣点最高的第三方销售渠道、综合服务费足额不套封顶、当前赠送权益预估成本),第一段每份应分合计超过最不利一份可分配池且本版没有已批准的首次短期经营激励申请 → 409 POOL_TRIAL_FAILED(消息逐票种写最低实付价、最不利一份池、第一段合计与超出额),状态不变、不发通告;凭已批准激励放行的,该申请有效期自本版生效营业日起算,转正当天挂进商户专区的通告一并写明激励到期日与「到期未重新获批的，自该日起新售出的票改按此前在用的方案」(18C 核对后操作员裁决补充第 12 条,不另发通告与短信)。
+      description: 差人复核(执行人≠起草人否则 403 SELF_ACTIVATION_FORBIDDEN)+转正前复校每行合计 10000。操作员裁决第十八批第 1 条:复核转正当日系统在受影响酒吧的商户专区逐家挂出通告即视为送达(18B 复核后裁决第 10 条;短信只是提醒,发不发、成不成功都不影响送达与生效),生效日=转正日+通告期;已售出的票按售出时生效的方案结算。第 75 条(ENUM:52「第一段的固定金额或固定单价在配置生效之前，必须先按该票种在当前各项配置下的最低可能可分配池金额试算……试算不通过的配置无效、不得生效」):转正前对本版第一段名单覆盖的每个可售通票按最不利的一张票试算(当前最低实付价、费率最高的支付通路、扣点最高的第三方销售渠道、综合服务费足额不套封顶、当前赠送权益预估成本),第一段每份应分合计超过最不利一份可分配池且本版没有已批准的首次短期经营激励申请 → 409 POOL_TRIAL_FAILED(消息逐票种写最低实付价、最不利一份池、第一段合计与超出额),状态不变、不发通告;凭已批准激励放行的,该申请有效期自本版生效营业日起算,转正当天挂进商户专区的通告一并写明激励到期日与「到期未重新获批的，自该日起新售出的票改按此前在用的方案」(18C 核对后操作员裁决补充第 12 条,不另发通告与短信)。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：最高权限本人起草的除外，可本人转正，不报 SELF_ACTIVATION_FORBIDDEN。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50255,7 +50212,7 @@ paths:
         - settlement
       operationId: settlementConfigApprovePassIncentive
       summary: 批准短期经营激励申请(项目之上的平台权限)
-      description: 第 75 条(DEC-R3-2026-08-04-13 审批人为项目之上的平台权限):须 settlement.bill.special_approve 且平台域、能看全部项目(只管单个项目的 403 PLATFORM_SCOPE_REQUIRED);只审待审申请(否则 409 INCENTIVE_APPLICATION_NOT_PENDING);审批人不得是提交人(403 SELF_ACTIVATION_FORBIDDEN)。重审须在上一笔已批准激励到期前获批,从其到期日接续一个新期限,到期后才审批的 409 INCENTIVE_EXPIRED(18C 核对后操作员裁决补充第 12、13 条,已改回此前方案);首次申请的有效期在该版转正时定。没有任何自动续期。
+      description: 第 75 条(DEC-R3-2026-08-04-13 审批人为项目之上的平台权限):须 settlement.bill.special_approve 且平台域、能看全部项目(只管单个项目的 403 PLATFORM_SCOPE_REQUIRED);只审待审申请(否则 409 INCENTIVE_APPLICATION_NOT_PENDING);审批人不得是提交人(403 SELF_ACTIVATION_FORBIDDEN)。重审须在上一笔已批准激励到期前获批,从其到期日接续一个新期限,到期后才审批的 409 INCENTIVE_EXPIRED(18C 核对后操作员裁决补充第 12、13 条,已改回此前方案);首次申请的有效期在该版转正时定。没有任何自动续期。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：最高权限本人提交的除外，可本人批准，不报 SELF_ACTIVATION_FORBIDDEN。
       x-auth-context: staff-token
       x-permission: settlement.bill.special_approve
       x-data-scope: platform
@@ -50301,7 +50258,7 @@ paths:
         - settlement
       operationId: settlementConfigRejectPassIncentive
       summary: 驳回短期经营激励申请(项目之上的平台权限)
-      description: 第 75 条:权限、范围与差人规则同批准;驳回后该版转正仍按试算 409 POOL_TRIAL_FAILED。
+      description: 第 75 条:权限、范围与差人规则同批准;驳回后该版转正仍按试算 409 POOL_TRIAL_FAILED。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：差人规则对最高权限本人提交的除外，可本人驳回。
       x-auth-context: staff-token
       x-permission: settlement.bill.special_approve
       x-data-scope: platform
@@ -50347,7 +50304,7 @@ paths:
         - settlement
       operationId: settlementConfigSaveDistributionNoticePeriod
       summary: 维护通票分账方案通告期
-      description: 第十八批第 2 条(ENUM:52):档位表与第一段名单变更共用的通告期,出厂一个月;period_value、period_unit(day/month)与上下限 min_value/max_value 须同时填写,1≤下限≤通告期≤上限。
+      description: 第十八批第 2 条(ENUM:52):档位表与第一段名单变更共用的通告期,出厂一个月;period_value、period_unit(day/month)与上下限 min_value/max_value 须同时填写,1≤下限≤通告期≤上限。 第十八批 CB 段第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：不再就地改写现行通告期，改动只落全平台一个草案槽（再存覆盖同一草案），经 settlementConfigActivateDraft（config_type=distribution_notice_period）他人复核批准后待生效（status=scheduled，现行值不变），到生效起始日期（按平台默认营业日）由系统转正、原生效行软替换 inactive 留库（留痕 settlement.config.version.effective）；返回现行生效的通告期（period_value、period_unit、min_value、max_value），不是草案。effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于平台默认当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。成功留痕 business_id 为草案 id，元数据另带 effective_from。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50375,12 +50332,17 @@ paths:
                   type: integer
                 max_value:
                   type: integer
+                effective_from:
+                  type: string
+                  format: date
+                  description: "生效起始日期（年-月-日，必填），须晚于平台默认当前营业日；经 settlementConfigActivateDraft（config_type=distribution_notice_period）他人复核批准后待生效，到该日由系统转正（第十八批 CB 段第 398 条 398-R1）。"
               required:
                 - idempotency_key
                 - period_value
                 - period_unit
                 - min_value
                 - max_value
+                - effective_from
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -50398,7 +50360,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateDraft
       summary: 复核转正:单行/归属/归因规则草案转正
-      description: "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：configType=internal_price_item 批准后为待生效（status=scheduled，旧生效价与四处业务快照不变），到生效起始日期（按提供方营业日：商户按该商户营业日，经营主体按平台默认营业日）由系统转正——旧生效行软替换 inactive、本行生效、同一事务同步四处业务快照；同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于提供方当前营业日 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）；最高权限免他人复核但不免生效日期。成功事件 settlement.config.draft.activated 元数据记 config_group=internal_price_catalog 与 effective_from。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：configType 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost 时批准后为待生效（status=scheduled，生效值不变），到生效起始日期（按该配置范围营业日：有商户按该商户，酒吧按该酒吧；只有项目按综合体；全平台行按平台默认营业日）由系统转正——同范围旧生效行软替换 inactive 留库、本行生效，留痕 settlement.config.version.effective（系统作业留痕，无对应接口操作；业务类型为表名、业务号为行 id，元数据 config_group、effective_from）；同一范围同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于该范围当前营业日 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）。这六类成功事件 settlement.config.draft.activated 元数据记 config_group（即 configType）与 effective_from。第十八批 BQ 段第 360 条 360-R1（第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」）：configType=channel_fee 复核批准时按（项目、费用层、渠道）范围取版本号（同范围非草案行最大号加一），旧版行留库；版本号不出现在接口里。"
+      description: "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：configType=internal_price_item 批准后为待生效（status=scheduled，旧生效价与四处业务快照不变），到生效起始日期（按提供方营业日：商户按该商户营业日，经营主体按平台默认营业日）由系统转正——旧生效行软替换 inactive、本行生效、同一事务同步四处业务快照；同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于提供方当前营业日 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）；最高权限免他人复核但不免生效日期。成功事件 settlement.config.draft.activated 元数据记 config_group=internal_price_catalog 与 effective_from。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：configType 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost 时批准后为待生效（status=scheduled，生效值不变），到生效起始日期（按该配置范围营业日：有商户按该商户，酒吧按该酒吧；只有项目按综合体；全平台行按平台默认营业日）由系统转正——同范围旧生效行软替换 inactive 留库、本行生效，留痕 settlement.config.version.effective（系统作业留痕，无对应接口操作；业务类型为表名、业务号为行 id，元数据 config_group、effective_from）；同一范围同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于该范围当前营业日 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）。这六类成功事件 settlement.config.draft.activated 元数据记 config_group（即 configType）与 effective_from。第十八批 BQ 段第 360 条 360-R1（第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」）：configType=channel_fee 复核批准时按（项目、费用层、渠道）范围取版本号（同范围非草案行最大号加一），旧版行留库；版本号不出现在接口里。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：差人复核对最高权限本人起草的除外（各 configType 同），可本人转正，不报 SELF_ACTIVATION_FORBIDDEN。第十八批 CB 段第 397 条 397-R1：configType=points_accrual_rate（积分累计率）已撤下，400 UNKNOWN_CONFIG_TYPE。第十八批 CB 段第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：configType 新增 distribution_notice_period（通票分账通告期，全平台一行，按平台默认营业日）与 objection_period（非积分商户账单异议期，按项目，按该项目营业日），与 371-R1 六类同：批准后待生效（status=scheduled，现行值不变），到生效起始日期由系统转正、同范围旧生效行软替换 inactive 留库，留痕 settlement.config.version.effective（业务类型为表名 ticket_distribution_notice_period、settlement_objection_period_policy，元数据 config_group 为 notice_period、objection_period 与 effective_from）；批准时生效起始日期已不晚于该范围当前营业日 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED（草案不动）；成功事件 settlement.config.draft.activated 业务类型与元数据 config_group 为该 configType，元数据另记 effective_from。"
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50442,7 +50404,7 @@ paths:
         - settlement
       operationId: settlementConfigArchive
       summary: 软删结算配置(status→inactive)
-      description: 仅 merchant_rate / revenue_stream_attribution;差人复核(执行人≠起草人否则403);不物理删。
+      description: configType 白名单 merchant_rate、revenue_stream_attribution、commission_rate、turnover_rent_rule、pass_gift_cost、internal_price_item（第十八批 CB 段第 397 条 397-R1 去掉 points_accrual_rate，现 400 UNSUPPORTED_ARCHIVE）;差人复核(执行人≠起草人否则403);不物理删。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：差人复核比的是该生效行最后更新人（批准转正的人），最高权限本人起草或批准的除外，可本人下线。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50491,7 +50453,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateAttributionRuleAlias
       summary: 复核转正:归因规则草案(弃用薄别名)
-      description: 弃用别名,内部转调 {configType}/{id}/activate(configType=attribution_rule)。差人复核。
+      description: 弃用别名,内部转调 {configType}/{id}/activate(configType=attribution_rule)。差人复核。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：最高权限本人起草的除外，可本人转正。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -50727,7 +50689,7 @@ paths:
         - settlement
       operationId: settlementConfigUpsertHighValueThreshold
       summary: 提交高价值判定阈值调整(最高权限审批)
-      description: 第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：全平台统一一个「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定。请求不带项目、商户；阈值、下限、上限与理由同时必填，满足 0 ≤ 下限 ≤ 阈值 ≤ 上限（否则 400 VALIDATION_FAILED）。提交只落全平台一行草案并进统一审批的最高权限策略（settlement.high_value_threshold.configure，top_authority），草案回写审批单号 review_id；已有一条在审草案时再提交 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。最高权限批准后待生效（status=scheduled，判定仍读原阈值；记 settlement.config.draft.activated，元数据 config_group=high_value_thresholds、effective_from），到生效起始日期（按平台默认营业日）由系统转正、原生效行（含出厂 hvt_default）软替换下线留库（留痕 settlement.config.version.effective）；批准时生效起始日期已不晚于平台默认当前营业日则草案下线（archive_reason「审批通过时生效起始日期已到，未生效（审批单号）」），审批单仍记批准，须改期重报；驳回则草案下线、判定仍读原值。不经「复核转正」生效。阈值未配置时判定侧一律按高价值拦下走审批。 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于平台默认当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。审批原件 proposed_config 与成功留痕元数据另带 effective_from。
+      description: 第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：全平台统一一个「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定。请求不带项目、商户；阈值、下限、上限与理由同时必填，满足 0 ≤ 下限 ≤ 阈值 ≤ 上限（否则 400 VALIDATION_FAILED）。提交只落全平台一行草案并进统一审批的最高权限策略（settlement.high_value_threshold.configure，top_authority），草案回写审批单号 review_id；已有一条在审草案时再提交 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。最高权限批准后待生效（status=scheduled，判定仍读原阈值；记 settlement.config.draft.activated，元数据 config_group=high_value_thresholds、effective_from），到生效起始日期（按平台默认营业日）由系统转正、原生效行（含出厂 hvt_default）软替换下线留库（留痕 settlement.config.version.effective）；批准时生效起始日期已不晚于平台默认当前营业日则草案下线（archive_reason「审批通过时生效起始日期已到，未生效（审批单号）」），审批单仍记批准，须改期重报；驳回则草案下线、判定仍读原值。不经「复核转正」生效。阈值未配置时判定侧一律按高价值拦下走审批。 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于平台默认当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。审批原件 proposed_config 与成功留痕元数据另带 effective_from。 第十八批 CB 段第 394 条 394-R2（ENUM:164「调整须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交即批准——不进最高权限复核单、不回写 review_id，同一事务置待生效（status=scheduled），到生效起始日期由系统转正；提交留痕 settlement.config.high_value_thresholds.updated 元数据不带 review_id，另记 settlement.config.draft.activated（元数据 config_group=high_value_thresholds、effective_from、master_self_initiated=true）。已有一条在审草案时仍 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -51674,7 +51636,7 @@ paths:
         - settlement
       operationId: decideInternalPayDayRule
       summary: 审批付账日配置(提交人不得自审)
-      description: 提交人审批自己的配置 403 SELF_APPROVAL_FORBIDDEN；已审批 409 PAY_DAY_RULE_ALREADY_DECIDED；通过时复核一年锁定与顺序校验；三个付账日自审批之日生效并同步全平台统一值。
+      description: 提交人审批自己的配置 403 SELF_APPROVAL_FORBIDDEN；已审批 409 PAY_DAY_RULE_ALREADY_DECIDED；通过时复核一年锁定与顺序校验；三个付账日自审批之日生效并同步全平台统一值。 第十八批 CB 段第 394 条 394-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：最高权限本人提交的除外，可本人审批，不报 SELF_APPROVAL_FORBIDDEN。
       x-permission: settlement.config.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -51730,7 +51692,7 @@ paths:
         - settlement
       operationId: getSettlementObjectionPeriod
       summary: 查非积分商户账单异议期(按项目)
-      description: BSM L1597：非积分类商户账单异议期按项目可配，出厂默认 10 个工作日；项目未配置返回出厂行(project_id=__global__)。不带 project_id 取本人项目；项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      description: BSM L1597：非积分类商户账单异议期按项目可配，出厂默认 10 个工作日；项目未配置返回出厂行(project_id=__global__)。不带 project_id 取本人项目；项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。 第十八批 CB 段第 398 条 398-R1：只返回现行生效值，未转正的草案与已批准待生效的版本不读（草案在 settlementConfigOverview 的待复核队列，config_group=objection_period）。
       x-permission: settlement.config.view
       x-data-scope: project
       x-terminal-allowed:
@@ -51762,7 +51724,7 @@ paths:
       operationId: saveSettlementObjectionPeriod
       summary: 配置非积分商户账单异议期及上下限(按项目)
       description: BSM L1597「须同时配置上下限」：工作日数与上下限同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；保存时以上限复核付账日顺序(400
-        PAY_DAY_ORDER_UNSATISFIABLE)；不带 project_id 取本人项目，项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+        PAY_DAY_ORDER_UNSATISFIABLE)；不带 project_id 取本人项目，项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。 第十八批 CB 段第 398 条 398-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」「无法判断是否涉及钱的，一律按涉及钱处理。」）：不再就地改写现行异议期，改动只落本项目一个草案槽（再存覆盖同一草案），经 settlementConfigActivateDraft（config_type=objection_period）他人复核批准后待生效（status=scheduled，现行值不变），到生效起始日期（按本项目营业日）由系统转正、本项目原生效行软替换 inactive 留库（留痕 settlement.config.version.effective）；以上限复核付账日顺序改为自生效起始日期起算；返回现行生效的异议期，不是草案。effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于本项目当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。成功留痕元数据另带 effective_from。
       x-permission: settlement.config.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -51783,6 +51745,7 @@ paths:
                 - working_days
                 - min_days
                 - max_days
+                - effective_from
               properties:
                 idempotency_key:
                   type: string
@@ -51803,6 +51766,10 @@ paths:
                 reason:
                   type: string
                   maxLength: 500
+                effective_from:
+                  type: string
+                  format: date
+                  description: "生效起始日期（年-月-日，必填），须晚于本项目当前营业日；经 settlementConfigActivateDraft（config_type=objection_period）他人复核批准后待生效，到该日由系统转正（第十八批 CB 段第 398 条 398-R1）。"
       responses:
         "200":
           $ref: "#/components/responses/Success"

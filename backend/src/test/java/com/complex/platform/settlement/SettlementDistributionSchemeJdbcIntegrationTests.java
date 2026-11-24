@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -67,6 +67,7 @@ class SettlementDistributionSchemeJdbcIntegrationTests {
     @Autowired private ObjectMapper json;
     @Autowired private DistributionSchemeService schemes;
     @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
+    @Autowired private SettlementConfigScheduledActivationService activation;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final String project = "tds_prj_" + suffix;
@@ -286,14 +287,15 @@ class SettlementDistributionSchemeJdbcIntegrationTests {
                 String.class, id, own)).as("本项目版的激励在本版生效前已到期，本版对本项目酒吧适用").containsExactly(own);
     }
 
-    /** 通告期数值、单位与上下限须同时填写；改成 10 天后，转正生效日＝转正日＋10 天。 */
+    /** 通告期数值、单位与上下限须同时填写；改成 10 天（第十八批 CB 段第 398 条：落草案、他人复核转正、到生效起始日期生效）后，转正生效日＝转正日＋10 天。 */
     @Test
     void noticePeriodNeedsBoundsAndDrivesEffectiveDate() throws Exception {
-        notice("{\"idempotency_key\":\"np1_" + suffix + "\",\"period_value\":10,\"period_unit\":\"day\"}")
+        notice("{\"idempotency_key\":\"np1_" + suffix + "\",\"period_value\":10,\"period_unit\":\"day\",\"effective_from\":\""
+                + businessDays.businessDate(null, null, Instant.now()).plusDays(1) + "\"}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
-        notice("{\"idempotency_key\":\"np2_" + suffix + "\",\"period_value\":10,\"period_unit\":\"day\",\"min_value\":7,\"max_value\":30}")
-                .andExpect(status().isOk());
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("通告期须同时填写数值、单位（天/月）及上下限，下限不小于 1，数值须在上下限内"));
+        noticePeriodInForce("np2_", 10, 7, 30);
         String id = draftId(saveDraft(drafter, rowsJson(1, 10000), "[]").andExpect(status().isOk()));
 
         mockMvc.perform(post(BASE + "/" + id + "/activate").with(approver)).andExpect(status().isOk());
@@ -310,8 +312,7 @@ class SettlementDistributionSchemeJdbcIntegrationTests {
      */
     @Test
     void schemeTakesEffectAtTheStartOfTheEffectiveBusinessDay() throws Exception {
-        notice("{\"idempotency_key\":\"np3_" + suffix + "\",\"period_value\":1,\"period_unit\":\"day\",\"min_value\":1,\"max_value\":30}")
-                .andExpect(status().isOk());
+        noticePeriodInForce("np3_", 1, 1, 30);
         String id = draftId(saveDraft(drafter, rowsJson(1, 10000), "[]").andExpect(status().isOk()));
 
         mockMvc.perform(post(BASE + "/" + id + "/activate").with(approver)).andExpect(status().isOk());
@@ -405,6 +406,21 @@ class SettlementDistributionSchemeJdbcIntegrationTests {
 
     private ResultActions notice(String body) throws Exception {
         return mockMvc.perform(post(BASE + "/notice-period").with(approver).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /**
+     * 第十八批 CB 段第 398 条 398-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效」）：通告期改动由 approver
+     * 落草案（次日生效），drafter 在结算配置中心复核转正，再按生效营业日内的时刻到日转正；之后转正的方案按新通告期定生效日。
+     */
+    private void noticePeriodInForce(String keyPrefix, int days, int min, int max) throws Exception {
+        LocalDate tomorrow = businessDays.businessDate(null, null, Instant.now()).plusDays(1);
+        notice("{\"idempotency_key\":\"%s%s\",\"period_value\":%d,\"period_unit\":\"day\",\"min_value\":%d,\"max_value\":%d,\"effective_from\":\"%s\"}"
+                .formatted(keyPrefix, suffix, days, min, max, tomorrow)).andExpect(status().isOk());
+        String draft = jdbc.queryForObject("SELECT id FROM ticket_distribution_notice_period WHERE is_draft = TRUE AND status = 'active'",
+                String.class);
+        mockMvc.perform(post("/api/v1/settlement/config/distribution_notice_period/" + draft + "/activate").with(drafter))
+                .andExpect(status().isOk());
+        activation.activateDue(Instant.now().plus(java.time.Duration.ofDays(1)));
     }
 
     /** 一个家数行：各名次比例，上下限取比例 ±1000 基点（夹在 0～10000 内）。 */

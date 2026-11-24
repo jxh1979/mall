@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -31,10 +31,14 @@ import org.springframework.stereotype.Service;
 public class SettlementConfigScheduledActivationService {
 
     private static final String PERM = "settlement.config.manage";
-    /** 371-R1 六类（分配方式、门票综合服务费、通票凑整参数、渠道费用、卡座提成费率、赠送权益预估成本）＋ 371-R3 高价值判定阈值。 */
+    /**
+     * 371-R1 六类（分配方式、门票综合服务费、通票凑整参数、渠道费用、卡座提成费率、赠送权益预估成本）＋ 371-R3 高价值判定阈值
+     * ＋ 第十八批 CB 段第 398 条 398-R1 通票分账通告期（全平台一行）与非积分商户账单异议期（按项目）。
+     */
     public static final Set<SingleRowConfig> DATED = EnumSet.of(SingleRowConfig.DISTRIBUTION_METHOD,
             SingleRowConfig.COMPREHENSIVE_SERVICE_FEE, SingleRowConfig.COMBO_DISCOUNT, SingleRowConfig.CHANNEL_FEE,
-            SingleRowConfig.COMMISSION_RATE, SingleRowConfig.PASS_GIFT_COST, SingleRowConfig.HIGH_VALUE_THRESHOLD);
+            SingleRowConfig.COMMISSION_RATE, SingleRowConfig.PASS_GIFT_COST, SingleRowConfig.HIGH_VALUE_THRESHOLD,
+            SingleRowConfig.NOTICE_PERIOD, SingleRowConfig.OBJECTION_PERIOD);
 
     private final JdbcSettlementConfigWriteRepository repository;
     private final BusinessDayResolver businessDays;
