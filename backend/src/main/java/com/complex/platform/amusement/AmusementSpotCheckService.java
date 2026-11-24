@@ -1,8 +1,9 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuditDataWindow;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -172,7 +173,9 @@ public class AmusementSpotCheckService {
                   FROM amusement_spot_check_misses m JOIN amusement_projects p ON p.id=m.project_id
                  ORDER BY m.detected_at DESC,m.id
                 """, (rs, n) -> {
-            boolean visible = merchant.isPresent() ? merchant.get().equals(rs.getString(9)) : reach.covers(rs.getString(4));
+            // 第十八批 CP 段第 372 条第 5 段（控制席补定，第十八批裁决 77）：外审数据时段按判定时刻
+            boolean visible = (merchant.isPresent() ? merchant.get().equals(rs.getString(9)) : reach.covers(rs.getString(4)))
+                    && AuditDataWindow.covers(rs.getTimestamp(8).toInstant());
             return visible ? new Miss(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
                     rs.getTimestamp(5).toInstant(), rs.getInt(6), rs.getTimestamp(7).toInstant(), rs.getTimestamp(8).toInstant()) : null;
         }).stream().filter(java.util.Objects::nonNull).toList();

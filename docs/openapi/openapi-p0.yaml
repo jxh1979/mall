@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.19
+  version: V1.20
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -1674,7 +1674,7 @@ paths:
         - amusement
       operationId: listAmusementSpotCheckMisses
       summary: 查询当班未抽检记录
-      description: "第十八批 BS 段第 373 条 373-R2（BSM:1300「……达不到最低频次的视为当班未抽检」）：列出当班未抽检记录，按判定时间倒序，不分页。判定由游乐巡检到期作业每轮执行：每笔成功入场找它之前最近一次已提交巡检作锚点（提交时刻与复检时刻取较晚者），起算点取锚点与该入场所属营业日起点二者较晚者，超过所属综合体项目的抽检间隔仍有成功入场即记一条（同一项目同一锚点只记最早那笔）；只判定留痕，不拦核销、不发通知。范围：商户账号只见本商户的游乐项目；其余账号按本权限可触及的综合体项目过滤（最高权限与平台管理员全部）。只读，不记留痕。"
+      description: "第十八批 BS 段第 373 条 373-R2（BSM:1300「……达不到最低频次的视为当班未抽检」）：列出当班未抽检记录，按判定时间倒序，不分页。判定由游乐巡检到期作业每轮执行：每笔成功入场找它之前最近一次已提交巡检作锚点（提交时刻与复检时刻取较晚者），起算点取锚点与该入场所属营业日起点二者较晚者，超过所属综合体项目的抽检间隔仍有成功入场即记一条（同一项目同一锚点只记最早那笔）；只判定留痕，不拦核销、不发通知。范围：商户账号只见本商户的游乐项目；其余账号按本权限可触及的综合体项目过滤（最高权限与平台管理员全部）。只读，不记留痕。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取判定时刻 detected_at。"
       x-permission: amusement.safety_inspection.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1753,6 +1753,7 @@ paths:
         - amusement
       operationId: listAmusementSessions
       summary: "查询游乐场次安排"
+      description: 第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取场次营业日 business_date，total 同口径。
       x-permission: amusement.session.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1868,7 +1869,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询游乐核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取核销时刻 created_at，与 dateFrom、dateTo 同时生效（取交集），total 同口径。
   /api/v1/amusement/verifications/exit:
     post:
       tags:
@@ -21651,7 +21652,7 @@ paths:
         - amusement
       operationId: listAmusementDeviceClassChanges
       summary: 查询游乐项目设备分级申请与历史
-      description: "第十八批 CF 段第 407 条 407-R1（决策台账「设备分类和每次变更必须保留申请人、复核人、理由、生效时间和历史版本」）：返回该游乐项目全部设备的分级申请（首次分级随建档提交，此后每次变更另行申请），按申请时间升序；每行带变更前后的分级与依赖关系、理由、附件、状态（pending_review 待复核、approved 已通过即生效、rejected 已驳回）、复核单号、申请人与申请时间、复核人与结案时间。范围：商户账号只看本商户的游乐项目，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号须持本权限且游乐项目所属综合体项目可触及，否则 403 FORBIDDEN；游乐项目不存在 404 AMUSEMENT_PROJECT_NOT_FOUND，没有唯一综合体归属 409 AMUSEMENT_BUSINESS_DAY_CONFIGURATION_REQUIRED。只读，不记留痕。"
+      description: "第十八批 CF 段第 407 条 407-R1（决策台账「设备分类和每次变更必须保留申请人、复核人、理由、生效时间和历史版本」）：返回该游乐项目全部设备的分级申请（首次分级随建档提交，此后每次变更另行申请），按申请时间升序；每行带变更前后的分级与依赖关系、理由、附件、状态（pending_review 待复核、approved 已通过即生效、rejected 已驳回）、复核单号、申请人与申请时间、复核人与结案时间。范围：商户账号只看本商户的游乐项目，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号须持本权限且游乐项目所属综合体项目可触及，否则 403 FORBIDDEN；游乐项目不存在 404 AMUSEMENT_PROJECT_NOT_FOUND，没有唯一综合体归属 409 AMUSEMENT_BUSINESS_DAY_CONFIGURATION_REQUIRED。只读，不记留痕。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取申请时刻 requested_at。"
       x-permission: amusement.device.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -25138,7 +25139,7 @@ paths:
         - amusement
       operationId: listAmusementParkWideFaults
       summary: 查询全园故障状态记录
-      description: CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。
+      description: CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取发起时刻 initiated_at，total 同口径。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -25430,7 +25431,7 @@ paths:
         - amusement
       operationId: listAmusementParkWideFaultActions
       summary: 查询全园故障状态留痕
-      description: CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      description: CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取留痕时刻 created_at，total 同口径。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -25566,7 +25567,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationBatches
       summary: 查询某次全园故障的补偿批次
-      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、补发人份数、补偿有效期截止。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、补发人份数、补偿有效期截止。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取批次生成时刻 created_at，total 同口径。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -25727,7 +25728,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationItems
       summary: 查询补偿批次的补偿记录
-      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（完整补发）、状态（待确认 / 已发放 / 已使用）、补偿有效期至、补发权益行、履约核销与锁定结算价。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（完整补发）、状态（待确认 / 已发放 / 已使用）、补偿有效期至、补发权益行、履约核销与锁定结算价。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取补偿记录生成时刻 created_at，total 同口径。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -25761,7 +25762,7 @@ paths:
         - amusement
       operationId: listAmusementCompensationBatchesByEvent
       summary: 按事件类型查询补偿批次（含场次提前结束）
-      description: TK-18（2026-10-18 操作员裁决：已入场客人比照 ENUM「全园故障与补偿通票」规则补偿）：场次提前结束时已入场（已扣次）的人份由结束事务生成 event_type=session_early_end 的补偿批次（关联原场次与结束原件、费用游乐公司承担、原票下另补本次 1 次），无全园故障可查，故按事件类型列出（待确认在前）；发放前仍须游乐公司负责人与工程或安全岗位先后经同一确认入口确认。有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。
+      description: TK-18（2026-10-18 操作员裁决：已入场客人比照 ENUM「全园故障与补偿通票」规则补偿）：场次提前结束时已入场（已扣次）的人份由结束事务生成 event_type=session_early_end 的补偿批次（关联原场次与结束原件、费用游乐公司承担、原票下另补本次 1 次），无全园故障可查，故按事件类型列出（待确认在前）；发放前仍须游乐公司负责人与工程或安全岗位先后经同一确认入口确认。有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取批次生成时刻 created_at，total 同口径。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -60138,7 +60139,7 @@ paths:
         - amusement
       operationId: listAmusementSessionEndings
       summary: 查看场次结束原件
-      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。
+      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取结束原件营业日 business_date。
       x-permission: amusement.session.view
       x-data-scope: project-amusement
       x-auth-context: staff-token
@@ -60224,7 +60225,7 @@ paths:
         - amusement
       operationId: listAmusementSessionFollowups
       summary: 查看场次结束后的未履约事项
-      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。只读实际待办，不提供凭备注直接完成的写入口。
+      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。只读实际待办，不提供凭备注直接完成的写入口。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取未履约事项生成时刻 created_at。
       x-permission: amusement.session.view
       x-data-scope: project-amusement
       x-auth-context: staff-token
@@ -60310,7 +60311,7 @@ paths:
         - amusement
       operationId: listAmusementCountReleases
       summary: 查看场次及日切人数释放记录
-      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。按原锁定综合体显示系统释放，不提供手工修改人数入口。
+      description: 按实际综合体及商户交集核验权限；结束原件、释放事实和原核销均保留，不修改原票次数、结算或退款资格。按原锁定综合体显示系统释放，不提供手工修改人数入口。第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，发生时间取释放执行时刻 reset_at。
       x-permission: amusement.verification.view
       x-data-scope: project-amusement
       x-auth-context: staff-token
@@ -90142,7 +90143,7 @@ x-contract-rules:
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  auditDataWindowRule: 外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款、操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件、通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细、酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。
+  auditDataWindowRule: 外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款、操作留痕查询与导出、证据事件、证据时间线、票务订单、已发放权益、核销记录、门票退款、通票安全事件、通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细、酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结、游乐场次、场次结束原件与未履约事项、游乐核销记录、游乐在玩人数释放记录、全园故障状态与其留痕、全园故障补偿批次与补偿记录、游乐当班未抽检记录、游乐设备分级申请与历史），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。
   terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码加受控第十一端 dealer_portal（独立经销商 Web 门户，CG-11d）；设备能力写入
     x-device-capability，服务端/监控调用写入 x-invocation-channel。
   authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为

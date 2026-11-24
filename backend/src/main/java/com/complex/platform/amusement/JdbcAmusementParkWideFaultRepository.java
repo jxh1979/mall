@@ -1,7 +1,8 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import com.complex.platform.access.AuditDataWindow;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -59,13 +60,14 @@ public class JdbcAmusementParkWideFaultRepository {
         return n != null && n > 0;
     }
 
+    /** 第十八批 CP 段第 372 条第 5 段 372-S5-R3（第十八批裁决 77）：外审数据时段按发起时刻，先筛再截 200 条；留痕按自身时刻。 */
     public List<AmusementParkWideFaultRecord> list(String projectId, String status) {
         return jdbcTemplate.query(SELECT + """
                  WHERE (:project_id::text IS NULL OR project_id = :project_id)
-                   AND (:status::text IS NULL OR status = :status)
+                   AND (:status::text IS NULL OR status = :status)%s
                  ORDER BY created_at DESC
                  LIMIT 200
-                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("status", status), this::map);
+                """.formatted(AuditDataWindow.andInstant("initiated_at")), new MapSqlParameterSource().addValue("project_id", projectId).addValue("status", status), this::map);
     }
 
     public AmusementParkWideFaultRecord insert(AmusementParkWideFaultRecord r) {
@@ -125,9 +127,9 @@ public class JdbcAmusementParkWideFaultRepository {
         return jdbcTemplate.query("""
                 SELECT id, fault_id, project_id, action, actor_id, actor_role, note, created_at
                   FROM amusement_park_wide_fault_actions
-                 WHERE fault_id = :fault_id
+                 WHERE fault_id = :fault_id%s
                  ORDER BY created_at, id
-                """, new MapSqlParameterSource("fault_id", faultId), (rs, n) -> new AmusementParkWideFaultActionRecord(
+                """.formatted(AuditDataWindow.andInstant("created_at")), new MapSqlParameterSource("fault_id", faultId), (rs, n) -> new AmusementParkWideFaultActionRecord(
                 rs.getString("id"), rs.getString("fault_id"), rs.getString("project_id"), rs.getString("action"),
                 rs.getString("actor_id"), rs.getString("actor_role"), rs.getString("note"), instant(rs, "created_at")));
     }

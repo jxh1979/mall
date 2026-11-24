@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.48
+文档版本：V1.49
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13651,3 +13651,91 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本组增量：新增操作 0 个，迁移 0 个。
 - 18CO 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 28ec1bcf；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.19、决策台账 V1.48，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CO 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3258805b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7460 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 17:47 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CP 落地位置补记（2026-11-20）：第十八批 CP 段（batch114）按 18CP 只读设计实现待开发清单第 372 条（外审数据时段第 5 段（游乐））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CP 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CP 段，batch114）实现待开发清单第 372 条（18CP 只读设计 b114-audit/d7-cp.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 372-S5-R1～R4（R1、R2、R3 同一实现代理串行写、共用新测试类 AuditDataWindowAmusementJdbcIntegrationTests，R4 收口最后做）。第 372 条按第十八批裁决 77 分段，第 1～3 段已合入主干，本段工作树开工前已快进到 18CN、18CF 合并后的主干，AuditDataWindow 的助手照现码调用、不再改。控制席补定（自定 82）：设计列出的段 5 上限外、设计定稿后才新增的两个游乐清单一并在本段承载——listAmusementSpotCheckMisses（GET /api/v1/amusement/spot-check-misses，18BS 新增，按漏检发现时刻 detected_at）与 listAmusementDeviceClassChanges（GET …/projects/{id}/devices/classification-changes，18CF 新增，按申请时刻 requested_at），写法同 R1～R3（清单尾拼时段条件或 covers 内存筛、契约补时段一句、测试时段内外各一条）；listAmusementDeviceStops（当前停运停用）、getAmusementSpotCheckPolicy、readAmusementBusinessDayConfigOriginal、getAmusementProjectInspectionPoints 属规则设置、资料或当前状态，照常显示。按字面或常理定的六点照设计 notes 执行。段 4（酒吧）、段 6（库存、商户、合规、平面图）与本段并行，撞 auditDataWindowRule 已承载清单、platform-governance-prd §4 审计人员条、data-isolation 规格审计人员行、覆盖表 PGM-0095 行、台账文末五处文本，合并时按文本把各段补的项拼在一起、不覆盖。设计旁见①（内部稽核与最高权限读游乐 16 处 403）已登记待开发清单第 462 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 9c0e84e3 开工（第七轮），变基到 28ec1bcf 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CP 落地位置补记（第 372 条第 5 段：游乐；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增操作 0 个，迁移 0 个（预留 V808～V811 未用），改 12 个既有操作的描述：listAmusementSessions（新增描述）、listAmusementSessionEndings、listAmusementSessionFollowups、listAmusementVerifications、listAmusementCountReleases、listAmusementParkWideFaults、listAmusementParkWideFaultActions、listAmusementCompensationBatchesByEvent、listAmusementFaultCompensationBatches、listAmusementFaultCompensationItems、listAmusementSpotCheckMisses、listAmusementDeviceClassChanges（后两个为控制席补定自定 82），改 1 条契约规则 auditDataWindowRule 的已承载清单）
+  372-S5-R1 游乐场次、场次结束原件与未履约事项按外审数据时段承载
+  - 改法：
+    - amusement 包 JdbcAmusementRepository.listSessionsScoped 在排序前拼 AuditDataWindow.andDate("s.business_date")：已划定时段的外审账号只列营业日在时段内的场次。全仓只有 AmusementService.listSessions 一个调用方，total 即返回条数，与行同口径。
+    - AmusementSessionLifecycleService.endings 按结束原件营业日拼 AuditDataWindow.andDate("business_date")。followups 按未履约事项生成时刻拼 AuditDataWindow.andInstant("f.created_at")。
+    - 子清单按子记录自身时刻判，不另判父场次；requireScope 不改。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests.sessionsEndingsAndFollowupsFollowOwnDatesWhileUnwindowedStaffSeesAll。
+  372-S5-R2 游乐核销记录与在玩人数释放记录按外审数据时段承载（与日期参数取交集）
+  - 改法：
+    - JdbcAmusementRepository.listVerificationItems 在排序前拼 AuditDataWindow.andInstant("av.created_at")，按核销时刻，与 dateFrom、dateTo 同为 AND，取交集；完全落在时段外时返回空，不报错。不取营业日：出场核销行没有营业日，核销是事件，现有日期参数也筛 created_at（按字面/常理定）。
+    - AmusementSessionLifecycleService.releases 按系统执行释放的时刻拼 AuditDataWindow.andInstant("l.reset_at")，即页面列名「系统执行时间」。
+  - 依据：PGM:682（同上）；第十八批裁决 77（同上）。
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests.verificationsAndCountReleasesFollowOccurrenceTimeAndIntersectDateParams。
+  372-S5-R3 全园故障状态与其留痕、全园故障补偿批次与补偿记录按外审数据时段承载
+  - 改法：
+    - JdbcAmusementParkWideFaultRepository.list 按发起时刻拼 AuditDataWindow.andInstant("initiated_at")，先筛时段再截 200 条。listActions 按留痕自身时刻拼 AuditDataWindow.andInstant("created_at")。
+    - JdbcAmusementFaultCompensationRepository.listBatches 与 listBatchesByEvent 按批次生成时刻拼 AuditDataWindow.andInstant("created_at")。
+    - AmusementFaultCompensationService.listItems 过完项目范围判定后，用 AuditDataWindow.covers 按补偿记录生成时刻在内存里筛，total 同口径。仓储 listItems 另被发放流程 issueItems 使用，所以不改仓储。
+    - 子清单（留痕、某故障的批次、批次的补偿记录）按子记录自身时刻判，不另判父故障或父批次。
+  - 依据：PGM:682（同上）；第十八批裁决 77（同上）。
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests.parkFaultsActionsAndCompensationFollowOwnTimes。
+  控制席补定（自定 82）：设计定稿后新增的两个游乐清单
+  - 改法：
+    - AmusementSpotCheckService.listMisses 在原有的商户或可触及综合体可见判定之后，再用 AuditDataWindow.covers 按判定时刻 detected_at 筛（listAmusementSpotCheckMisses）。
+    - AmusementDeviceClassService.history 按申请时刻拼 AuditDataWindow.andInstant("requested_at")（listAmusementDeviceClassChanges）。
+    - listAmusementDeviceStops、getAmusementSpotCheckPolicy、readAmusementBusinessDayConfigOriginal、getAmusementProjectInspectionPoints 属规则设置、资料或当前状态，照常显示、不改。
+  - 依据：PGM:682（同上）；第十八批裁决 77（同上）。
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests.spotCheckMissesAndDeviceClassChangesFollowOwnTimes。
+  372-S5-R4 收口：契约规则已承载清单、文档与台账补记、照常入口回归
+  - 改法：
+    - 上列 12 个操作描述末尾各补一句本段口径；listAmusementSessions 原来没有描述，新增一句。
+    - x-contract-rules 的 auditDataWindowRule「已承载」清单在「积分追回明细」后补「游乐场次、场次结束原件与未履约事项、游乐核销记录、游乐在玩人数释放记录、全园故障状态与其留痕、全园故障补偿批次与补偿记录、游乐当班未抽检记录、游乐设备分级申请与历史」。
+    - docs/platform-governance-prd-v0.1.md §4「审计人员」条补游乐已承载一段；data-isolation 规格审计人员行补「游乐」；html-prd-coverage PGM-0095 行补本段落点。
+    - 游乐项目、状态看板、容量快照、补偿参数、营业日配置照常显示，代码不改。
+  - 依据：PGM:682；第十八批裁决 77 所选选项原文「没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」。
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests.alwaysVisibleAmusementEntriesStayVisibleForWindowedAuditor。
+  不做（按设计 not_doing）：
+  - 有发生日期、但外审账号本就 403 MERCHANT_SCOPE_REQUIRED 的 10 个入口不承载：listAmusementEntitlementSessions、getAmusementEntitlementSession、listAmusementQueueEntries、listAmusementReservations、listAmusementGroupBookings、listAmusementIncidents、listAmusementInspectionTasks、listAmusementSafetyInspections、listAmusementMaintenanceRecords、getAmusementMaintenanceRecord。它们都取 AuthorizationService.currentMerchantScope。也不为它们写「仍 403」的回归用例。
+  - 承载的入口里没有明细，也没有导出，所以不加 requireCover、OUT_OF_AUDIT_DATA_WINDOW，也不加导出记录的 data_window。
+  - 不改 AuditDataWindow 和前端；不为没有营业日的旧场次写兼容（UD-07）。
+  - 核销记录日期参数按 UTC 零点换算的问题本段不改；内部稽核与最高权限读游乐 16 处 403 已登记待开发清单第 462 条，本段不改。
+- 372-S5-R1～R4 契约部分（第十八批 CP 段第 372 条第 5 段；依据 PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」；段 5 上限外的两个清单按控制席补定（自定 82））：
+  改法：12 个既有操作各在描述末尾补一句；listAmusementSessions 原来没有描述，新增这一句；listAmusementVerifications 的原通用句保留，补句接在后面。句首统一为「第十八批 CP 段第 372 条第 5 段（PGM:682；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的记录，」，后接各操作的发生时间口径：
+  - R1：listAmusementSessions 取场次营业日 business_date，total 同口径；listAmusementSessionEndings 取结束原件营业日 business_date；listAmusementSessionFollowups 取未履约事项生成时刻 created_at。
+  - R2：listAmusementVerifications 取核销时刻 created_at，与 dateFrom、dateTo 同时生效（取交集），total 同口径；listAmusementCountReleases 取释放执行时刻 reset_at。
+  - R3：listAmusementParkWideFaults 取发起时刻 initiated_at；listAmusementParkWideFaultActions 取留痕时刻 created_at；listAmusementCompensationBatchesByEvent、listAmusementFaultCompensationBatches 取批次生成时刻 created_at；listAmusementFaultCompensationItems 取补偿记录生成时刻 created_at。这 5 个都写 total 同口径。
+  - 控制席补定：listAmusementSpotCheckMisses 取判定时刻 detected_at；listAmusementDeviceClassChanges 取申请时刻 requested_at。
+  - 返回数组的 endings、followups、count-releases、spot-check-misses、classification-changes 没有 total，句中不写 total。
+  R4：契约规则 x-contract-rules.auditDataWindowRule 在已承载清单「积分追回明细」之后补「游乐场次、场次结束原件与未履约事项、游乐核销记录、游乐在玩人数释放记录、全园故障状态与其留痕、全园故障补偿批次与补偿记录、游乐当班未抽检记录、游乐设备分级申请与历史」。
+  落地位置（契约句与现码一一对应）：
+  - AmusementService.listSessions → JdbcAmusementRepository.listSessionsScoped
+  - AmusementSessionLifecycleService.endings、followups、releases
+  - AmusementService.listVerificationItems → JdbcAmusementRepository.listVerificationItems
+  - AmusementParkWideFaultService.list、listActions → JdbcAmusementParkWideFaultRepository.list、listActions
+  - AmusementFaultCompensationService.listBatches、listBatchesByEvent → JdbcAmusementFaultCompensationRepository.listBatches、listBatchesByEvent；AmusementFaultCompensationService.listItems 用 AuditDataWindow.covers 在内存里筛
+  - AmusementSpotCheckService.listMisses 用 AuditDataWindow.covers 筛
+  - AmusementDeviceClassService.history 用 AuditDataWindow.andInstant
+  本段增量：新增操作 0，改 12 个既有操作描述，改 1 条契约规则；不加 schema、字段键、失败码；迁移 0（预留 V808～V811 未用）。
+  测试（实现代理所建）：AuditDataWindowAmusementJdbcIntegrationTests。契约校验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过，yaml 与 json 深比较一致。
+- 18CP 汇合（J）：本段没改页面和接口响应结构，e2e 不用改，选择器、断言、mock 与截图基线都不动。门禁结论（在 9c0e84e3 基线上实跑）：
+  - 后端全量（--fresh）0 红；前端 typecheck 0 错。
+  - vitest 全量只有 DealerAdmissionCatalogPage 一个负载偶发红，单独重跑 8/8 通过，属既有偶发。
+  - 客人三个工作区（customer-app、customer-miniapp、customer-core）单测全过；安卓员工端单测全过，android-app 编译通过。
+  - chromium 五份后台 spec 全过。
+  - docs:operation-matrix、docs:openapi-closure、docs:data-isolation-spec、docs:domain-ownership-scope 重生成后与工作树无差异，verify:p0-contract 全绿。
+  - OpenAPI yaml 与 json 深比较一致：本段新增 0 个操作，改了 12 个既有游乐操作的说明（listAmusementSessions、listAmusementVerifications、listAmusementSessionEndings、listAmusementSessionFollowups、listAmusementCountReleases、listAmusementParkWideFaults、listAmusementParkWideFaultActions、listAmusementFaultCompensationBatches、listAmusementFaultCompensationItems、listAmusementCompensationBatchesByEvent，以及控制席补定的 listAmusementSpotCheckMisses、listAmusementDeviceClassChanges），契约规则只改了 auditDataWindowRule，schema 和 response 不变。
+  - 本段无迁移，预留的 V808～V811 没用。
+- 372-S5-R4（文档部分，18CP 文档组）：
+  - 平台治理层 PRD（platform-governance-prd）§4「审计人员」条的实现现状句：在 18CO 酒吧那句「……出品票流转记录与服务责任区间在页面上取不到入口，不另承载；」之后、「其余业务域分段承载中（待开发清单第 372 条）」之前，补了「游乐已承载（第十八批 CP 段第 372 条第 5 段 372-S5-R1～R3 与控制席补定）——场次与结束原件（营业日）、未履约事项（生成时刻）、核销记录（核销时刻，与日期筛选同时生效）、在玩人数释放记录（释放执行时刻）、全园故障状态（发起时刻）与其留痕（留痕时刻）、补偿批次与补偿记录（各自生成时刻）、当班未抽检记录（判定时刻）、设备分级申请与历史（申请时刻）；游乐项目、状态看板、容量快照、补偿参数、营业日配置照常显示；排队、预约、团体预订、事故、巡检、维保、权益会话对外审账号本就 403，不另承载；」。
+  - 同一 PRD 的 §16 变更日志加一行：类型为实现现状，位置为 §4 审计人员条，内容为第十八批 CP 段第 372 条第 5 段 372-S5-R1～R4。
+  - 多租户隔离规格（data-isolation-and-tenant-scope-security-spec）§10「特殊人员组织边界」表的审计人员行：已按时段过滤的域补「游乐」。
+  - 两份文档各升一版；PRD 变更日志加一行；隔离规格没有修订表，不加行。
+  - 依据：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；第十八批裁决 77 所选选项原文「没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」。
+  - 文档句对应的代码：
+    - 营业日：JdbcAmusementRepository.listSessionsScoped（场次营业日）、AmusementSessionLifecycleService.endings（结束原件营业日）。
+    - 各自时刻：AmusementSessionLifecycleService.followups（生成时刻）与 releases（释放执行时刻）；JdbcAmusementRepository.listVerificationItems（核销时刻，与 dateFrom、dateTo 取交集）；JdbcAmusementParkWideFaultRepository.list（发起时刻）与 listActions（留痕时刻）；JdbcAmusementFaultCompensationRepository.listBatches 与 listBatchesByEvent（批次生成时刻）；AmusementDeviceClassService.history（申请时刻）。
+    - 内存筛：AmusementFaultCompensationService.listItems（补偿记录生成时刻）、AmusementSpotCheckService.listMisses（判定时刻）。
+  - 测试：AuditDataWindowAmusementJdbcIntegrationTests，用例 sessionsEndingsAndFollowupsFollowOwnDatesWhileUnwindowedStaffSeesAll、verificationsAndCountReleasesFollowOccurrenceTimeAndIntersectDateParams、parkFaultsActionsAndCompensationFollowOwnTimes、spotCheckMissesAndDeviceClassChangesFollowOwnTimes、alwaysVisibleAmusementEntriesStayVisibleForWindowedAuditor。
+  - 本组增量：新增操作 0；迁移 0（预留 V808～V811 未用）。
+- 18CP 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main f447ef87；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.20、决策台账 V1.49，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CP 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 ea4bb4c8 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7465 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 18:34 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
