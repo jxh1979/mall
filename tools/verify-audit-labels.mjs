@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 门禁：操作留痕（audit_events）写入的业务类型与事件名都要在 backend/src/main/resources/audit/audit-labels.json 里有中文名
 // （业务类型在 business_types，事件名在 event_names）。
 // 依据：PGM:287「全局原则 · 界面全中文（所有终端零英文）……字段名、状态、枚举取值……必须全部为中文……」；第十八批 AN 段第 227 条
@@ -243,6 +243,9 @@ const DECLARED = [
   ["business", `${J}access/staff/PayrollTaxService.java:469、:470（审批结果留痕，:236、:237 业务类型为审批对象类型 VERSION、ASSESSMENT）`,
     ["payroll_tax_version", "payroll_tax_assessment"]],
   ["business", `${J}bar/BarPayrollRuleService.java:188（业务类型为同行声明的 OBJECT 常量）`, ["bar_payroll_rule"]],
+  ["actor", `${J}evidence/AuditEventService.java（record、anonymousRequestActorType 与 kioskDeviceId：没有认证信息的非请求线程记 system；未登录请求按路径记，`
+    + "/api/v1/terminals/kiosks/ 柜机上报记 device、/api/open/ 记 third_party、/api/v1/customer/ 记 customer、其余记 anonymous；第十八批 CH 段第 412 条 412-R1）",
+    ["system", "device", "third_party", "customer", "anonymous"]],
   ["actor", `${J}auth/ProductionAuthService.java:413（最高权限账号 account_type＝SessionIssuer.MASTER_ACCOUNT_TYPE，`
     + "evidence/AuditEventService.java:129 按 actor.accountType() 记 actor_type）", ["master_authority"]],
 ];

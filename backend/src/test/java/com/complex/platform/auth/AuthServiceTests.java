@@ -224,6 +224,9 @@ class AuthServiceTests {
     @Test
     void liveMasterSessionCannotRefreshWithoutUsb() {
         AuthService.LoginResponse master = service.issueMasterSession("usb-master:test");
+        // 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：破窗签发会话的留痕记最高权限本人。
+        assertThat(auditEventRepository.events).filteredOn(event -> "auth.master.session_issued".equals(event.eventName()))
+                .extracting(AuditEvent::actorType).containsExactly("master_authority");
         assertThatThrownBy(() -> service.refresh(
                 new AuthService.RefreshTokenRequest(master.refreshToken(), "usb-master:test"),
                 master.accessToken()

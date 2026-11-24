@@ -1,11 +1,12 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Duration;
 import java.time.Instant;
@@ -185,7 +186,8 @@ public class AuthService implements SessionIssuer {
                             "session_id", session.id(),
                             "device_id", blankToDefault(request.deviceId(), "unknown"),
                             "terminal_type", blankToDefault(request.terminalType(), "web")
-                    )
+                    ),
+                    actorOf(user)
             );
             return responseFor(session, user);
         } catch (ApiException exception) {
@@ -243,7 +245,8 @@ public class AuthService implements SessionIssuer {
                             "user_id", user.id(),
                             "session_id", refreshed.id(),
                             "device_id", blankToDefault(refreshed.deviceId(), "unknown")
-                    )
+                    ),
+                    actorOf(user)
             );
             return responseFor(refreshed, user);
         } catch (ApiException exception) {
@@ -418,8 +421,13 @@ public class AuthService implements SessionIssuer {
         usersByUsername.putIfAbsent(SessionIssuer.MASTER_USERNAME, user);
         SessionRecord session = createSession(user, deviceId, "recovery");
         auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
-                session.id(), null, null, java.util.Map.of("user_id", user.id()));
+                session.id(), null, null, java.util.Map.of("user_id", user.id()), actorOf(user));
         return responseFor(session, user);
+    }
+
+    /** 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：登录、续期、破窗签发成功的留痕按该账号记操作人。 */
+    private static AccessActor actorOf(UserRecord user) {
+        return new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(), user.merchantId(), user.status());
     }
 
     private SessionRecord createSession(UserRecord user, String deviceId, String terminalType) {

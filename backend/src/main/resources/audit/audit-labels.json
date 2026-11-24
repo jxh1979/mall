@@ -449,6 +449,10 @@
     "platform_admin": "平台管理员",
     "sales": "销售人员",
     "staff": "普通员工",
+    "anonymous": "匿名访问",
+    "system": "系统作业",
+    "third_party": "第三方系统",
+    "device": "设备",
     "supervisor": "主管"
   },
   "event_names": {

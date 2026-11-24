@@ -10,11 +10,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.HandlerMapping;
 
 @Service
 public class AuditEventService {
@@ -74,7 +76,25 @@ public class AuditEventService {
             Map<String, Object> metadata
     ) {
         return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey,
-                metadata, null, null);
+                metadata, null, null, null);
+    }
+
+    /**
+     * 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：未登录请求里主体此刻才确立（员工登录、续期成功，U 盘破窗签发会话）时，
+     * 按该账号记操作人（类型、编号、商户），不按请求里的匿名主体记。
+     */
+    public AuditEvent recordSuccess(
+            String eventName,
+            String permissionCode,
+            String businessType,
+            String businessId,
+            String requestId,
+            String idempotencyKey,
+            Map<String, Object> metadata,
+            AccessActor actor
+    ) {
+        return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey,
+                metadata, null, null, actor);
     }
 
     /**
@@ -112,7 +132,7 @@ public class AuditEventService {
             String subjectType
     ) {
         return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey,
-                metadata, eventCategory, subjectType);
+                metadata, eventCategory, subjectType, null);
     }
 
     /**
@@ -132,7 +152,7 @@ public class AuditEventService {
     ) {
         return record(eventName, "failure", permissionCode, businessType, businessId, requestId, idempotencyKey, Map.of(
                 "error_code", errorCode
-        ), null, null);
+        ), null, null, null);
     }
 
     private AuditEvent record(
@@ -145,7 +165,8 @@ public class AuditEventService {
             String idempotencyKey,
             Map<String, Object> metadata,
             String eventCategory,
-            String subjectType
+            String subjectType,
+            AccessActor subject
     ) {
         String actorId = null;
         String actorType = "staff";
@@ -155,19 +176,27 @@ public class AuditEventService {
         operatorTrace(meta);
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
-                Object principal = auth.getPrincipal();
-                if (principal instanceof AccessActor actor) {
-                    actorId = actor.id();
-                    actorType = actor.accountType() != null ? actor.accountType() : "staff";
-                    merchantId = actor.merchantId();
-                    authContext = actor.username();
-                } else {
+            AccessActor actor = subject != null ? subject
+                    : auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof AccessActor current ? current : null;
+            if (actor != null) {
+                actorId = actor.id();
+                actorType = actor.accountType() != null ? actor.accountType() : "staff";
+                merchantId = actor.merchantId();
+                authContext = actor.username();
+            } else if (auth == null) {
+                // 第十八批 CH 段第 412 条 412-R1（PGM:899）：没有认证信息＝不在请求里的线程（定时作业、启动补数；请求经匿名过滤器至少有匿名主体）。
+                actorType = "system";
+            } else {
+                if (auth.isAuthenticated()) {
                     authContext = auth.getName();
                 }
-                if (authContext != null && authContext.length() > 64) {
-                    authContext = authContext.substring(0, 64);
+                if (auth instanceof AnonymousAuthenticationToken) {
+                    actorId = kioskDeviceId();
+                    actorType = actorId != null ? "device" : anonymousRequestActorType();
                 }
+            }
+            if (authContext != null && authContext.length() > 64) {
+                authContext = authContext.substring(0, 64);
             }
         } catch (RuntimeException ignored) {
             // best-effort: never suppress the audited operation due to auth extraction failure
@@ -193,6 +222,37 @@ public class AuditEventService {
                 subjectType
         );
         return repository.save(event);
+    }
+
+    /**
+     * 第十八批 CH 段第 412 条 412-R1（PGM:899「……谁发起……都要能查到。」）：未登录请求按路径认发起方——开放平台第三方读取与回调（/api/open/，
+     * 与 TerminalMasterSwitchInterceptor 同一认定）记 third_party；客人端未登录接口（/api/v1/customer/：手机号登录、注册、取验证码）记 customer；
+     * 其余未登录请求（员工登录失败等）没有主体，记 anonymous（柜机上报记 device，见 {@link #kioskDeviceId}）。第三方按路径前缀判定，目前只有 /api/open/。
+     */
+    private static String anonymousRequestActorType() {
+        String uri = RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs
+                ? attrs.getRequest().getRequestURI() : null;
+        if (uri != null && uri.startsWith("/api/open/")) {
+            return "third_party";
+        }
+        if (uri != null && uri.startsWith("/api/v1/customer/")) {
+            return "customer";
+        }
+        return "anonymous";
+    }
+
+    /**
+     * 第十八批 CH 段第 412 条 412-R1 收尾复核后控制席补充（PGM:899「……谁发起……都要能查到。」；全链路操作留痕 PRD §6.5 操作人类型词表 device）：
+     * 柜机配置、心跳、格口事件上报（/api/v1/terminals/kiosks/{device_id}/…，凭 X-Device-Token、不带员工会话）的发起方是该设备，返回路径里的
+     * 设备编号；不是柜机上报或取不到编号返回 null（照旧按 {@link #anonymousRequestActorType} 记）。
+     */
+    private static String kioskDeviceId() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)
+                || !attrs.getRequest().getRequestURI().startsWith("/api/v1/terminals/kiosks/")
+                || !(attrs.getRequest().getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE) instanceof Map<?, ?> vars)) {
+            return null;
+        }
+        return vars.get("device_id") instanceof String id && !id.isBlank() ? id : null;
     }
 
     /**

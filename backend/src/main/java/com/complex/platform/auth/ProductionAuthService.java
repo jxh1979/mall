@@ -1,6 +1,6 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -183,7 +183,8 @@ public class ProductionAuthService implements SessionIssuer {
                             "session_id", session.id(),
                             "device_id", session.deviceId(),
                             "terminal_type", session.terminalType()
-                    )
+                    ),
+                    credential.toActor()
             );
             return responseFor(session, credential.toApiUser());
         } catch (ApiException exception) {
@@ -245,7 +246,8 @@ public class ProductionAuthService implements SessionIssuer {
                             "user_id", session.userId(),
                             "session_id", refreshed.id(),
                             "device_id", refreshed.deviceId()
-                    )
+                    ),
+                    session.toActor()
             );
             return responseFor(refreshed, session.toApiUser());
         } catch (ApiException exception) {
@@ -449,7 +451,7 @@ public class ProductionAuthService implements SessionIssuer {
                 SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
         SessionRecord session = createSession(actor, deviceId, "recovery", now);
         auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
-                session.id(), null, null, Map.of("user_id", userId));
+                session.id(), null, null, Map.of("user_id", userId), actor);
         return responseFor(session, new AuthService.ApiUser(userId, SessionIssuer.MASTER_USERNAME,
                 SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null));
     }

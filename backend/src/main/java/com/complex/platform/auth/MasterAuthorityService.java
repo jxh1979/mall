@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.auth;
 
 import com.complex.platform.common.api.ApiException;
@@ -154,7 +154,10 @@ public class MasterAuthorityService {
         windows.remove(sourceOf(sourceKey));
         auditEventService.recordSuccess("auth.master.login_succeeded", "auth.master", "auth-session",
                 SessionIssuer.MASTER_USER_ID, null, null,
-                Map.of("session_id", response.sessionId(), "source", sourceOf(sourceKey)));
+                Map.of("session_id", response.sessionId(), "source", sourceOf(sourceKey)),
+                // 第十八批 CH 段第 412 条 412-R1（PGM:899）：破窗登录成功按最高权限本人记操作人。
+                new com.complex.platform.access.AccessActor(response.user().id(), response.user().username(),
+                        response.user().accountType(), response.user().organizationId(), response.user().merchantId(), "active"));
         return response;
     }
 
