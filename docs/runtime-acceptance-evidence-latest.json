@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-24T12:00:23.223Z",
+  "generated_at": "2026-11-24T12:44:15.392Z",
   "git": {
-    "head": "a839c7664a8d5a222e4c21c73c5fe5f85b31d5c3",
-    "head_short": "a839c766",
-    "branch": "feature/business-code-batch111-20261106",
+    "head": "845c956110b19f6f44f7a031ee56ae979e540ac5",
+    "head_short": "845c9561",
+    "branch": "feature/business-code-batch97-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "8e0c3341d022f54864dcbd1e2106926a446852b8411e74169dd835cb13bb166d",
-    "source_fingerprint_file_count": 3681,
+    "source_fingerprint": "6461f400c94f2b7d121d42453f7fbb12c095ed3275c2f46c69a20edeea1ddc36",
+    "source_fingerprint_file_count": 3693,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 690,
-    "tests": 7340,
+    "suites": 696,
+    "tests": 7357,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-24T11:58:37.369Z",
+    "latest_mtime": "2026-11-24T12:40:59.357Z",
     "passed": true
   },
   "web_unit_source": {
@@ -126,6 +126,7 @@
       "apps/web/src/admin/pages/AnalyticsKpiFocus.test.tsx",
       "apps/web/src/admin/pages/ApprovalChainPage.test.tsx",
       "apps/web/src/admin/pages/ArchivedContentPage.test.tsx",
+      "apps/web/src/admin/pages/ArchivedContentPage.workOrderPaging.test.tsx",
       "apps/web/src/admin/pages/AuditEventsPage.test.tsx",
       "apps/web/src/admin/pages/BarCombosPage.delete.test.tsx",
       "apps/web/src/admin/pages/BarCombosPage.test.tsx",
@@ -210,6 +211,7 @@
       "apps/web/src/admin/pages/ExportDownloads.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.abnormallevel.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.alarm.test.tsx",
+      "apps/web/src/admin/pages/FacilityWorkbenchPage.archive.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.customercomplaint.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.degraded.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.dualconfirm.test.tsx",
@@ -275,6 +277,7 @@
       "apps/web/src/admin/pages/MemberLoyaltyConfigPage.test.tsx",
       "apps/web/src/admin/pages/MerchantPenaltyPage.test.tsx",
       "apps/web/src/admin/pages/MerchantScopePage.test.tsx",
+      "apps/web/src/admin/pages/MerchantWorkOrdersPage.archive.test.tsx",
       "apps/web/src/admin/pages/MerchantWorkOrdersPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneBillsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneConcessionApplicationsPage.test.tsx",
@@ -409,6 +412,7 @@
       "apps/web/src/admin/pages/TicketingPoliciesPage.pricing.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.ruleversions.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.salestatus.test.tsx",
+      "apps/web/src/admin/pages/TicketingPoliciesPage.templateArchive.test.tsx",
       "apps/web/src/admin/pages/TraceHandoverBackfillPage.test.tsx",
       "apps/web/src/admin/pages/TraceLinkDrilldown.test.tsx",
       "apps/web/src/admin/pages/TraceLinkP2A.test.tsx",
@@ -438,8 +442,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 377,
-    "test_count_from_source": 2087
+    "file_count": 381,
+    "test_count_from_source": 2103
   },
   "web_build": {
     "dist_index_exists": true,
@@ -460,15 +464,15 @@
     "asset_count": 176,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BR1r9S1M.js",
+        "path": "apps/web/dist/assets/main-DwpSgtqo.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-24T11:58:46.866Z"
+        "mtime": "2026-11-24T12:41:08.840Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-24T11:58:46.869Z"
+      "mtime": "2026-11-24T12:41:08.843Z"
     },
     "no_main_bundle_warning_expected": true
   },
