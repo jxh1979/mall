@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,7 +36,14 @@ public record FacilityEquipmentRecord(
         Instant deleteRequestedAt,
         String deleteReason,
         // 第十六批第 36 条（ENUM:267、BSM:1408「维保分定期保养、例行巡检、故障维修、安全检测、部件更换」）：最近一次维保完成登记的维保类型。
-        String lastMaintenanceType) {
+        String lastMaintenanceType,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason) {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public FacilityEquipmentRecord(String id, String name, String equipmentType, String spaceId, String brand, String model, String vendor, String responsibleUserId, String status, Integer maintenanceCycleDays, Instant lastMaintenanceAt, LocalDate nextMaintenanceDue, LocalDate installDate, LocalDate warrantyUntil, String alarmSource, String alarmNote, Instant alarmRaisedAt, String projectId, String merchantId, Instant createdAt, Instant updatedAt, Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt, String deleteReason, String lastMaintenanceType) {
+        this(id, name, equipmentType, spaceId, brand, model, vendor, responsibleUserId, status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil, alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, lastMaintenanceType, null);
+    }
+
 
     /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
     public FacilityEquipmentRecord(
@@ -73,7 +80,7 @@ public record FacilityEquipmentRecord(
                 status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                lastMaintenanceType);
+                lastMaintenanceType, archivedAt == null ? null : archiveReason);
     }
 
     public FacilityEquipmentRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -82,7 +89,7 @@ public record FacilityEquipmentRecord(
                 status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                lastMaintenanceType);
+                lastMaintenanceType, archiveReason);
     }
 
     public FacilityEquipmentRecord withLastMaintenanceType(String lastMaintenanceType) {
@@ -90,6 +97,6 @@ public record FacilityEquipmentRecord(
                 status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                lastMaintenanceType);
+                lastMaintenanceType, archiveReason);
     }
 }

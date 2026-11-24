@@ -32,8 +32,15 @@ public record MerchantWorkOrderRecord(
         String deleteStatus,
         String deleteRequestedBy,
         Instant deleteRequestedAt,
-        String deleteReason
+        String deleteReason,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason
 ) {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public MerchantWorkOrderRecord(String id, String merchantId, String spaceId, String contractId, String workOrderType, String priority, String status, String title, String description, String reportedByUserId, String reportedChannel, String ownerDepartment, String ownerUserId, Instant dueAt, Instant closedAt, String resolution, Integer satisfactionScore, List<String> evidenceAttachmentIds, boolean slaBreached, Instant escalatedAt, Instant createdAt, Instant updatedAt, Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt, String deleteReason) {
+        this(id, merchantId, spaceId, contractId, workOrderType, priority, status, title, description, reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution, satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, null);
+    }
+
     public MerchantWorkOrderRecord {
         evidenceAttachmentIds = evidenceAttachmentIds == null ? List.of() : List.copyOf(evidenceAttachmentIds);
     }
@@ -74,7 +81,7 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, "assigned", title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution,
                 satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, now,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archiveReason);
     }
 
     public MerchantWorkOrderRecord transitionTo(String targetStatus, Instant now) {
@@ -82,7 +89,7 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, targetStatus, title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution,
                 satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, now,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archiveReason);
     }
 
     public MerchantWorkOrderRecord close(String resolution, Integer satisfactionScore, Instant now) {
@@ -90,7 +97,7 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, "closed", title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, now, resolution,
                 satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, now,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archiveReason);
     }
 
     /**
@@ -102,7 +109,7 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, status, title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution,
                 satisfactionScore, evidenceAttachmentIds, true, now, createdAt, now,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archiveReason);
     }
 
     // --- V264 存档/删除范式：不可变 record 的字段更新辅助。 ---
@@ -111,7 +118,7 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, status, title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution,
                 satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archivedAt == null ? null : archiveReason);
     }
 
     public MerchantWorkOrderRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -120,6 +127,6 @@ public record MerchantWorkOrderRecord(
                 id, merchantId, spaceId, contractId, workOrderType, priority, status, title, description,
                 reportedByUserId, reportedChannel, ownerDepartment, ownerUserId, dueAt, closedAt, resolution,
                 satisfactionScore, evidenceAttachmentIds, slaBreached, escalatedAt, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, archiveReason);
     }
 }

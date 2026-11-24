@@ -38,8 +38,15 @@ public record BarProductRecord(
         // V625（第十八批 AK 段第 221 条 221-R1，ENUM:111「沽清分两档」）：沽清档位 temporary（临时沽清）/ long_term（长期下架），未沽清为空；
         // 临时沽清到期时间＝该酒吧本营业日结束时刻，长期下架与未沽清为空。
         String soldOutType,
-        Instant soldOutUntil
+        Instant soldOutUntil,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason
 ) implements BarCatalogLifecycle<BarProductRecord> {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public BarProductRecord(String id, String barId, String merchantId, String productName, String productType, long priceCent, String currency, String inventoryItemId, String stockLocationId, boolean stockDeductionRequired, String status, Instant createdAt, Instant updatedAt, Integer standardPourVolume, String pourVolumeUnit, Integer lossThreshold, boolean soldOut, Instant soldOutAt, String soldOutReason, Long internalSettlementPriceCent, String categoryId, String imageUrl, Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt, String deleteReason, String soldOutType, Instant soldOutUntil) {
+        this(id, barId, merchantId, productName, productType, priceCent, currency, inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt, standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason, internalSettlementPriceCent, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil, null);
+    }
+
 
     /** 内部结算价按权限脱敏:无 bar.internal_settlement_price.view 权限的读端返回副本内部价置 null。 */
     public BarProductRecord withoutInternalPrice() {
@@ -47,7 +54,7 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 null, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
-                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil, archiveReason);
     }
 
     /** 221-R1：沽清五列的字段更新辅助（未沽清五列皆空），其余字段原样保留。 */
@@ -57,7 +64,7 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOutType != null, soldOutAt, soldOutReason,
                 internalSettlementPriceCent, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
-                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil, archiveReason);
     }
 
     /** 向后兼容构造器（V625 沽清档位前签名）：既有调用方零改动，沽清档位与到期时间默认空。 */
@@ -165,7 +172,7 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 internalSettlementPriceCent, categoryId, imageUrl,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil, archivedAt == null ? null : archiveReason);
     }
 
     public BarProductRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -174,6 +181,6 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 internalSettlementPriceCent, categoryId, imageUrl,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil, archiveReason);
     }
 }

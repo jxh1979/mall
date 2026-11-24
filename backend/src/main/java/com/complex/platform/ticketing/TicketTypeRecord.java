@@ -48,8 +48,15 @@ public record TicketTypeRecord(
         // 开售、停售时间（空＝不限）与暂停售卖时刻（空＝未暂停）。只由售卖设置动作写（JdbcTicketTypeSaleRepository）。
         Instant saleStartsAt,
         Instant saleEndsAt,
-        Instant salePausedAt
+        Instant salePausedAt,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason
 ) implements ArchivableRecord<TicketTypeRecord> {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public TicketTypeRecord(String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent, Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status, Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt, Integer stockQuantity, int soldQuantity, String ticketCategory, Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt, String deleteReason, boolean refundable, String barId, BigDecimal comboDiscountRate, Instant saleStartsAt, Instant saleEndsAt, Instant salePausedAt) {
+        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt, stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId, comboDiscountRate, saleStartsAt, saleEndsAt, salePausedAt, null);
+    }
+
 
     /** 不打折（100%）——V369 前建的票种与未配折扣的票种一律按此，算出售价 = 各业态票面原价之和。 */
     public static final BigDecimal NO_COMBO_DISCOUNT = BigDecimal.valueOf(100);
@@ -104,7 +111,7 @@ public record TicketTypeRecord(
                 stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus,
                 deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId, discountRate,
-                saleStartsAt, saleEndsAt, salePausedAt);
+                saleStartsAt, saleEndsAt, salePausedAt, archiveReason);
     }
 
     /** V369：改组成（加/改权益绑定）后把已发布票种退回草稿，逼它重新过一次发布闸。 */
@@ -113,7 +120,7 @@ public record TicketTypeRecord(
                 holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus,
                 deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId, comboDiscountRate,
-                saleStartsAt, saleEndsAt, salePausedAt);
+                saleStartsAt, saleEndsAt, salePausedAt, archiveReason);
     }
 
     /** V369 18 参构造（17 参 + comboDiscountRate）：建票入口透传票种折扣，其余存档/删除默认。 */
@@ -134,7 +141,7 @@ public record TicketTypeRecord(
                 holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId,
-                comboDiscountRate, saleStartsAt, saleEndsAt, salePausedAt);
+                comboDiscountRate, saleStartsAt, saleEndsAt, salePausedAt, archivedAt == null ? null : archiveReason);
     }
 
     public TicketTypeRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -143,7 +150,7 @@ public record TicketTypeRecord(
                 holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId,
-                comboDiscountRate, saleStartsAt, saleEndsAt, salePausedAt);
+                comboDiscountRate, saleStartsAt, saleEndsAt, salePausedAt, archiveReason);
     }
 
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.time.Instant;
 
@@ -38,8 +38,15 @@ public record StaffProfileRecord(
         boolean salesPosition,
         String employmentStatus,
         String companyId,
-        String registrationSource
+        String registrationSource,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason
 ) {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public StaffProfileRecord(String id, String projectId, String merchantId, String userId, String name, String phone, String idDoc, String staffLevelId, String registrationStatus, String approvedBy, Instant approvedAt, String rejectReason, String status, Instant createdAt, Instant updatedAt, Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt, String deleteReason, boolean salesPosition, String employmentStatus, String companyId, String registrationSource) {
+        this(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId, registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, salesPosition, employmentStatus, companyId, registrationSource, null);
+    }
+
 
     /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none + 非销售岗。 */
     public StaffProfileRecord(
@@ -87,14 +94,14 @@ public record StaffProfileRecord(
     public StaffProfileRecord withCompanyRoute(String companyId, String registrationSource) {
         return new StaffProfileRecord(id,projectId,merchantId,userId,name,phone,idDoc,staffLevelId,registrationStatus,
                 approvedBy,approvedAt,rejectReason,status,createdAt,updatedAt,archivedAt,archivedBy,deleteStatus,
-                deleteRequestedBy,deleteRequestedAt,deleteReason,salesPosition,employmentStatus,companyId,registrationSource);
+                deleteRequestedBy,deleteRequestedAt,deleteReason,salesPosition,employmentStatus,companyId,registrationSource, archiveReason);
     }
 
     public StaffProfileRecord withEmploymentStatus(String employmentStatus, Instant updatedAt) {
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                salesPosition, employmentStatus, companyId, registrationSource);
+                salesPosition, employmentStatus, companyId, registrationSource, archiveReason);
     }
 
     public StaffProfileRecord maskedPersonalInfo() {
@@ -102,7 +109,7 @@ public record StaffProfileRecord(
                 com.complex.platform.common.PhoneMask.mask(phone), idDoc == null ? null : "******",
                 staffLevelId, registrationStatus, approvedBy, approvedAt, rejectReason, status,
                 createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
-                deleteRequestedAt, deleteReason, salesPosition, employmentStatus, companyId, registrationSource);
+                deleteRequestedAt, deleteReason, salesPosition, employmentStatus, companyId, registrationSource, archiveReason);
     }
 
     public StaffProfileRecord withRegistrationReview(String userId, String registrationStatus,
@@ -110,7 +117,7 @@ public record StaffProfileRecord(
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId,
                 registrationStatus, approvedBy, reviewedAt, rejectReason, status, createdAt, reviewedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                salesPosition, employmentStatus, companyId, registrationSource);
+                salesPosition, employmentStatus, companyId, registrationSource, archiveReason);
     }
 
     // --- V264 存档/删除范式：不可变 record 的字段更新辅助。 ---
@@ -118,7 +125,7 @@ public record StaffProfileRecord(
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                salesPosition, employmentStatus, companyId, registrationSource);
+                salesPosition, employmentStatus, companyId, registrationSource, archivedAt == null ? null : archiveReason);
     }
 
     public StaffProfileRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -126,7 +133,7 @@ public record StaffProfileRecord(
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                salesPosition, employmentStatus, companyId, registrationSource);
+                salesPosition, employmentStatus, companyId, registrationSource, archiveReason);
     }
 
     /** V349：设/撤销销售岗（人事在员工档案页维护，落审计）。 */
@@ -134,6 +141,6 @@ public record StaffProfileRecord(
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phone, idDoc, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                salesPosition, employmentStatus, companyId, registrationSource);
+                salesPosition, employmentStatus, companyId, registrationSource, archiveReason);
     }
 }

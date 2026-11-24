@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -58,7 +58,8 @@ final class JdbcTicketingRowMapper {
                 // 299-R1（V665）：开售、停售时间与暂停售卖时刻。
                 nullableInstant(resultSet, "sale_starts_at"),
                 nullableInstant(resultSet, "sale_ends_at"),
-                nullableInstant(resultSet, "sale_paused_at")
+                nullableInstant(resultSet, "sale_paused_at"),
+                resultSet.getString("archive_reason")
         );
     }
 
@@ -86,7 +87,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
-                resultSet.getString("catalog_item_code")
+                resultSet.getString("catalog_item_code"),
+                resultSet.getString("archive_reason")
         );
     }
 
@@ -211,7 +213,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
-                nullableLong(resultSet, "adjustment_amount_cent")
+                nullableLong(resultSet, "adjustment_amount_cent"),
+                resultSet.getString("archive_reason")
         );
     }
 

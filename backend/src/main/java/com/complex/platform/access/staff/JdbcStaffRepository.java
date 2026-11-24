@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1391,7 +1391,7 @@ public class JdbcStaffRepository {
         List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                   FROM staff_profiles
                  WHERE id = :id
                    AND delete_status <> 'approved'
@@ -1404,7 +1404,7 @@ public class JdbcStaffRepository {
             return jdbcTemplate.query("""
                     SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                            registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                           archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                           archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                       FROM staff_profiles
                      WHERE delete_status <> 'approved'
                      ORDER BY created_at DESC, id
@@ -1413,7 +1413,7 @@ public class JdbcStaffRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                    AND merchant_id = :merchant_id
@@ -1425,7 +1425,7 @@ public class JdbcStaffRepository {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                 """);
@@ -1467,7 +1467,7 @@ public class JdbcStaffRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                    AND project_id = :project_id
@@ -1639,7 +1639,7 @@ public class JdbcStaffRepository {
         java.util.List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone, id_doc, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position, employment_status, company_id, registration_source, archive_reason
                   FROM staff_profiles
                  WHERE user_id = :user_id
                    AND delete_status <> 'approved'
@@ -1695,7 +1695,8 @@ public class JdbcStaffRepository {
                 rs.getString("delete_requested_by"),
                 nullableInstant(rs, "delete_requested_at"),
                 rs.getString("delete_reason"),
-                rs.getBoolean("is_sales_position"), rs.getString("employment_status"), rs.getString("company_id"), rs.getString("registration_source")
+                rs.getBoolean("is_sales_position"), rs.getString("employment_status"), rs.getString("company_id"), rs.getString("registration_source"),
+                rs.getString("archive_reason")
         );
     }
 

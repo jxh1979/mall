@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.29
+// 文件版本：V0.30
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -233,7 +233,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
-                       supervising_company_id, supervising_company_reason
+                       supervising_company_id, supervising_company_reason, archive_reason
                   FROM merchants
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -249,7 +249,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
-                       supervising_company_id, supervising_company_reason
+                       supervising_company_id, supervising_company_reason, archive_reason
                   FROM merchants
                  WHERE (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))
                  ORDER BY created_at DESC, id
@@ -291,7 +291,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
-                       supervising_company_id, supervising_company_reason
+                       supervising_company_id, supervising_company_reason, archive_reason
                   FROM merchants
                  WHERE id = :id
                 """, Map.of("id", merchantId), this::mapMerchant).stream().findFirst();
@@ -362,7 +362,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
-                       supervising_company_id, supervising_company_reason
+                       supervising_company_id, supervising_company_reason, archive_reason
                   FROM merchants
                  WHERE project_id = :project_id AND business_entity_id = :business_entity_id
                    AND archived_at IS NULL AND delete_status <> 'approved'
@@ -456,28 +456,35 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public List<SpaceTypeRecord> listSpaceTypes() {
         return jdbcTemplate.query("""
-                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at
+                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at, archived_at, archived_by, archive_reason
                   FROM space_type_dictionary
                  ORDER BY sort_order, type_code
                 """, (rs, n) -> new SpaceTypeRecord(
                 rs.getString("id"), rs.getString("type_code"), rs.getString("type_name"),
                 rs.getInt("sort_order"), rs.getString("status"),
-                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()));
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                nullableInstant(rs, "archived_at"), rs.getString("archived_by"), rs.getString("archive_reason")));
     }
 
     @Override
     public SpaceTypeRecord saveSpaceType(SpaceTypeRecord t) {
         jdbcTemplate.update("""
-                INSERT INTO space_type_dictionary (id, type_code, type_name, sort_order, status, created_at, updated_at)
-                VALUES (:id, :type_code, :type_name, :sort_order, :status, :created_at, :updated_at)
+                INSERT INTO space_type_dictionary (id, type_code, type_name, sort_order, status, created_at, updated_at,
+                    archived_at, archived_by, archive_reason)
+                VALUES (:id, :type_code, :type_name, :sort_order, :status, :created_at, :updated_at,
+                    :archived_at, :archived_by, :archive_reason)
                 ON CONFLICT (type_code) DO UPDATE SET
                     type_name = EXCLUDED.type_name, sort_order = EXCLUDED.sort_order,
-                    status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+                    status = EXCLUDED.status, updated_at = EXCLUDED.updated_at,
+                    archived_at = EXCLUDED.archived_at, archived_by = EXCLUDED.archived_by, archive_reason = EXCLUDED.archive_reason
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", t.id()).addValue("type_code", t.typeCode()).addValue("type_name", t.typeName())
                 .addValue("sort_order", t.sortOrder()).addValue("status", t.status())
                 .addValue("created_at", timestampWithTimeZone(t.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(t.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(t.updatedAt()))
+                .addValue("archived_at", t.archivedAt() == null ? null : timestampWithTimeZone(t.archivedAt()),
+                        java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+                .addValue("archived_by", t.archivedBy()).addValue("archive_reason", t.archiveReason()));
         return t;
     }
 
@@ -494,14 +501,15 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public java.util.Optional<SpaceTypeRecord> findSpaceTypeById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at
+                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at, archived_at, archived_by, archive_reason
                   FROM space_type_dictionary
                  WHERE id = :id
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id),
                 (rs, n) -> new SpaceTypeRecord(
                         rs.getString("id"), rs.getString("type_code"), rs.getString("type_name"),
                         rs.getInt("sort_order"), rs.getString("status"),
-                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()))
+                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                nullableInstant(rs, "archived_at"), rs.getString("archived_by"), rs.getString("archive_reason")))
                 .stream().findFirst();
     }
 
@@ -601,7 +609,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
                 + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id, "
-                + "supervising_company_id, supervising_company_reason FROM merchants" + where
+                + "supervising_company_id, supervising_company_reason, archive_reason FROM merchants" + where
                 + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
@@ -868,7 +876,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("delete_reason"),
                 resultSet.getString("project_id"),
                 resultSet.getString("supervising_company_id"),
-                resultSet.getString("supervising_company_reason")
+                resultSet.getString("supervising_company_reason"),
+                resultSet.getString("archive_reason")
         );
     }
 
@@ -1574,7 +1583,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
                 + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id, "
-                + "supervising_company_id, supervising_company_reason FROM merchants" + where
+                + "supervising_company_id, supervising_company_reason, archive_reason FROM merchants" + where
                 + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
@@ -1651,7 +1660,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
                 + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id, "
-                + "supervising_company_id, supervising_company_reason",
+                + "supervising_company_id, supervising_company_reason, archive_reason",
                 "FROM merchants WHERE (project_id IN (:project_ids) OR EXISTS (SELECT 1 FROM merchant_projects mp WHERE mp.merchant_id = merchants.id AND mp.project_id IN (:project_ids))) AND (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))"
                         + " AND (CAST(:business_format AS VARCHAR) IS NULL OR merchant_type = :business_format)",
                 new MapSqlParameterSource().addValue("include_archived", includeArchived).addValue("business_format", businessFormat),

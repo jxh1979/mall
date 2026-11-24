@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.common.api.ApiException;
 
@@ -554,7 +554,18 @@ public class TicketingService {
                 request,
                 EntitlementTemplateRecord.class,
                 TicketingWriteOperation.REQUEST_DELETE_ENTITLEMENT_TEMPLATE,
-                () -> catalogService.requestDeleteEntitlementTemplate(templateId, request, actorId())
+                () -> {
+                    EntitlementTemplateRecord saved = catalogService.requestDeleteEntitlementTemplate(templateId, request, actorId());
+                    if (!isMaster()) {
+                        return saved;
+                    }
+                    // 第十八批 BY 段第 383 条 383-R2（BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：
+                    // 照 249-R4 票种写法，当场删除，占用检查照走，另落一条 delete_approved；有占用 409，本方法事务整笔回滚。
+                    catalogService.executeDeleteEntitlementTemplate(templateId);
+                    operations.recordSuccess(TicketingWriteOperation.APPROVE_DELETE_ENTITLEMENT_TEMPLATE, templateId);
+                    return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(),
+                            saved.deleteReason(), saved.updatedAt());
+                }
         );
     }
 
@@ -568,7 +579,10 @@ public class TicketingService {
                 request,
                 EntitlementTemplateDeleteDecision.class,
                 TicketingWriteOperation.APPROVE_DELETE_ENTITLEMENT_TEMPLATE,
-                () -> catalogService.approveDeleteEntitlementTemplate(templateId, request, actorId())
+                () -> {
+                    requireMasterApproval("权益模板");
+                    return catalogService.approveDeleteEntitlementTemplate(templateId, request, actorId());
+                }
         );
     }
 

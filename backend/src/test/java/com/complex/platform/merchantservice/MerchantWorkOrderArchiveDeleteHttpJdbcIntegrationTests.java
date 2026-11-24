@@ -1,6 +1,6 @@
 package com.complex.platform.merchantservice;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.crypto.PiiCipher;
 import java.time.Instant;
 import java.util.List;
@@ -83,23 +84,39 @@ class MerchantWorkOrderArchiveDeleteHttpJdbcIntegrationTests {
         assertThat(events("merchant_service.work_order.archived")).isEqualTo(1);
     }
 
-    /** 申请删除带 reason 进入待审批；申请人审批自己的申请 403 WORK_ORDER_SELF_APPROVE_FORBIDDEN；另一审批人 decision=approved 200 并软删除。 */
+    /**
+     * 申请删除带 reason 进入待审批；第十八批 BY 段 383-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：
+     * 申请人本人与另一普通审批人审批都 403 MASTER_APPROVAL_REQUIRED、仍待审批；最高权限本人 decision=approved 200 并软删除。
+     */
     @Test
-    void deleteRequestThenApprovalByAnotherApprover() throws Exception {
+    void deleteRequestThenOnlyMasterMayApprove() throws Exception {
         send(requester, "archive", "{\"reason\":\"已结案存档\"}").andExpect(status().isOk());
         send(requester, "delete-request", "{\"reason\":\"重复录入\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.delete_status").value("pending"));
 
         send(requester, "delete-approve", "{\"decision\":\"approved\"}").andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("WORK_ORDER_SELF_APPROVE_FORBIDDEN"));
+                .andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
+        send(approver, "delete-approve", "{\"decision\":\"approved\"}").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
         assertThat(deleteStatus()).isEqualTo("pending");
 
-        send(approver, "delete-approve", "{\"decision\":\"approved\"}").andExpect(status().isOk())
+        send(master(), "delete-approve", "{\"decision\":\"approved\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.decision").value("approved"))
                 .andExpect(jsonPath("$.data.deleted").value(true));
         assertThat(deleteStatus()).isEqualTo("approved");
         assertThat(events("merchant_service.work_order.delete_requested")).isEqualTo(1);
         assertThat(events("merchant_service.work_order.delete_approved")).isEqualTo(1);
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ResultActions send(RequestPostProcessor who, String action, String body) throws Exception {

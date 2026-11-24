@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -23,7 +23,7 @@ class JdbcFacilityRepository implements FacilityRepository {
             maintenance_cycle_days, last_maintenance_at, next_maintenance_due, install_date, warranty_until,
             alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id, created_at, updated_at,
             archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-            last_maintenance_type
+            last_maintenance_type, archive_reason
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -158,7 +158,7 @@ class JdbcFacilityRepository implements FacilityRepository {
                 nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"),
                 nullableInstant(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
                 rs.getString("delete_requested_by"), nullableInstant(rs, "delete_requested_at"),
-                rs.getString("delete_reason"), rs.getString("last_maintenance_type"));
+                rs.getString("delete_reason"), rs.getString("last_maintenance_type"), rs.getString("archive_reason"));
     }
 
     @Override

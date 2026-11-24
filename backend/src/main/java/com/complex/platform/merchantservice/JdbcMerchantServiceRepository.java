@@ -38,7 +38,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                            owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                            evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                            archived_at, archived_by, delete_status, delete_requested_by,
-                           delete_requested_at, delete_reason
+                           delete_requested_at, delete_reason, archive_reason
                       FROM merchant_service_work_orders
                      WHERE delete_status <> 'approved'
                        AND merchant_id = :merchant_id
@@ -52,7 +52,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE delete_status <> 'approved'
                  ORDER BY created_at DESC, id
@@ -61,18 +61,18 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
     }
 
     @Override
-    public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, boolean includeArchived, int limit) {
+    public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, boolean includeArchived, int limit, long offset) {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE delete_status <> 'approved'
                 """);
-        MapSqlParameterSource params = new MapSqlParameterSource().addValue("limit", limit);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("limit", limit).addValue("offset", offset);
         if (merchantScope.isPresent()) {
             sql.append(" AND merchant_id = :merchant_id");
             params.addValue("merchant_id", merchantScope.get());
@@ -80,27 +80,28 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
         if (!includeArchived) {
             sql.append(" AND archived_at IS NULL");
         }
-        sql.append(" ORDER BY created_at DESC, id LIMIT :limit");
+        sql.append(" ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset");
         return jdbcTemplate.query(sql.toString(), params, this::mapWorkOrder);
     }
 
     /** 93-R3：商户经营项目口径同 JdbcAnalyticsRepository.MERCHANTS_OPERATING_IN_PROJECTS（主项目加 merchant_projects）。 */
     @Override
-    public List<MerchantWorkOrderRecord> findWorkOrdersByMerchantProjects(Set<String> projectIds, boolean includeArchived, int limit) {
+    public List<MerchantWorkOrderRecord> findWorkOrdersByMerchantProjects(Set<String> projectIds, boolean includeArchived, int limit, long offset) {
         return jdbcTemplate.query("""
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE delete_status <> 'approved'
                    AND merchant_id IN (SELECT m.id FROM merchants m
                                         WHERE m.project_id IN (:project_ids)
                                            OR m.id IN (SELECT mp.merchant_id FROM merchant_projects mp WHERE mp.project_id IN (:project_ids)))
-                """ + (includeArchived ? "" : " AND archived_at IS NULL") + " ORDER BY created_at DESC, id LIMIT :limit",
-                new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("limit", limit), this::mapWorkOrder);
+                """ + (includeArchived ? "" : " AND archived_at IS NULL") + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("limit", limit).addValue("offset", offset),
+                this::mapWorkOrder);
     }
 
     /** 111-R1：派给本人的（owner_user_id），不含已存档与已审批删除的。 */
@@ -112,7 +113,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE owner_user_id = :user_id
                    AND delete_status <> 'approved'
@@ -130,7 +131,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE id = :id
                    AND delete_status <> 'approved'
@@ -145,7 +146,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE id = :id
                    AND delete_status <> 'approved'
@@ -161,7 +162,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
                        evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by,
-                       delete_requested_at, delete_reason
+                       delete_requested_at, delete_reason, archive_reason
                   FROM merchant_service_work_orders
                  WHERE delete_status <> 'approved'
                    AND due_at IS NOT NULL
@@ -349,7 +350,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 resultSet.getString("delete_status"),
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
-                resultSet.getString("delete_reason")
+                resultSet.getString("delete_reason"),
+                resultSet.getString("archive_reason")
         );
     }
 

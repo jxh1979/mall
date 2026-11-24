@@ -1,4 +1,4 @@
-// 文件版本：V0.60
+// 文件版本：V0.61
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3161,6 +3161,11 @@ export const VALUE_LABELS: Record<string, string> = {
   facility_equipment_scrap_disposal_completed: "设备报废处置已完成",
   facility_equipment_scrap_finance_recorded: "设备报废已财务入账",
   facility_equipment_maintenance_done: "设备维保已完成",
+  facility_equipment_archived: "设备已存档",
+  facility_equipment_unarchived: "设备已取消存档",
+  facility_equipment_delete_requested: "设备删除申请已提交",
+  facility_equipment_delete_approved: "设备删除已批准",
+  facility_equipment_delete_rejected: "设备删除已驳回",
   facility_work_order_created: "工单已创建",
   facility_work_order_assigned: "工单已派发",
   facility_work_order_reassigned: "工单已改派",
@@ -3271,6 +3276,11 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_work_order_processed: "商户工单已处理",
   merchant_work_order_closed: "商户工单已关闭",
   merchant_work_order_cancelled: "商户工单已取消",
+  merchant_work_order_archived: "商户工单已存档",
+  merchant_work_order_unarchived: "商户工单已取消存档",
+  merchant_work_order_delete_requested: "商户工单删除申请已提交",
+  merchant_work_order_delete_approved: "商户工单删除已批准",
+  merchant_work_order_delete_rejected: "商户工单删除已驳回",
   // 第十八批 M 段第 117 条：工单用料面板。
   work_order_material_issued: "工单用料已出库",
   work_order_cost_bearer_marked: "费用承担方已标明",
@@ -3405,6 +3415,11 @@ export const VALUE_LABELS: Record<string, string> = {
   partner_voucher_redeemed: "合作方券已核销",
   ticket_policy_publish: "票务规则已发布",
   entitlement_template_created: "权益模板已创建",
+  entitlement_template_archived: "权益模板已存档",
+  entitlement_template_unarchived: "权益模板已取消存档",
+  entitlement_template_delete_requested: "权益模板删除申请已提交",
+  entitlement_template_delete_approved: "权益模板删除已批准",
+  entitlement_template_delete_rejected: "权益模板删除已驳回",
   ticket_entitlement_bound: "票种权益已绑定",
   merchant_concession_application_submitted: "让利申请已提交并确认",
   ticket_price_rule_created: "票价规则已创建",

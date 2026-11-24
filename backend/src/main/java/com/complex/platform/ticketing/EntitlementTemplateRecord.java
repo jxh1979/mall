@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
@@ -42,8 +42,15 @@ public record EntitlementTemplateRecord(
         String deleteReason,
         // 批10/E(V380):内部结算 SKU 目录引用(internal_price_catalog.item_code)。agreement_price_cent 自此为
         // 目录价快照(只读,系统在设引用/目录转正时同步);改价一律回目录走草案复核,模板侧无任何改价入口。
-        String catalogItemCode
+        String catalogItemCode,
+        // 第十八批 BY 段第 387 条 387-R1（第十八批裁决 81「每个分类都显示存档理由」）：含已存档列表带出存档理由（V271 archive_reason 列）。
+        String archiveReason
 ) implements ArchivableRecord<EntitlementTemplateRecord> {
+    /** 387-R1：存档理由之前的签名，既有构造点零改动，archiveReason 取空。 */
+    public EntitlementTemplateRecord(String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status, String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt, String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId, java.time.Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy, java.time.Instant deleteRequestedAt, String deleteReason, String catalogItemCode) {
+        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow, exclusiveMerchantId, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, catalogItemCode, null);
+    }
+
 
     // ponytail: V253 前的构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
     //           避免为 6 个新字段改所有既有 16 参构造点;日后语义要变则删本构造让编译逼出所有点。
@@ -62,7 +69,7 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode);
+                catalogItemCode, archivedAt == null ? null : archiveReason);
     }
 
     public EntitlementTemplateRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -71,7 +78,7 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode);
+                catalogItemCode, archiveReason);
     }
 
     /**
@@ -83,6 +90,6 @@ public record EntitlementTemplateRecord(
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, snapshotPriceCent,
                 consumptionWindow, exclusiveMerchantId,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                catalogItemCode);
+                catalogItemCode, archiveReason);
     }
 }

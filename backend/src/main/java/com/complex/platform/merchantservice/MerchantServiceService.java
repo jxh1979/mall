@@ -126,18 +126,25 @@ public class MerchantServiceService {
     }
 
     public PageResponse<MerchantWorkOrderRecord> listWorkOrders() {
-        return listWorkOrders(false);
+        return listWorkOrders(false, 1, DEFAULT_PAGE_LIMIT);
     }
 
-    /** V264：includeArchived=false（默认）排除已存档工单；true 时含存档（供后台管理存档件）。 */
-    public PageResponse<MerchantWorkOrderRecord> listWorkOrders(boolean includeArchived) {
+    /**
+     * V264：includeArchived=false（默认）排除已存档工单；true 时含存档（供后台管理存档件）。
+     * 第十八批 BY 段第 383 条 383-R1（BSM:569「进去可以看到全部被存档的对象」）：按 page、size 分页，page 小于 1 按 1，
+     * size 小于 1 或大于 100 按 100；不带参数＝第 1 页 100 条，同原来。
+     */
+    public PageResponse<MerchantWorkOrderRecord> listWorkOrders(boolean includeArchived, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 || size > DEFAULT_PAGE_LIMIT ? DEFAULT_PAGE_LIMIT : size;
+        long offset = (long) (safePage - 1) * safeSize;
         List<MerchantWorkOrderRecord> records;
         try {
-            records = repository.findWorkOrdersByScope(authorizationService.currentMerchantScope(), includeArchived, DEFAULT_PAGE_LIMIT);
+            records = repository.findWorkOrdersByScope(authorizationService.currentMerchantScope(), includeArchived, safeSize, offset);
         } catch (ApiException exception) {
             Set<String> projects = staffReach(exception, "merchant.service_work_order.view").organizationIds();
             records = projects.isEmpty() ? List.of()
-                    : repository.findWorkOrdersByMerchantProjects(projects, includeArchived, DEFAULT_PAGE_LIMIT);
+                    : repository.findWorkOrdersByMerchantProjects(projects, includeArchived, safeSize, offset);
         }
         auditEventService.recordSuccess(
                 "merchant_service.listMerchantServiceWorkOrders.succeeded",
@@ -148,7 +155,7 @@ public class MerchantServiceService {
                 null,
                 Map.of("count", records.size())
         );
-        return new PageResponse<>(records, 1, DEFAULT_PAGE_LIMIT, records.size());
+        return new PageResponse<>(records, safePage, safeSize, records.size());
     }
 
     /** 第十八批 M 段第 111 条 111-R1（BSM:1466「我的工单：只看派给自己的工单和处理进度。」）：员工手机「我的工单」只读列出派给本人的商户服务工单。 */
@@ -945,12 +952,24 @@ public class MerchantServiceService {
         MerchantWorkOrderRecord saved = repository.saveWorkOrder(order.withDelete("pending", actorId(), now, reason, now));
         auditEventService.recordSuccess("merchant_service.work_order.delete_requested",
                 "merchant.service_work_order.close", BUSINESS_TYPE, id, requestId(), null, Map.of());
-        return saved;
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            return saved;
+        }
+        // 第十八批 BY 段第 383 条 383-R1（BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：
+        // 当场删除，占用检查照走，另落一条 delete_approved；有占用 409，本方法事务整笔回滚。
+        executeWorkOrderDelete(id);
+        auditEventService.recordSuccess("merchant_service.work_order.delete_approved",
+                "merchant.service_work_order.approve", BUSINESS_TYPE, id, requestId(), null, Map.of());
+        return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(), saved.deleteReason(), saved.updatedAt());
     }
 
     /** 审批删除申请。approved 且无活引用（工单已终态）→ 物理删除；rejected → 回 none。禁自审。 */
     @Transactional
     public MerchantWorkOrderDeleteDecision approveDeleteWorkOrder(String id, MerchantWorkOrderDeleteApprovalRequest request) {
+        // 第十八批 BY 段第 383 条 383-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：批准与驳回都过这道闸。
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "商户服务工单删除须由最高权限本人批准");
+        }
         MerchantWorkOrderRecord order = findWorkOrder(id);
         checkMerchantOwnership(order.merchantId(), "merchant.service_work_order.approve");
         if (!"pending".equals(order.deleteStatus())) {
@@ -971,14 +990,18 @@ public class MerchantServiceService {
                     "merchant.service_work_order.approve", BUSINESS_TYPE, id, requestId(), null, Map.of());
             return new MerchantWorkOrderDeleteDecision(id, "rejected", false);
         }
-        long refs = repository.countWorkOrderReferences(id);
-        if (refs > 0) {
-            throw ApiException.conflict("WORK_ORDER_IN_USE", "工单未终结（须先关闭或取消），不可删除");
-        }
-        repository.deleteWorkOrder(id);
+        executeWorkOrderDelete(id);
         auditEventService.recordSuccess("merchant_service.work_order.delete_approved",
                 "merchant.service_work_order.approve", BUSINESS_TYPE, id, requestId(), null, Map.of());
         return new MerchantWorkOrderDeleteDecision(id, "approved", true);
+    }
+
+    /** 删前查占用（未关闭或取消的工单算占用），无占用即删除；审批通过与最高权限本人发起即删共用（383-R1）。 */
+    private void executeWorkOrderDelete(String id) {
+        if (repository.countWorkOrderReferences(id) > 0) {
+            throw ApiException.conflict("WORK_ORDER_IN_USE", "工单未终结（须先关闭或取消），不可删除");
+        }
+        repository.deleteWorkOrder(id);
     }
 
     private MerchantWorkOrderRecord findWorkOrder(String id) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -12,6 +12,7 @@ import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { ComplaintFollowupDialog } from "./ComplaintFollowupDialog";
+import { ArchiveLifecycleActions, archiveStateLabel } from "./ArchiveLifecycleActions";
 import { WorkOrderMaterialsPanel } from "./WorkOrderMaterialsPanel";
 import type { AdminPageProps, GovernanceProjectRow } from "../types";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -22,6 +23,7 @@ type FacilityEquipmentRow = {
   spaceId?: string | null; brand?: string | null; responsibleUserId?: string | null;
   maintenanceCycleDays?: number | null; nextMaintenanceDue?: string | null; lastMaintenanceType?: string | null;
   alarmSource?: string | null; alarmNote?: string | null;
+  archivedAt?: string | null; deleteStatus?: string;
 };
 type FacilityWorkOrderRow = {
   id: string; code?: string; workOrderType: string; priority: string; status: string; title: string;
@@ -160,6 +162,9 @@ function statusBadge(status?: string | null) {
 
 export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [equipment, setEquipment] = React.useState<FacilityEquipmentRow[]>([]);
+  // 第十八批 BY 段第 383 条 383-R3（BSM:569「想恢复点「取消存档」即可」）：默认不列已存档设备，勾选后带 include_archived=true 重新拉取（同员工档案页）。
+  const [includeArchivedEquipment, setIncludeArchivedEquipment] = React.useState(false);
+  const includeArchivedEquipmentRef = React.useRef(false);
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
   // 第十八批 M 段第 111 条 111-R3：投诉行的客诉跟进弹窗（BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环」）。
@@ -243,7 +248,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       setFaultRules(ruleList.data ?? []);
       setAlarmNotice(alarmList.notice ?? mineList.notice ?? dutyList.notice ?? ruleList.notice);
       const [equipmentRows, dueRows, orderRows, overdueRows, templateRows, taskRows, scrapList] = await Promise.all([
-        api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment"),
+        api.get<FacilityEquipmentRow[]>(includeArchivedEquipmentRef.current ? "/api/v1/facility/equipment?include_archived=true" : "/api/v1/facility/equipment"),
         loadSecondary(() => api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment/maintenance-due"), [] as FacilityEquipmentRow[]),
         api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders"),
         loadSecondaryIfPermitted(canWorkOrderManage, () => api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"), [] as FacilityWorkOrderRow[]),
@@ -842,6 +847,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           items={[
             { key: "equipment", label: "① 设备台账", forceRender: true, children: (<>
         <h3>设备台账</h3>
+        <label><input type="checkbox" data-testid="facility-equipment-include-archived" checked={includeArchivedEquipment} onChange={(event) => { includeArchivedEquipmentRef.current = event.target.checked; setIncludeArchivedEquipment(event.target.checked); void reload(); }} />显示已存档设备</label>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-equipment-table">
             <thead><tr><th>编号</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th><th>详情</th></tr></thead>
@@ -849,13 +855,15 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-equipment-${row.id}`}
                 onClick={() => openEquipmentDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEquipmentDetail(row); } }}>
-                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{statusBadge(row.status)}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{archiveStateLabel(row) ?? statusBadge(row.status)}</td>
                 <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td>
                 <td>{zh(row.alarmSource)} {row.alarmNote ?? ""}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => setMaintenanceForm({ equipmentId: row.id, maintenanceType: "" })}>维保完成</PermissionButton>
                   {row.status !== "retired" ? <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-scrap-open-${row.id}`} onClick={() => setScrapForm({ equipmentId: row.id, reason: "", disposalMethod: "", finalApproverId: "" })}>申请报废</PermissionButton> : null}
+                  <ArchiveLifecycleActions api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError}
+                    row={row} basePath={`/api/v1/facility/equipment/${row.id}`} manage={EQUIPMENT} approve={["facility.equipment.approve"]} resultPrefix="facility_equipment" testIdPrefix="facility-equipment" onChanged={reload} />
                 </td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看设备详情" onClick={(event) => { event.stopPropagation(); openEquipmentDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>

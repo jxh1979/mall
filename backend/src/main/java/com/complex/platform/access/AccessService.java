@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.48
+// 文件版本：V0.49
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -995,7 +995,7 @@ public class AccessService {
             switch (action) {
                 case "archive" -> {
                     if (current.archivedAt() != null || current.deletedAt() != null) throw ApiException.conflict("INVALID_STATE", "模板已存档");
-                    updated = current.withLifecycle(now, null, null, null, now);
+                    updated = current.withLifecycle(now, null, null, null, now).withArchiveReason(reason);
                 }
                 case "restore" -> {
                     if (current.archivedAt() == null) throw ApiException.conflict("INVALID_STATE", "模板未存档");

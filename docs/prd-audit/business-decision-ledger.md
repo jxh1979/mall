@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.39
+文档版本：V1.40
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3982,6 +3982,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 77 | **第 372 条 外部审计、监管「只能查看划定的时间段」怎么落**（题面：「【第 372 条】外部审计、监管「只能查看划定的时间段」怎么落？ 前因：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改」。同一文件讲账号期限一律用「有效期」，这句用「时间段」且作查看对象，字面更像数据时段；但当初落地按授权时效做。 现状：「范围」已有（套外部审计模板或逐项临时授权，只限所给项目）。「时间段」只有账号层面期限：外部机构账号有效期（可不填＝长期）、临时授权到期时间；外部审计模板本身不带有效期。外审账号有效期间看到的是该项目有史以来全部记录。 分歧：「时间段」指能看哪段时间发生的数据（如年审只看 2026 年度），还是账号在哪段时间能进来看（如只在进场一个月内有效）。」）—— 操作员选「按数据发生时间（推荐）」：开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完。（未选：「按账号授权时效」「暂不做保留登记」）（2026-11-20 弹窗；来由：18BT 只读设计第 372 条待裁题。控制席说明：工作量大，另起只读设计按业务域拆成若干段分轮做；18BT 本段只做第 370 条。） | 待开发清单第 372 条（18BT） |
 | 78 | **第 264 条 免费权益记为「商户让利」时系统要不要收商户的申请确认**（题面：「【第 264 条】把一项免费权益记成「商户让利」（核销后不给商户结算）时，系统要不要收商户的申请确认材料？ 前因：业务地图与枚举速查原句「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；另写「商户签约参加平台活动的其折扣即属后者」。只写了前提，没写申请和书面确认放进系统还是线下存档。最接近的是合同运营细则「合同签署先线下签纸质、系统上传扫描件归档」，但那句管的是商户合同。 现状：后台「票务策略」页配票种权益时，免费权益的「成本承担方」下拉直接选「商户让利型」就能保存发布；系统不收任何材料，也不记商户有没有申请确认，留痕只有谁什么时候绑了这项权益。 分歧：系统要不要承载这份申请与确认；要的话是运营代传商户纸面确认，还是商户自己在系统里申请确认。组合通票搭餐饮零售免费券、酒吧加送赠饮、商户参加平台活动，都是日常会遇到的。」）—— 操作员选「商户在系统里申请确认」：商户用自己的账号提交让利申请（哪张票、哪项权益）并在线确认，运营配票种时只能从已确认的申请里选商户让利型。（未选：「运营上传确认材料（推荐）」「线下存档系统不管」）（2026-11-20 弹窗；来由：18BV 只读设计第 264 条待裁题。控制席说明：设计原按推荐项写，按所选选项重做只读设计后再实现。） | 待开发清单第 264 条（18BV） |
 | 80 | **自定事项第 49 条复议：有价的餐饮零售权益能不能标成「商户让利」**（题面：「【自定第 49 条·有价的餐饮零售权益能不能标成「商户让利」】前因：第 264 条（你选了「商户在系统里申请确认」）的设计顺带发现：票务策略页配通票时，餐饮、零售的「专属直付」权益就算有价格，出资方下拉也能选「商户让利型」，后端照存；核销时只看「商户让利」不看票面价，结算记 0，商户收不到这项有价权益的直付款。ENUM:37「收费型折扣券带价格，计入业态价格并参与通票池分配，平台按分账比例向商户付款」；BSM:751「商户让利的零元免费权益不结算」——原句把让利限在零元免费权益。我定的：不登记。理由是第 264 条做完后，要标商户让利必须先有该商户为这张票提交并确认的申请，我判断正常业务碰不到。重新看一遍后：商户仍可能对有价权益提交申请（误点或以为是活动折扣），而原句让利只管零元权益，拦一下成本很小。所以这次我改为推荐「登记并随第 264 条一并拦」。」）—— 操作员选「只零元权益能选让利（推荐）」：登记并随第 264 条（18BV）一并做：有价格的权益行不许选「商户让利型」，前端不给选、后端拒绝；商户让利申请也只能针对零元权益。（未选：「维持不登记」）（2026-11-21 弹窗；来由：操作员要求复议控制席自定事项。控制席说明：待开发清单第 420 条，随 18BV 第 264 条修复阶段一并做。） | 控制席自定事项（18BV） |
+| 81 | **第 387 条 已存档内容页要不要显示每条记录当初的存档理由**（题面：「【第 387 条】「已存档内容」页要不要显示每条记录当初的存档理由？前因：BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」BSM:576、577 写「存档及删除都需要填写理由」。删除另有 BSM:574「谁在什么时候、以什么理由删了什么，都有记录可查」，存档没有这样一句。现状：各类存档时都必须填理由、也存进了库；但本页 15 个分类只有服务项目、游乐项目权益绑定两类能显示理由，其余只显示存档时间和存档人；空间类型连时间和存档人也没存。设施设备、商户服务工单、员工档案等几类必填的理由在界面上任何地方都看不到。分歧：HTML 没写本页要显示哪些内容，属「属实但无依据」，按 11-19 规矩要问你。」）—— 操作员选「显示存档理由（推荐）」：每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由。（未选：「不显示，维持现状」）（2026-11-21 弹窗；来由：18BY 只读设计第 387 条待裁题。控制席说明：随 18BY 做 387-R1～R3） | 待开发清单第 387 条（18BY） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -12698,3 +12699,122 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 门禁：verify:data-isolation-spec、verify-full-admin-page-matrix、git diff --check 通过。
 - 18CM 合并前变基（2026-11-24）：本段自 e936ab4a 变基到 origin/main f8d8260e；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.10、决策台账 V1.39，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 a839c766 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7340 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2087；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 12:01 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BY 落地位置补记（2026-11-20）：第十八批 BY 段（batch97）按 18BY 只读设计实现待开发清单第 383、387 条（已存档入口与存档理由组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BY 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BY 段，batch97）实现待开发清单第 383、387 条（18BY 只读设计 b97-audit/d6-by.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 383-R1～383-R6、387-R1～387-R3。第 387 条已由第十八批裁决 81 定为「显示存档理由」：每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由（裁决表第 81 行已插入本工作树决策台账）。本段工作树已快进到 18BM 合并后的主干 6068f50e：18BM 修复项 F12～F15 已让已存档内容页补游乐项目权益绑定、岗位角色模板两类，票价规则、卡座预订显示名称，存档理由与存档时间存档人按真实列，387 各 rid 按现码重新定位，已由 18BM 做掉的部分不重做。设计旁见（商户服务工单页主列表只显示最近 100 条等）已登记为待开发清单第 432 条等待核实条目，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 6068f50e 开工（第六轮 13 段并行），变基到 7a19a646 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BY 落地位置补记（第 383、387 条；本段迁移 V740；新增操作 0 个，只改既有操作的说明、查询参数与失败码）
+  - 383-R1（商户服务工单删除只认最高权限，最高权限本人申请即删；列表加分页参数）
+    - 依据：BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；BSM:569「进去可以看到全部被存档的对象」；第十八批裁决 71 所选选项②「……也可以自己发起删除、即时生效」；18AO 落地补记「不做：订台、商户服务工单、权益模板的删除审批（三者都没有客户端入口，随各自入口条目做……）」。
+    - 改法与落地位置：
+      - MerchantServiceService.approveDeleteWorkOrder 第一句加最高权限闸，非最高权限 403 MASTER_APPROVAL_REQUIRED，批准与驳回都过闸。
+      - 查占用并软删抽成 MerchantServiceService.executeWorkOrderDelete。
+      - MerchantServiceService.requestDeleteWorkOrder 遇最高权限本人当场删除，另落 merchant_service.work_order.delete_approved；有占用 409 WORK_ORDER_IN_USE，整笔回滚。
+      - 分页：MerchantServiceController.listWorkOrders 加 page（默认 1）、size（默认 100）；MerchantServiceService.listWorkOrders(includeArchived, page, size) 中 page 小于 1 按 1，size 小于 1 或大于 100 按 100。
+      - MerchantServiceRepository.findWorkOrdersByScope、findWorkOrdersByMerchantProjects 加 offset 参数，JdbcMerchantServiceRepository 按 LIMIT、OFFSET 分页。
+      - 契约：listMerchantServiceWorkOrders 补 include_archived、page、size 三个查询参数；requestDeleteMerchantServiceWorkOrder 加 WORK_ORDER_IN_USE；approveDeleteMerchantServiceWorkOrder 加 MASTER_APPROVAL_REQUIRED。由契约代理改。
+    - 测试：
+      - MerchantWorkOrderMasterDeleteJdbcIntegrationTests（nonMasterApproveDelete_403MasterApprovalRequired_stillPending、masterDeleteRequestOnArchivedClosedOrder_takesEffect、masterDeleteRequestOnOpenOrder_409WorkOrderInUse_rolledBack）
+      - MerchantWorkOrderListPagingJdbcIntegrationTests（includeArchivedListPagesPastFirstHundred、platformStaffIncludeArchivedListPagesPastFirstHundred：商户账号与不挂商户的平台员工两条查询都翻到第 2 页）
+      - 同批改既有：MerchantServiceControllerTests.listUsesViewPermissionAndPageResponseShape；MerchantWorkOrderArchiveDeleteJdbcIntegrationTests（审批人改最高权限、ordinaryApplicantCannotApproveMasterOnlyDeletion）；MerchantWorkOrderArchiveDeleteHttpJdbcIntegrationTests.deleteRequestThenOnlyMasterMayApprove
+  - 383-R2（权益模板删除只认最高权限，最高权限本人申请即删）
+    - 依据：BSM:577 同上；BSM:570「由具备最高权限的人审批通过后执行（申请人不能审批自己的申请）」；第十八批裁决 71 所选选项②。
+    - 改法与落地位置（照 18AO 249-R4 票种写法）：
+      - TicketingService.approveDeleteEntitlementTemplate 先过 requireMasterApproval。
+      - TicketingService.requestDeleteEntitlementTemplate 遇最高权限本人调 TicketCatalogService.executeDeleteEntitlementTemplate，记 TicketingWriteOperation.APPROVE_DELETE_ENTITLEMENT_TEMPLATE 留痕，返回 delete_status=approved。
+      - 占用提示抽成 TicketCatalogService.templateInUse，两处共用。
+      - 契约：requestDeleteEntitlementTemplate、approveDeleteEntitlementTemplate 的说明与 x-failure-codes 整段，由契约代理改。
+    - 测试：EntitlementTemplateMasterDeleteJdbcIntegrationTests（nonMasterApproveDelete_403MasterApprovalRequired、masterDeleteRequestOnArchivedUnboundTemplate_takesEffect、masterDeleteRequestOnTemplateBoundToTicketType_409EntitlementTemplateInUse_rolledBack）
+  - 383-R3（楼宇运营工作台设备台账存档、取消存档、申请删除、审批入口）
+    - 依据：BSM:577「设施设备……现在也支持存档、以及审批后删除」；BSM:569「想恢复点「取消存档」即可」；BSM:570。
+    - 改法与落地位置：
+      - 新组件 ArchiveLifecycleActions 与 archiveStateLabel（两页共用，照 BarReservationLifecycleActions）。
+      - FacilityWorkbenchPage 设备台账加「显示已存档设备」，勾选后带 include_archived=true 重读；状态列显示「已存档」或「待审批删除」；操作格挂存档、取消存档、申请删除（最高权限本人「直接删除」）、批准与驳回。
+      - fieldLabels.ts 加 facility_equipment_archived 等 5 个结果键。
+      - 页面矩阵 ADM-FAC-001 补四个接口与 facility.equipment.approve。
+      - 后端不改。
+    - 测试：FacilityWorkbenchPage.archive.test.tsx（4 例）
+  - 383-R4（商户服务工单页存档、取消存档、申请删除、审批入口）
+    - 依据：BSM:577「商户服务工单……现在也支持存档、以及审批后删除」；BSM:569；BSM:570。
+    - 改法与落地位置：
+      - MerchantWorkOrdersPage 加「显示已存档工单」，复用 ArchiveLifecycleActions（管理码 merchant.service_work_order.close，批准码 merchant.service_work_order.approve）。
+      - 「显示已存档工单」勾选框放在页头之后、列表块之外（同员工档案页），没有未存档工单（列表空态）时也能勾。
+      - types.ts 的 MerchantWorkOrderRow 补 archivedAt、deleteStatus。
+      - fieldLabels.ts 加 merchant_work_order_archived 等 5 个结果键。
+      - 页面矩阵 ADM-MER-001 补四个接口与批准码。
+    - 测试：MerchantWorkOrdersPage.archive.test.tsx（5 例）
+  - 383-R5（票务策略页权益模板存档、取消存档、申请删除、审批入口）
+    - 依据：BSM:567「对配置类主数据——商户档案、票种、价格规则、酒吧商品/分类/套餐等——现在可以：」；BSM:569「点「存档」就从各处的选择列表里隐藏」；BSM:573「已存档的票种、商品等，不能再被拿去下单、配价、组套餐」；BSM:577。
+    - 改法与落地位置：
+      - TicketingPoliciesPage 的 archiveCatalog、requestDeleteCatalog、approveDeleteCatalog、catalogActions 的 kind 扩为三值，改为查 CATALOG_KINDS 常量表。
+      - archiveCatalog 包 try/catch：存档、取消存档被拒或请求失败报中文原因（同 requestDeleteCatalog，票种、派生价规则一并）。
+      - 读模板带 includeArchived；「③ 权益模板」加「显示已存档权益模板」与操作列。
+      - 新建票向导、第三方券配置、通票组装三处模板下拉不列已存档。
+      - fieldLabels.ts 加 entitlement_template_archived 等 5 个结果键。
+      - 页面矩阵 ADM-TKT-001 补四个接口与 ticket.entitlement.approve。
+    - 测试：TicketingPoliciesPage.templateArchive.test.tsx（6 例）
+  - 383-R6（已存档内容页的商户服务工单逐页取完）
+    - 依据：BSM:569「进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」
+    - 改法与落地位置：ArchivedContentPage 的 loadMerchants 改为通用 loadAllPages，商户档案与商户服务工单都逐页取完（每页 100 条）。
+    - 测试：ArchivedContentPage.workOrderPaging.test.tsx
+  - 387-R1（11 类含已存档列表带出存档理由）
+    - 依据：第十八批裁决 81「每个分类都显示存档理由」；BSM:569；BSM:576、577「存档及删除都需要填写理由」。
+    - 改法与落地位置：
+      - 11 个记录类末尾加 archiveReason，带旧签名构造器，复制方法都带上，取消存档时清空：MerchantRecord、TicketTypeRecord、TicketPriceRuleRecord、EntitlementTemplateRecord、BarProductRecord、BarProductCategoryRecord、BarComboRecord、BarReservationRecord、StaffProfileRecord、FacilityEquipmentRecord、MerchantWorkOrderRecord。
+      - 各 Jdbc 映射读 archive_reason，显式列清单的 SELECT 加列：JdbcPlatformRepository.mapMerchant、JdbcTicketingRowMapper、JdbcBarRowMapper、JdbcBarPosCatalogRepository、JdbcStaffRepository.mapProfile、JdbcFacilityRepository.mapEquipment、JdbcMerchantServiceRepository.mapWorkOrder。
+      - BarComboRecord.withoutInternalPrice 改为原样带上存档与删除字段及理由；JdbcBarPosCatalogRepository.withItems 也带上理由。
+      - 契约：这些列表都回通用 Page，没有专用记录 schema，由契约代理在各列表操作说明里补 archive_reason。
+    - 测试：ArchiveReasonListedJdbcIntegrationTests（ticketTypeListCarriesArchiveReason、facilityEquipmentListCarriesArchiveReason、merchantWorkOrderListCarriesArchiveReason、staffProfileListCarriesArchiveReason、barProductListCarriesArchiveReason、barComboListWithoutInternalPriceViewCarriesArchiveInfo）
+  - 387-R2（空间类型补存存档时间、存档人、理由；岗位角色模板补存理由并带出存档人）
+    - 依据：第十八批裁决 81「空间类型补存存档时间、存档人、理由，岗位角色模板补存理由」。
+    - 改法与落地位置：
+      - 迁移 V740：space_type_dictionary 加 archived_at、archived_by、archive_reason；position_role_templates 加 archive_reason。
+      - SpaceTypeRecord 加三项。JdbcPlatformRepository.saveSpaceType、listSpaceTypes、findSpaceTypeById 存取这三列。
+      - PlatformService.archiveSpaceType 写入；unarchiveSpaceType 清空；requestDeleteSpaceType 与 doApproveDeleteSpaceType 原样保留原值。
+      - PositionRoleTemplate 加 archivedBy、archiveReason 与 withArchiveReason；AccessService.changePositionTemplateLifecycleAudited 的 archive 分支带上理由。
+      - JdbcAccessRepository.savePositionTemplateLifecycle 存档置理由、恢复清空；mapPositionRoleTemplate 读出 archived_by 与 archive_reason。
+    - 测试：SpaceTypeArchiveInfoJdbcIntegrationTests（archiveRecordsTimeActorAndReasonAndUnarchiveClearsThem、rejectedDeleteKeepsArchiveTimeActorAndReason）；PositionTemplateArchiveReasonJdbcIntegrationTests.archiveCarriesArchivedByAndReasonAndRestoreClearsThem
+  - 387-R3（已存档内容页每类都显示存档时间、存档人、存档理由）
+    - 依据：第十八批裁决 81；BSM:569。
+    - 改法与落地位置：
+      - ArchivedContentPage 删去 18BM 的按分类配列机制（Column、COLUMN_LABELS、DEFAULT_COLUMNS、WITH_REASON、各分类的 columns 字段），表头固定为名称、编号、存档时间、存档人、存档理由、操作。
+      - 页面矩阵 ADM-OPS-003 的 key_fields 与 validation 改为如实。
+    - 测试：ArchivedContentPage.test.tsx 改「只列有查看权限的分类；……带名称、北京时间的存档时间、存档人与存档理由」「每类都显示存档时间、存档人、存档理由（服务项目；空间类型补存的三项也显示）」两例，以及票价规则、卡座预订、岗位角色模板三例的表头与单元格。
+- 18BY 契约落地（K-contract，第 383、387 条）：新增操作 0 个；只改 openapi-p0 的 yaml 与 json 两份，同值就地改，不改 info.version。
+  - 383-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；BSM:569「进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」）：
+    - listMerchantServiceWorkOrders 补查询参数 include_archived（boolean，默认 false）、page（默认 1，小于 1 按 1）、size（默认 100，小于 1 或大于 100 按 100）；说明补按创建时间倒序分页、响应 page 与 page_size 回收口后的值、total 为本页条数。对应代码：MerchantServiceController.listWorkOrders、MerchantServiceService.listWorkOrders(boolean, int, int)。
+    - requestDeleteMerchantServiceWorkOrder 说明补最高权限本人发起即删、照查占用、409 WORK_ORDER_IN_USE 整笔回滚、另落 merchant_service.work_order.delete_approved、返回 delete_status=approved；x-failure-codes 加 WORK_ORDER_IN_USE。对应代码：MerchantServiceService.requestDeleteWorkOrder、executeWorkOrderDelete。
+    - approveDeleteMerchantServiceWorkOrder 说明把原第 93 条 93-R3「平台管理员不限」及其按范围审批的子句改为：只认最高权限本人，批准与驳回都要，先于取单判，其他人 403 MASTER_APPROVAL_REQUIRED；最高权限再过 93-R3 范围闸、按全部项目判。x-failure-codes 加 MASTER_APPROVAL_REQUIRED，原有码保留。对应代码：MerchantServiceService.approveDeleteWorkOrder。
+  - 383-R2（同 BSM:577 两句）：
+    - requestDeleteEntitlementTemplate 说明照 requestDeleteTicketType 改写为最高权限本人发起即删、照查占用、另留痕 ticket_entitlement_template.delete_approved；新增 x-failure-codes：VALIDATION_FAILED、ENTITLEMENT_TEMPLATE_NOT_FOUND、ENTITLEMENT_TEMPLATE_NOT_ARCHIVED、ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING、ENTITLEMENT_TEMPLATE_IN_USE。
+    - approveDeleteEntitlementTemplate 说明由「上级审批删除申请……物理删除」改为只认最高权限本人（403 MASTER_APPROVAL_REQUIRED）、软删除、返回 template_id、decision、deleted；新增 x-failure-codes：VALIDATION_FAILED、ENTITLEMENT_TEMPLATE_NOT_FOUND、ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING、ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN、ENTITLEMENT_TEMPLATE_IN_USE、MASTER_APPROVAL_REQUIRED。
+    - 对应代码：TicketingService.requestDeleteEntitlementTemplate、approveDeleteEntitlementTemplate（requireMasterApproval）；TicketCatalogService.executeDeleteEntitlementTemplate、templateInUse。
+  - 387-R1（第十八批裁决 81 所选选项原文「每个分类都显示存档理由」）：这些列表都回通用 components/responses/Page，没有专用的记录 schema，所以在 listMerchants、listTicketTypes、listTicketPriceRules、listEntitlementTemplates、listBarProducts、listBarProductCategories、listBarCombos、listBarReservations、listStaffProfiles、listFacilityEquipment、listMerchantServiceWorkOrders 这 11 个操作的说明里各补一句：每行另带 archive_reason（可为空，存档时所填，取消存档后为空），单条返回的同类记录也带该键，值以列表读出为准。
+  - 387-R2（第十八批裁决 81 原文「空间类型补存存档时间、存档人、理由，岗位角色模板补存理由」）：
+    - listSpaceTypes 说明补每行带 archived_at、archived_by、archive_reason，存档时写、取消存档清空、申请删除与审批删除时原样保留（SpaceTypeRecord、PlatformService.archiveSpaceType、unarchiveSpaceType）。
+    - listPositionRoleTemplates 新加说明：每行带 archived_by、archive_reason。
+    - changePositionRoleTemplateLifecycle 说明补 archive 时存理由、restore 清空这两项，返回的模板也带这两个键（archive 的返回里 archived_by 为空，以列表读出为准）。对应代码：PositionRoleTemplate、AccessService 的岗位模板生命周期、JdbcAccessRepository.savePositionTemplateLifecycle。
+  - 校验：yaml 与 json 深比较一致；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部 PASS。本段契约无迁移、无新权限码。
+- 18BY 汇合段（J）：tests/e2e 没有改。本段改了四个页面：楼宇运营工作台 FacilityWorkbenchPage、商户服务工单页 MerchantWorkOrdersPage、票务策略页 TicketingPoliciesPage、已存档内容页 ArchivedContentPage。在 full-admin-mvp、full-admin-remaining、full-admin-ui-hardening、full-admin-visual、property-fee-evidence 五份后台 spec 与 support/mock-api 里，逐个核了这几页的选择器、断言与假响应。假响应按路径命中，不看查询串，所以列表新加的 includeArchived、include_archived、page、size 不影响命中。新按钮都用新 testId，与既有断言不冲突。视觉基线四张都不是本段改的页面，没有重拍。门禁结论：删 target 后在新库跑后端全量，本段迁移 V740 真迁，0 红。管理端 typecheck 0 错，vitest 全绿。客人端 customer-app、customer-miniapp、customer-core 三个工作区单测全绿。安卓员工端 gradle test 0 红，android-app 编译通过。chromium 五份后台 spec 全过。镜像里重生成四份生成物后，verify:p0-contract 通过；四份里只有数据隔离规格的最新迁移行随 V740 变化，由收尾统一重生成。yaml 与 json 深比较一致，本段新增操作 0、删除 0，components schema 没改。改动的 18 个既有操作只动了说明、查询参数与失败码：listMerchantServiceWorkOrders、requestDeleteMerchantServiceWorkOrder、approveDeleteMerchantServiceWorkOrder、listEntitlementTemplates、requestDeleteEntitlementTemplate、approveDeleteEntitlementTemplate、listMerchants、listTicketTypes、listTicketPriceRules、listBarProducts、listBarProductCategories、listBarCombos、listBarReservations、listStaffProfiles、listFacilityEquipment、listSpaceTypes、listPositionRoleTemplates、changePositionRoleTemplateLifecycle。页面矩阵校验与结果标签校验通过，git diff --check 干净。入口文档基线因新迁移报快照落后，按任务书由收尾跑 refresh-entry-doc-baseline 回填。
+- D-docs（18BY 文档组，第 383、387 条现状句同步）：
+  改法：PRD 和下位文档里的现状句、待补句就地改成现码实情，不新增业务规则；有版本号的每份只升一次，有修订表的加一行。
+  落地位置：
+  - 平台治理 PRD §15C.1 实现现状块：
+    - 已存档内容页每类都列存档时间、存档人、存档理由（387-R1～R3；ArchivedContentPage 的 ARCHIVED_CATEGORIES 全类同列；SpaceTypeRecord、PositionRoleTemplate 补字段；迁移 V740）。
+    - 商户档案、商户服务工单逐页取完（383-R6，ArchivedContentPage.loadAllPages）。
+  - 平台治理 PRD §15C.2 新增实现现状块：
+    - 设施设备、商户服务工单、通票权益模板有了后台存档与删除入口（383-R3～R5；ArchiveLifecycleActions、FacilityWorkbenchPage、MerchantWorkOrdersPage、TicketingPoliciesPage.catalogActions）。
+    - 商户服务工单与权益模板的删除只认最高权限本人，最高权限本人申请即删（383-R1、383-R2；MerchantServiceService.requestDeleteWorkOrder、approveDeleteWorkOrder；TicketingService.requestDeleteEntitlementTemplate、approveDeleteEntitlementTemplate）。
+    - 工单列表加 page、size（listMerchantServiceWorkOrders）。
+    - §16 变更日志加一行。
+  - 票务 PRD §12 已确认第 11 条末句「权益模板删除不在本条」改成权益模板删除同票种规则，并写进票务策略页「③ 权益模板」入口与三处模板下拉过滤（requestDeleteEntitlementTemplate、approveDeleteEntitlementTemplate）；§14 加一行。
+  - 商户服务工单接口契约 §3 接口表 GET /api/v1/merchant-service/work-orders 行补 include_archived、page、size（listMerchantServiceWorkOrders）。
+  - 数据存档与审批后删除范式设计 §8、§11.1 各补一段实现现状（§11.1 原句「前端存档/删除操作列按用户要求留后续」）。
+  依据：
+  - BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」
+  - BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - 第十八批裁决 71 所选选项②「……最高权限也可以自己发起删除、即时生效」。
+  - 第十八批裁决 81「每个分类都显示存档理由；空间类型补存存档时间、存档人、理由，岗位角色模板补存理由」。
+  测试：文档没有单测；node tools/verify-full-admin-page-matrix.mjs 通过，node tools/verify-entry-anchors.mjs 通过，git diff --check 干净。本组新增操作 0、迁移 0。
+- 18BY 合并前变基（2026-11-24）：本段自 7a19a646 变基到 origin/main 4723f2b8；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.11、决策台账 V1.40，Flyway 最新 V740（共 631 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BY 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 845c9561 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7357 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2103；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 12:45 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
