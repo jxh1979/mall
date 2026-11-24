@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.44
+文档版本：V1.45
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13215,3 +13215,119 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 测试：文档中引用 StaffShiftStaffOptionsJdbcIntegrationTests、StaffShiftApprovalSummaryJdbcIntegrationTests、StaffShiftAttendancePage.staffpick.test.tsx；校验 verify-full-admin-page-matrix 通过。
 - 18CJ 合并前变基（2026-11-24）：本段自 0ed7c377 变基到 origin/main bb2df36a；合并时 OpenAPI 共 1420 个操作（主干 1419）、info.version V1.15、决策台账 V1.44，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CJ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 0764f8bb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7418 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2120；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 14:34 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CN 落地位置补记（2026-11-20）：第十八批 CN 段（batch112）按 18CN 只读设计实现待开发清单第 372 条（外审数据时段第 3 段（财务其余查看码与开票导出））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CN 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CN 段，batch112）实现待开发清单第 372 条（18CN 只读设计 b112-audit/d7-cn.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 372-S3-R1～R6（R1 先做；R2、R3、R5 用 R1 的助手；R4 独立；R6 收口最后做）。第 372 条按第十八批裁决 77（按数据发生时间）分段，第 1 段（底座与财务域，18BX）与第 2 段（操作记录与证据＋票务核销，18CM PR #636）都已合入；本段工作树已快进到 18CM 合并后的主干，设计里「等 18CM 合入后」的各项照做，行号以现码 grep 为准。18CD（第 402 条开票清单内部往来组）尚未合并、在合并队列里，R3 契约补句接在 listSettlementInvoiceItems 现有描述末尾，合并时按文本合；本段不碰 SettlementInvoiceService、SettlementInvoicePage。andMonth 本段无调用方，照分段方案在本段加并用单元测试守住，段 4～6 只调用不再改 AuditDataWindow。设计质疑者复核补记的工资付款明细边界（上月工资应付行在段 1 台账里看得到、工资付款面板按工资月份 403）属两条既定口径交界，照设计不改；开票清单同页 settlementInvoiceSummary 不在段 3 上限内，本段不改。设计旁见①（通票结算审阅与开票清单不按项目隔离）②（平台财务读分红与商户费用 403）已登记待开发清单第 458、459 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 4723f2b8 开工（第七轮），变基到 efd57257 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CN 落地位置补记（第 372 条第 3 段：财务其余查看与开票导出；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增操作 0 个，迁移 0 个（预留 V800～V803 未用），改 6 个既有操作的描述 listSettlementTransactions、listSettlementBills、listSettlementInvoiceItems、exportSettlementInvoiceItems、getPayrollBankPaymentContext、getPointsRecoveryDetail（getPayrollBankPaymentContext 新增失败码 OUT_OF_AUDIT_DATA_WINDOW），改 1 条契约规则 auditDataWindowRule 的已承载清单）
+  372-S3-R1 AuditDataWindow 补 andPeriod、andMonth 与内存筛选用的 covers
+  - 改法：
+    - access 包 AuditDataWindow 在 andDate 之后加三个静态助手，已有方法不动。
+    - andPeriod(起列, 止列)：有时段时拼「起列 >= 起日 AND 止列 <= 止日」，期间整段落在时段内才列。
+    - andMonth(年-月文本列)：只列整月落在时段内的月份。起日是 1 日取当月，否则取下月；止日是月末取当月，否则取上月；时段内没有整月时拼「AND FALSE」。本段没有调用方，留给段 4～段 6。
+    - covers(时刻)：没有时段或时刻为空时为真，否则按北京日期判断是否在起止内，两端都含。给须先过项目闸、再在内存里筛的子记录用。
+    - 带日期参数的查询都与时段直接 AND 取交集，不加 clamp。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录」
+  - 测试：AuditDataWindowTests.withoutWindowHelpersAddNothing、periodWholeMonthAndCoversFollowWindowInBeijingDays、wholeMonthKeepsMonthStartingOnFirstDayAndDropsMonthCutMidway、windowWithoutAnyWholeMonthMatchesNoMonth。
+  372-S3-R2 通票结算审阅：结算流水与月度结算单头按时段承载
+  - 改法：
+    - settlement 包 JdbcSettlementTransactionRepository.listVerificationSettled 与 countVerificationSettled 在商户条件后拼 AuditDataWindow.andInstant("COALESCE(business_at, created_at)")。发生时间取核销或冲正的业务时刻，与清单返回的 business_at 同口径；行与 total 同一条件。
+    - JdbcSettlementBillRepository.listBills 在排序前拼 AuditDataWindow.andPeriod("b.period_start", "b.period_end")，只列账期整段落在时段内的结算单。month 与时段同时生效，落在时段外返回空；LIMIT 24 作用在筛完之后。
+    - 这两处只有 SettlementQueryService.listSettlements、listBills 调用。
+    - getSettlementBillReview 不改：外审先被 requirePlatformScope 拦为 403。
+  - 依据：PGM:682（同上）；第十八批裁决 77（同上）。
+  - 测试：AuditDataWindowSettlementJdbcIntegrationTests.settlementTransactionsKeepOnlyBusinessTimeInsideWindowWithMatchingTotal、settlementBillsKeepOnlyPeriodsWhollyInsideWindowAndMonthNarrowsFurther。
+  372-S3-R3 开票清单导出（与列表、可编辑版重取同一取数）按开票期间承载
+  - 改法：
+    - settlement 包 JdbcSettlementInvoiceRepository.list 与 count 在 LIST_FILTER 之后拼 AuditDataWindow.andPeriod("period_start", "period_end")，只取开票期间整段落在时段内的条目。行与总数同一条件，periodStart 与时段同时生效。exportSettlementInvoiceItems、listSettlementInvoiceItems 与可编辑版重取 SettlementInvoiceController.viewTable 都经 SettlementInvoiceService.list 落到这里。
+    - SettlementInvoiceController.invoiceTable 的导出记录 filters 加 data_window，记所用外审数据时段，没有时段为空；写法同 FinanceService.arApTable。settlement.invoice.exported 的 row_count 即时段内条数。
+    - LIST_FILTER 常量、summarizeBySubject、listOverIssued 不改，settlementInvoiceSummary 不在段 3 上限内。
+  - 依据：
+    - PGM:686「每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件，导出记录本身永久保存、不在任何清理范围内。」
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录」
+  - 测试：AuditDataWindowSettlementJdbcIntegrationTests.invoiceItemsKeepOnlyInvoicePeriodsWhollyInsideWindowWithMatchingTotal、invoiceExportRecordsWindowAndCountsOnlyItemsInsideIt。
+  372-S3-R4 工资银行付款明细按工资单月份整月判定
+  - 改法：
+    - finance 包 FinancePayrollService.attempts 在项目、发薪主体与商户闸之后，按工资单月份 month 的 1 日与月末各调一次 AuditDataWindow.requireCovers。整月不在时段内时 403 OUT_OF_AUDIT_DATA_WINDOW；跨范围的仍先报 PAYROLL_FINANCE_SCOPE_MISMATCH。失败落 finance.payroll.attempts_view_failed。
+    - 付款尝试、同一支付日的其他工资单、待办更正随该工资单列出，不另筛，照第 1 段 InternalPayableExecutionService 只判父记录的先例。
+    - 写入口 prepare、submit、result 不改。
+  - 依据：PGM:682（同上）；第十八批裁决 77（同上）。
+  - 测试：AuditDataWindowSettlementJdbcIntegrationTests.payrollPaymentContextNeedsWholeWageMonthInsideWindow。
+  372-S3-R5 积分追回明细：先过全部来源范围，再只列时段内的追回与豁免记录
+  - 改法：
+    - customer 包 PointsRecoveryWaiverService.get 照旧按全部原奖励来源过项目与商户闸（跨范围 403 CROSS_PROJECT_FORBIDDEN，没有记录 404），之后用 AuditDataWindow.covers 只留时段内建立的追回记录，pending_points 只合计这些记录。
+    - 豁免查询在排序前拼 AuditDataWindow.andInstant("created_at")，按豁免办理时刻筛；豁免原件里的 lines 是那次豁免的快照，跟着豁免照常列出。
+    - 全部记录都在时段外时返回空明细，不报错。
+    - waive 不改。
+  - 依据：
+    - PGM:682（同上）
+    - 第十八批裁决 77 所选选项原文「外审账号在各清单、明细和导出里只看得到这段时间内发生的记录；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」
+  - 测试：AuditDataWindowSettlementJdbcIntegrationTests.pointsRecoveryDetailListsOnlyRecoveriesAndWaiversInsideWindow、pointsRecoveryDetailIsEmptyWithoutErrorWhenEveryRecordIsOutsideWindow、pointsRecoveryDetailChecksEverySourceScopeBeforeWindow。
+  372-S3-R6 段 3 收口
+  - 契约（契约代理统一改）：
+    - 上述 6 个操作描述各补本段口径；getPayrollBankPaymentContext 新增 x-failure-codes OUT_OF_AUDIT_DATA_WINDOW。
+    - exportSettlementInvoiceItems 导出记录 filters 一句补 data_window。
+    - auditDataWindowRule 已承载清单补「通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细」。
+  - 文档（文档组与收尾统一改）：platform-governance-prd 审计人员实现现状条与修订表、data-isolation 规格审计人员行、覆盖表 PGM-0095 备注（仍 PARTIAL）。
+  - 页面矩阵、FieldLabels、fieldLabels.ts、audit-labels.json 不改，本段没有新字段键、新事件、新接口。
+  - 不承载的 22 个入口与理由：
+    - getSettlementBillReview：requirePlatformScope，外审 403 PLATFORM_SCOPE_REQUIRED。
+    - listDividendPlans、listDividendStatements、getDividendStatement、listDividendReserveReleases：经 DividendService.scopeMerchant 或 checkMerchantOwnership 取 currentMerchantScope，不挂商户的外审 403 MERCHANT_SCOPE_REQUIRED。
+    - listDividendPeriodHolds、listDividendCloseouts、listDividendTaxRates、listDividendBarLoans：先 requirePlatformScope，外审 403。
+    - 主体税务三个入口（EntityTaxService.list、profit、listRates）：先 requirePlatformScope，外审 403。
+    - 商户费用三个入口（MerchantExpenseService.listEntries、summarize、listLockedMerchants）：取 currentMerchantScope，外审 403 MERCHANT_SCOPE_REQUIRED。
+    - 积分月账单七个入口：listTicketPointsBillingRules、listTicketPointsCalendars、listTicketPointsOutages 要全平台范围，外审 403；listTicketPointsBills 按卖方或收方主体过滤，外审拿到空清单；listTicketPointsBillItems、listTicketPointsBillObjections、listTicketPointsBillScheduleAdjustments 经 requireReadable，外审 403。
+  - 后端全量：7350 测，0 失败，0 错误（在 4723f2b8 基线上实跑）。
+- （契约部分，供并入「18CN 落地位置补记（第 372 条第 3 段：财务其余查看与开票导出；依据第十八批裁决 77；本段增量：新增 0 个操作、0 个迁移）」）
+  所有 rid 的共同依据：PGM:682「外部审计/监管只能查看划定的范围与时间段」，以及第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」。
+  - 372-S3-R2：
+    - listSettlementTransactions 描述补：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的结算流水，发生时间取核销业务时刻 business_at（与清单返回的 business_at 同口径，即 COALESCE(business_at, created_at)），分页结果与 total 同一条件。代码位置 JdbcSettlementTransactionRepository.listVerificationSettled、countVerificationSettled。
+    - listSettlementBills 描述补：只列账期 period_start～period_end 整段落在时段内的结算单，month 与时段同时生效。代码位置 JdbcSettlementBillRepository.listBills。
+    - 测试 AuditDataWindowSettlementJdbcIntegrationTests。
+  - 372-S3-R3：
+    - listSettlementInvoiceItems 描述补：只列开票期间整段落在时段内的条目，分页结果与 total 同一条件。
+    - exportSettlementInvoiceItems 描述：导出记录 filters 改为记 project_id、period_start、subject_entity_id、status、scope（全平台）与 data_window（外审数据时段，起～止，无时段为空）；另补只导出开票期间整段落在时段内的条目（与列表同取数），可编辑版重取按领取时的时段取数。
+    - 代码位置 JdbcSettlementInvoiceRepository.list、count，SettlementInvoiceController.invoiceTable、viewTable。
+    - 测试 AuditDataWindowSettlementJdbcIntegrationTests。
+  - 372-S3-R4：
+    - getPayrollBankPaymentContext 描述补：工资单月份 month 不是整月落在时段内时（该月首日或末日在时段外）403 OUT_OF_AUDIT_DATA_WINDOW，在项目、发薪主体与商户范围判定之后判（跨范围的仍先报 PAYROLL_FINANCE_SCOPE_MISMATCH）；付款尝试、同日其他工资单与待办更正随该工资单列出。
+    - 该操作新增 x-failure-codes: OUT_OF_AUDIT_DATA_WINDOW，写法同 getFinanceRefund、getInternalPayableExecution。
+    - 代码位置 FinancePayrollService.attempts。
+    - 测试 AuditDataWindowSettlementJdbcIntegrationTests。
+  - 372-S3-R5：
+    - getPointsRecoveryDetail 描述补：先按全部原奖励来源校验项目与商户范围（跨范围仍 403 CROSS_PROJECT_FORBIDDEN），再只列时段内建立的追回记录（lines，按 created_at）与时段内办理的豁免（waivers，按 created_at）；pending_points 只合计时段内的追回记录；全部在时段外时返回空 lines、waivers，pending_points 为 0。
+    - 代码位置 PointsRecoveryWaiverService.get。
+    - 测试 AuditDataWindowSettlementJdbcIntegrationTests。
+  - 372-S3-R6：x-contract-rules.auditDataWindowRule 的「已承载」清单补「通票结算流水与月度结算单头、开票清单与其导出、工资银行付款明细、积分追回明细」。
+  本段 OpenAPI 增量：新增 0 个操作，改 6 个既有操作的说明，给 1 个操作新增失败码，改 1 条契约规则。
+- 18CN 汇合（J）：e2e 不改。本段只在后端读取入口加外审数据时段条件，并改 6 个既有操作的说明：listSettlementBills、listSettlementTransactions、listSettlementInvoiceItems、exportSettlementInvoiceItems、getPointsRecoveryDetail、getPayrollBankPaymentContext。响应形状不变，前端与页面也不改，tests/e2e 的开票清单与积分追回页 mock、断言照旧可用，不用重拍截图基线。
+  门禁结论（在 4723f2b8 基线上实跑）：后端全量（新建空库，本段无迁移）、后台前端 typecheck 与全量单测、客人三个工作区单测、安卓员工端单测与 android-app 编译、五份后台 e2e spec（chromium）全部通过，0 红。四份生成物重生成后与工作树一致，verify:p0-contract 通过。契约 yaml 与 json 一致，本段新增 0 个操作；getPayrollBankPaymentContext 补失败码 OUT_OF_AUDIT_DATA_WINDOW；契约规则 auditDataWindowRule 补已承载清单。
+- 372-S3-R6（文档组，第十八批 CN 段第 372 条第 3 段）
+  - 改法与落地位置：
+    - 平台治理层 PRD（platform-governance-prd）§4「角色与使用场景」审计人员条的实现现状句：在「其余业务域分段承载中（待开发清单第 372 条）」之前补一句，写明财务其余查看与开票导出已承载（372-S3-R1～R5）。各入口按以下口径取时段：
+      - 通票结算流水：按核销业务时刻。
+      - 月度结算单头：账期整段落在时段内才列。
+      - 开票清单与其导出、可编辑版重取：开票期间整段落在时段内才列；导出记录筛选条件记下所用时段。
+      - 工资银行付款明细：工资月份须整月落在时段内，否则 403。
+      - 积分追回明细：先过全部来源范围，再只列时段内的追回与豁免记录。
+      - 分红、主体税务、商户费用、积分月账单与结算单审阅明细：外审账号本就 403 或取不到，不另承载。
+    - 同一 PRD 变更日志加一行，放在 18CM 那行之上。
+    - 多租户数据隔离规格（data-isolation-and-tenant-scope-security-spec）§10 审计人员行「落地承接」：「财务域、操作记录与证据、票务核销已按时段过滤」改为「财务域（含通票结算审阅、工资付款与积分追回明细）与开票清单导出、操作记录与证据、票务核销已按时段过滤」；其余业务域仍分段承载中。
+  - 对应代码：
+    - AuditDataWindow.andPeriod、andMonth、covers（andMonth 本段无调用方，留给段 4～段 6）；
+    - JdbcSettlementTransactionRepository.listVerificationSettled、countVerificationSettled；
+    - JdbcSettlementBillRepository.listBills；
+    - JdbcSettlementInvoiceRepository.list、count；
+    - SettlementInvoiceController.invoiceTable；
+    - FinancePayrollService.attempts；
+    - PointsRecoveryWaiverService.get。
+  - 对应契约：listSettlementTransactions、listSettlementBills、listSettlementInvoiceItems、exportSettlementInvoiceItems、getPayrollBankPaymentContext、getPointsRecoveryDetail，以及 x-contract-rules.auditDataWindowRule。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - PGM:686「每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件」
+    - 第十八批裁决 77「按数据发生时间」「十二个业务域上百个读取入口逐个加，分几轮做完」。
+  - 本组增量：新增操作 0 个，迁移 0 个，没有测试类。
+  - 门禁：verify-full-admin-page-matrix、verify:data-isolation-spec、git diff --check 通过。
+- 18CN 合并前变基（2026-11-24）：本段自 efd57257 变基到 origin/main 1e3b22b7；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.16、决策台账 V1.45，Flyway 最新 V764（共 636 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

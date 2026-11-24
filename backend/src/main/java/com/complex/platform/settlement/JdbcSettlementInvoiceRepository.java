@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.time.LocalDate;
 import java.util.List;
@@ -370,7 +370,8 @@ public class JdbcSettlementInvoiceRepository {
                        (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name, ar_ap_item_id,
                        ledger_source
                   FROM settlement_invoice_items
-                """ + LIST_FILTER + """
+                """ + LIST_FILTER + com.complex.platform.access.AuditDataWindow.andPeriod("period_start", "period_end") // 372-S3-R3：外审数据时段按开票期间整段
+                + """
                  ORDER BY period_start DESC, subject_name NULLS LAST, income_type, id
                  LIMIT :limit OFFSET :offset
                 """;
@@ -392,7 +393,8 @@ public class JdbcSettlementInvoiceRepository {
     }
 
     public long count(String projectId, LocalDate periodStart, String subjectEntityId, String status) {
-        String sql = "SELECT count(*) FROM settlement_invoice_items" + LIST_FILTER;
+        String sql = "SELECT count(*) FROM settlement_invoice_items" + LIST_FILTER
+                + com.complex.platform.access.AuditDataWindow.andPeriod("period_start", "period_end"); // 372-S3-R3：与清单同一条件
         Long v = jdbcTemplate.queryForObject(sql, filterParams(projectId, periodStart, subjectEntityId, status),
                 Long.class);
         return v == null ? 0L : v;

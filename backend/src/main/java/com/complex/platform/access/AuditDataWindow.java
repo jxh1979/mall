@@ -1,11 +1,12 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Optional;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -46,6 +47,32 @@ public record AuditDataWindow(LocalDate from, LocalDate to) {
     public static String andDate(String column) {
         return current().map(window -> " AND " + column + " BETWEEN DATE '" + window.from + "' AND DATE '" + window.to + "'")
                 .orElse("");
+    }
+
+    /**
+     * 第十八批 CN 段第 372 条第 3 段 372-S3-R1（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录」）：期间列（账期、开票期间）——
+     * 无时段返回空串，否则「 AND 起列 >= 起日 AND 止列 <= 止日」，即期间整段落在时段内才列。
+     */
+    public static String andPeriod(String startColumn, String endColumn) {
+        return current().map(window -> " AND " + startColumn + " >= DATE '" + window.from + "' AND " + endColumn + " <= DATE '" + window.to + "'")
+                .orElse("");
+    }
+
+    /** 372-S3-R1：年-月文本列（yyyy-MM）——只列整月落在时段内的月份；无时段返回空串，时段内没有整月时「 AND FALSE」。 */
+    public static String andMonth(String column) {
+        return current().map(window -> {
+            YearMonth first = YearMonth.from(window.from.minusDays(1)).plusMonths(1); // 起日是 1 日取当月，否则取下月
+            YearMonth last = YearMonth.from(window.to.plusDays(1)).minusMonths(1);    // 止日是月末取当月，否则取上月
+            return first.isAfter(last) ? " AND FALSE" : " AND " + column + " BETWEEN '" + first + "' AND '" + last + "'";
+        }).orElse("");
+    }
+
+    /** 372-S3-R1：内存筛选（子记录须先过项目闸、不能先在 SQL 里筛时）——无时段或时刻为空为真，否则北京日期在起止内（两端都含）。 */
+    public static boolean covers(Instant at) {
+        return at == null || current().map(window -> {
+            LocalDate on = at.atZone(LocalZone.ID).toLocalDate();
+            return !on.isBefore(window.from) && !on.isAfter(window.to);
+        }).orElse(true);
     }
 
     /** 明细：有时段且该记录的发生时刻不在时段内 403 OUT_OF_AUDIT_DATA_WINDOW。 */

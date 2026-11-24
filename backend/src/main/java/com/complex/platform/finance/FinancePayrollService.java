@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -81,6 +81,8 @@ public class FinancePayrollService {
     public PaymentContext attempts(String statementId) {
         try {
         Scope scope=scope(VIEW);Wage w=wage(statementId,false);checkScope(w,scope);
+        // 第十八批 CN 段第 372 条第 3 段 372-S3-R4（第十八批裁决 77）：过完项目、发薪主体与商户闸，再按工资单月份整月判外审数据时段
+        YearMonth month=YearMonth.parse(w.month());com.complex.platform.access.AuditDataWindow.requireCovers(month.atDay(1));com.complex.platform.access.AuditDataWindow.requireCovers(month.atEndOfMonth());
         var attempts=jdbc.queryForList("SELECT * FROM finance_payroll_payment_attempts WHERE statement_id=? ORDER BY created_at,id",statementId);
         var related=jdbc.queryForList("""
                 SELECT id,ar_ap_item_id,total_cent,paid_amount_cent,payment_due_date,status,statement_kind
