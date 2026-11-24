@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -827,8 +827,8 @@ class JdbcBarRepository implements BarRepository {
                        o.sales_staff_id, o.created_at, o.updated_at, o.order_type, o.paid_at
                   FROM bar_orders o JOIN merchants m ON m.id = o.bar_id
                  WHERE m.project_id IN (:projects)
-                 ORDER BY o.created_at DESC, o.id
-                """, Map.of("projects", projectIds), rowMapper::mapOrder);
+                """ + com.complex.platform.access.AuditDataWindow.andInstant("o.created_at") // 372-S4-R1：外审数据时段按下单时刻
+                + " ORDER BY o.created_at DESC, o.id", Map.of("projects", projectIds), rowMapper::mapOrder);
     }
 
     @Override

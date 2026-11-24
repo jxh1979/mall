@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.47
+文档版本：V1.48
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13583,3 +13583,71 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 收尾：两份 HTML 文件版本行、entry-registry.csv 与 authority-rule-ledger.csv 的 document_version 列相对基线各升一版。
 - 18CL 合并前变基（2026-11-24）：本段自 955ea1ba 变基到 origin/main 9c0e84e3；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.18、决策台账 V1.47，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CL 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fcbc52b7 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7456 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 15:41 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CO 落地位置补记（2026-11-20）：第十八批 CO 段（batch113）按 18CO 只读设计实现待开发清单第 372 条（外审数据时段第 4 段（酒吧））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CO 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CO 段，batch113）实现待开发清单第 372 条（18CO 只读设计 b113-audit/d7-co.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 372-S4-R1～R4（R1 先做并建测试类与酒吧夹具，R2、R3 同一批，R4 收口最后做）。第 372 条按第十八批裁决 77 分段，第 1～3 段（18BX、18CM、18CN）都已合入主干，本段工作树开工前已快进到 18CN 合并后的主干，AuditDataWindow 的 andPeriod、andMonth、covers 照现码调用、不再改 AuditDataWindow；设计里「等 18CN 合入后」的五处文本（auditDataWindowRule 已承载清单、platform-governance-prd §4 审计人员条与修订表、data-isolation 规格审计人员行、覆盖表 PGM-0095 行、决策台账文末）按现码就地接在 18CN 那句之后。R2、R3 引用 AuditDataWindow 照现码其他调用处的写法（全限定名或补 import 二选一，与同包现有写法一致）。按字面或常理定的六点照设计 notes 执行。段 5（游乐）、段 6（库存、商户、合规、平面图）与本段并行，撞同样五处文本，合并时按文本手工合。设计旁见①（内部稽核与不挂商户的项目侧员工读酒吧卡座、订台、出品票、赠饮兑付、账单奖励 403）已登记待开发清单第 461 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2927434e 开工（第七轮），变基到 28ec1bcf 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CO 落地位置补记（第 372 条第 4 段：酒吧；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增操作 0 个，迁移 0 个（预留 V804～V807 未用），改 4 个既有操作的描述 listBarOrders（在原 description 末尾补一句）、listBarSuspendedOrders、exportBarSuspendedOrders、listBarPayrollRuns，改 1 条契约规则 auditDataWindowRule 的已承载清单）
+  372-S4-R1 酒吧订单清单按下单时刻承载（外审项目侧分支）
+  - 改法：
+    - bar 包 JdbcBarRepository.listOrdersInProjects：在「m.project_id IN (:projects)」之后、排序之前拼 AuditDataWindow.andInstant("o.created_at")。发生时间取下单时刻；只改已有 SQL，没加方法体。
+    - 这个方法只有 BarService.listOrders 的项目侧分支调用，外审走的就是这一支（不挂商户、非平台管理员、非最高权限）。商户、平台管理员、最高权限走 listOrders(listScope())，不会有时段，不改。
+    - total 由 BarOperationExecutor.readPage 取返回条数，与行同口径。每单带出的账单摘要、明细、挂起记录与提成随订单列出，不另按时段筛（照段 1 getInternalPayableExecution、段 3 工资付款明细只判父记录的先例）。
+    - 契约：listBarOrders 在原 description 末尾补一句。BarOrdersPage 不改：顶部指标走经营分析明细，对外审 403 时页面已回退按本地列表计算，随之同口径。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - 第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」
+  - 测试：AuditDataWindowBarJdbcIntegrationTests.barOrdersListOnlyOrdersPlacedInsideWindowWithTotalOnSameBasis。外审只看到 2026-01-01 00:10 与 2026-12-31 23:59 两单、total 2；不划时段的项目员工看到四单、total 4。
+  372-S4-R2 挂起订单风险看板、导出与可编辑版重取按挂起时刻承载
+  - 改法：
+    - bar 包 BarSuspendedOrderBoard.filter：在酒吧筛选之后、scoped 之前，有时段时加条件 AuditDataWindow.andInstant("s.suspended_at")。看板行、total、未结清汇总 summary、导出与可编辑版重取 table() 用同一条件；状态筛选仍只作用于列表。
+    - 发生时间取挂起时刻 suspended_at（按字面定：该表没有 created_at）。
+    - filters 在 bar_id 之后记 data_window（AuditDataWindow.current 的 label，没有时段为空；写法同 FinanceService.arApTable、AuditController.operationEventsTable）。导出记录 export_files.filters 与可编辑版申请随之记下所用时段。
+    - 导出留痕 bar.order_suspension.exported 的 row_count 即时段内条数。可编辑版重取 BarSuspendedOrderController.viewTable 经 board.table 按领取那次请求的时段取数，控制器不改。
+    - 契约：listBarSuspendedOrders 描述末尾补句；exportBarSuspendedOrders 描述在 filters 说明里加 data_window，并在末尾补句。BarSuspendedOrdersBoard 页面不改。
+  - 依据：
+    - PGM:682（同上）
+    - PGM:686「每一次导出——不论脱敏与否——都记录导出人、导出时间、导出所用设备、导出内容范围与筛选条件」
+    - 第十八批裁决 77（同上）
+  - 测试：
+    - AuditDataWindowBarJdbcIntegrationTests.suspendedOrderBoardListsTotalAndUnsettledSummaryOnlyInsideWindow：外审 orders 只有时段内那单，total 1、unsettled_count 1；项目员工两单，total 2、unsettled_count 2。
+    - AuditDataWindowBarJdbcIntegrationTests.suspendedOrderExportRecordsWindowAndCountsOnlyOrdersInsideIt：导出记录 filters.data_window 为「2026-01-01～2026-12-31」、row_count 1；bar.order_suspension.exported 留痕 row_count「1」。
+  372-S4-R3 酒吧小费与服务费月结按所查月份整月承载（服务收费规则照常）
+  - 改法：
+    - bar 包 BarPayrollAllocationService.overview：在 BarPayrollSupport.requireReadScope 与月份格式校验之后加一行——有时段且所查月份不是整月落在时段内，就返回空数组、不报错。跨范围仍 403 BAR_PAYROLL_SCOPE_MISMATCH，格式错仍 400 BAR_PAYROLL_INVALID。
+    - 判定口径与 AuditDataWindow.andMonth 相同（整月），但不在 SQL 尾拼：同一结果里既有库内已定格月结，也有按该月账单现算的待月结和历史缺来源行，在入口判一次即全部覆盖。
+    - 写入口 close 不改（外审没有 bar.payroll.manage）；读取留痕 bar.payroll.read 照旧由 BarPayrollController 落。
+    - 服务收费规则 listBarPayrollRules 是规则设置，照常显示，不改。
+    - 契约：listBarPayrollRuns 描述末尾补句。BarPayrollPage 不改（空表照常显示）。
+  - 依据：
+    - PGM:682（同上）
+    - 第十八批裁决 77（同上）
+    - 整月口径照补设计按字面定「账期须整段落在时段内才显示」「完全落在时段外返回空、不报错」，与 18CN 的 andMonth、工资银行付款明细同口径。
+  - 测试：AuditDataWindowBarJdbcIntegrationTests.payrollRunsReturnOnlyMonthsWhollyInsideWindowWhilePayrollRulesStayVisible。
+    - 时段 2026-01-01～2026-12-31：外审 month=2025-12 为空数组，month=2026-06 含该行；项目员工 month=2025-12 含该行。
+    - 改划为 2026-06-15～2026-12-31 后：外审 month=2026-06 为空数组。
+    - 外审读服务收费规则 200。
+  372-S4-R4 段 4 收口
+  - 契约：auditDataWindowRule「已承载」括号末尾、18CN 的「积分追回明细」之后补「、酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结」。
+  - 下位文档同步：platform-governance-prd §4 审计人员实现现状条与修订表、data-isolation 规格审计人员行、覆盖表 PGM-0095 行（coverage_status 仍为 PARTIAL，其余业务域改为游乐、库存、商户、合规、平面图，见第 372 条段 5、段 6）。
+  - 本段不改：前端页面、页面矩阵、FieldLabels 与 fieldLabels.ts（data_window 段 1 已配）、audit-labels.json（无新事件）、security-baseline-latest.json（操作数不变）、AuditDataWindow。
+  不承载（16 个入口）及理由：
+  - 外审本就 403，不承载 5 个：listBarReservations、listBarTableSessions（BarService.listScope 取 AuthorizationService.currentMerchantScope，只放行平台管理员与带商户账号，不挂商户的外部人员账号 403 MERCHANT_SCOPE_REQUIRED）；getBarReservationInvitation（BarEntryService.requireReservation 取 currentMerchantScope，前端也没有 GET 调用方）；listBarEntitlementRedemptions（BarEntitlementRedemptionService.listRedemptions 直接取 currentMerchantScope，apps 下没有调用方）；listBarBillMerchantRewards（BarBillingService.checkMerchantOwnership 取 currentMerchantScope）。
+  - 正常业务到不了，不承载 2 个：listBarProductionTicketEvents（出品票编号只能从出品票清单 listProductionTickets 拿，清单对外审 403，apps 下没有调用方）；listBarServiceResponsibilities（唯一调用方在卡座与订台页，该页主加载里卡座与开台会话对外审 403、整页失败，取不到开台会话编号）。
+  - 照常显示 9 个（规则设置与资料，没有发生日期）：listBarProducts、listBarProductsByCategory、getBarCatalogImage、listBarTables、getBarArrivalReminderPolicy、listBarProductCategories、listBarCombos、listBarBusinessDayConfigs、listBarPayrollRules。依据所选选项原文「没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」；其中 listBarProducts、listBarTables 本身对外审 403。
+  - 其余不做：商户、平台管理员、最高权限读订单走的 JdbcBarRepository.listOrders 不拼时段（时段只对已划定的外部人员账号取值）；订单内嵌的账单摘要、明细、挂起记录与提成不另筛。
+  - 设计旁见①（内部稽核与不挂商户的项目侧员工读酒吧卡座、订台、出品票、赠饮兑付、账单奖励 403）已登记待开发清单第 461 条，本段不改。
+- 18CO 落地位置补记·契约部分（第 372 条第 4 段：酒吧；依据第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」，以及 PGM:682「外部审计/监管只能查看划定的范围与时间段」）。本段增量：新增操作 0 个；改 4 个既有操作的描述、1 条契约规则。
+  - 372-S4-R1：listBarOrders 在原 description 末尾补一句：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内下单的订单，发生时间取下单时刻 created_at，total 同口径；每单带出的账单摘要、明细与挂起记录随订单列出，不另按时段筛。对应代码 JdbcBarRepository.listOrdersInProjects，由 BarService.listOrders 的项目侧分支调用。
+  - 372-S4-R2：listBarSuspendedOrders 在描述末尾补一句：只列时段内挂起的订单，发生时间取挂起时刻 suspended_at；summary 未结清汇总、orders 与 total 同一条件，status、bar_id 与时段同时生效。exportBarSuspendedOrders 有两处改动：描述里的导出记录 filters 就地补 data_window（外审数据时段，起～止，无时段为空）；描述末尾补一句：只导出时段内挂起的订单，与看板同取数，标题里的未结清数量与未收金额同口径，可编辑版重取按领取时的时段取数。对应代码 BarSuspendedOrderBoard.filter。
+  - 372-S4-R3：listBarPayrollRuns 在描述末尾补一句：month 须整月落在时段内才返回该月的月结与未结事项，否则返回空数组（不报错）；项目与商户范围判定、月份格式校验在前；服务收费规则 listBarPayrollRules 照常显示。对应代码 BarPayrollAllocationService.overview。
+  - x-contract-rules.auditDataWindowRule 的已承载清单在「积分追回明细」之后补「酒吧订单、挂起订单风险看板与其导出、酒吧小费与服务费月结」。
+  - 不变的部分：x-permission、x-data-scope、x-failure-codes（不用 OUT_OF_AUDIT_DATA_WINDOW）、x-audit-event、x-auth-context、x-terminal-allowed。
+- 18CO J 段（汇合）：本段新增 0 个操作，无迁移（预留 V804～V807 未用）。e2e 不改：O1 段与契约段都没改前端页面、页面矩阵、adminRoutes，也没改 listBarOrders、listBarSuspendedOrders、exportBarSuspendedOrders、listBarPayrollRuns 的响应结构，外审数据时段只对划定了时段的外部人员账号过滤取数。full-admin-remaining 里 ADM-BAR-007 的 bar-payroll-page 断言与 mock-api 的 bar.payroll 授予照旧成立，视觉基线没有重拍。门禁结论：后端 --fresh 全量 0 红（含 AuditDataWindowBarJdbcIntegrationTests）；apps/web typecheck 与 vitest、客人端三个工作区、安卓员工端 gradle test 与 android-app 编译、五份后台 chromium e2e 全部通过。四份 docs:* 生成物重生成后与工作树一致，不用改；verify:p0-contract 全过。OpenAPI yaml 与 json 深比较一致，只有 listBarOrders、listBarSuspendedOrders、exportBarSuspendedOrders、listBarPayrollRuns 四个操作的说明与 x-contract-rules 的 auditDataWindowRule 有变，没有增删操作。
+- 18CO 文档组（D-docs，第 372 条第 4 段 372-S4-R4 文档部分；依据 PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」、PGM:686 每次导出记录筛选条件、第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：
+  - docs/platform-governance-prd-v0.1.md §4 角色边界补充「审计人员」实现现状条：在第 3 段那句之后补酒吧已承载。内容是：订单清单（listBarOrders，JdbcBarRepository.listOrdersInProjects，按下单时刻；账单摘要、明细与挂起记录随订单列出）；挂起订单风险看板与其导出、可编辑版重取（listBarSuspendedOrders、exportBarSuspendedOrders，BarSuspendedOrderBoard.filter，按挂起时刻；未结清汇总同口径，导出记录筛选记 data_window）；小费与服务费月结（listBarPayrollRuns，BarPayrollAllocationService.overview，所查月份须整月落在时段内，否则为空）。商品、分类、套餐、卡座、到店提醒、营业日与服务收费规则照常显示，其中商品、分类、按分类商品、套餐与卡座清单对外审账号本就 403。订台、开台会话、订台邀请函、赠饮兑付、账单奖励对外审账号本就 403；出品票流转记录与服务责任区间在页面上取不到入口，不另承载。变更日志加一行，标题版本升一次。
+  - docs/data-isolation-and-tenant-scope-security-spec-v0.1.md 审计人员行：已按时段过滤清单补「酒吧订单与挂起看板（含导出）及小费与服务费月结」，标题版本升一次。
+  - 本组没有新增测试。核对：verify-full-admin-page-matrix 通过；generate-data-isolation-spec --check 同步；git diff --check 干净。
+  - 本组增量：新增操作 0 个，迁移 0 个。
+- 18CO 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 28ec1bcf；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.19、决策台账 V1.48，Flyway 最新 V769（共 638 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CO 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3258805b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7460 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2129；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 17:47 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
