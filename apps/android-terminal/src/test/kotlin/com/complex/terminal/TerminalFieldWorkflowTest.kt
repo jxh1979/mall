@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -166,6 +166,45 @@ class TerminalFieldWorkflowTest {
     val error = assertFailsWith<ApiException> { workflow.checkAmusementInspectionPoint("amu-1", 2, "WRONGCODE000", "pass") }
     assertEquals(409, error.statusCode)
     assertTrue("扫到的不是第 2 个点位（安全压杠）的码" in apiErrorText(error), apiErrorText(error))
+  }
+
+  // 第十八批 CF 段第 404 条 404-R2（BSM:1300「确需补录的一律须附证据（照片／录音／录像等）并经主管复核后方生效」；DEC-R6-09「补录记录与原始扫码记录并列展示、
+  // 互不覆盖」）：点位补录走 POST .../inspection-points/{seq}/backfill，蛇形键带原时点、证据、点位结果；点位视图并列带回补录单与走点行的补录单编号。
+  @Test
+  fun amusementInspectionPointBackfillSendsSnakeKeysAndViewCarriesBackfills() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      captured += req
+      if (req.path.endsWith("/backfill")) {
+        okJson("""{"id":"mbf_2","target_type":"amusement_inspection_point","target_id":"amu-1","target_part":"2","status":"pending","review_id":"rv_2"}""")
+      } else {
+        okJson("""{"project_id":"amu-1","points":[{"seq":1,"point_name":"入口闸机"},{"seq":2,"point_name":"安全压杠"}],"walk":[{"seq":1,"point_name":"入口闸机","result":"pass","checked_by":"staff-1","checked_at":"2026-11-24T00:10:00Z","backfill_id":"mbf_1"}],"backfills":[{"id":"mbf_1","target_part":"1","status":"approved"},{"id":"mbf_2","target_part":"2","status":"pending"}]}""")
+      }
+    }
+
+    val row = api.submitAmusementInspectionPointBackfill("amu-1", 2,
+      AmusementInspectionPointBackfillRequest("k-1", "2026-11-24T01:00:00Z", "点位码污损扫不出", "staff-1", listOf("att_1"), "pass"))
+
+    val request = captured.single()
+    assertEquals("/api/v1/amusement/projects/amu-1/inspection-points/2/backfill", request.path)
+    assertTrue("\"result\":\"pass\"" in request.body, request.body)
+    assertTrue("\"occurred_at\":\"2026-11-24T01:00:00Z\"" in request.body, request.body)
+    assertTrue("\"evidence_attachment_ids\":[\"att_1\"]" in request.body, request.body)
+    assertTrue("\"responsible_staff_id\":\"staff-1\"" in request.body, request.body)
+    assertEquals("pending", row.status)
+    assertEquals("2", row.targetPart)
+
+    val view = api.getAmusementInspectionPoints("amu-1")
+    assertEquals("mbf_1", view.walk.single().backfillId)
+    assertEquals(listOf("1" to "approved", "2" to "pending"), view.backfills.map { it.targetPart to it.status })
+  }
+
+  // 第十八批 CF 段第 409 条 409-R3（BSM:1267「超过时仅告警提示、仍可放行」）：游乐核销结果带回已达运营容量标记，屏上多提示一行。
+  @Test
+  fun amusementVerifyOnlineParsesOperatingCapacityReached() {
+    val api = newApi { okJson("""{"id":"ver-1","verification_no":"V-1","status":"success","operating_capacity_reached":true}""") }
+    val response = TerminalWorkflow(api, storeWithSessionAndBinding()).amusementVerifyOnline("E-AMUSE-1")
+    assertEquals(true, response.operatingCapacityReached)
   }
 
   @Test
@@ -584,6 +623,8 @@ class TerminalFieldWorkflowTest {
     val shanghai = java.time.ZoneId.of("Asia/Shanghai")
     assertEquals("2026-11-05T12:30:00Z", localInstantOf("2026-11-05", "20:30", shanghai))
     assertEquals("2026-11-05T12:30:00Z", localInstantOf(" 2026-11-05 ", " 20:30 ", shanghai))
+    // 18CF 收尾复核修正：游乐巡检点位补录屏原时点默认带秒（LocalTime.now().withNano(0)），带秒的时刻照样换算。
+    assertEquals("2026-11-05T12:30:45Z", localInstantOf("2026-11-05", "20:30:45", shanghai))
     assertNull(localInstantOf("2026/11/05", "20:30", shanghai))
     assertNull(localInstantOf("2026-11-05", "", shanghai))
   }

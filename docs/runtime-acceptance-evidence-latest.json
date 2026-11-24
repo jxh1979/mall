@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-24T14:55:01.407Z",
+  "generated_at": "2026-11-24T15:18:01.679Z",
   "git": {
-    "head": "2aa9afbebfc5dac6290b752ea3570b86cf28ffa1",
-    "head_short": "2aa9afbe",
-    "branch": "feature/business-code-batch112-20261106",
+    "head": "18db144e304f81bb4b24d38a48bff192652682ad",
+    "head_short": "18db144e",
+    "branch": "feature/business-code-batch104-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "5f5f9d60e094b0cd43dac55065c05e4f44e35bc3a1a970d42c12158c854459c8",
-    "source_fingerprint_file_count": 3718,
+    "source_fingerprint": "507b5348cbcf42c0e650b1540832c4b3792c5bccd4b55af78d4f3ebbe9badd38",
+    "source_fingerprint_file_count": 3737,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 710,
-    "tests": 7430,
+    "suites": 716,
+    "tests": 7450,
     "failures": 0,
     "errors": 0,
-    "skipped": 0,
-    "latest_mtime": "2026-11-24T14:53:03.293Z",
+    "skipped": 7,
+    "latest_mtime": "2026-11-24T15:15:51.322Z",
     "passed": true
   },
   "web_unit_source": {
@@ -100,12 +100,14 @@
       "apps/web/src/admin/pages/AdmissionAuditsPage.test.tsx",
       "apps/web/src/admin/pages/AiThresholdsPage.test.tsx",
       "apps/web/src/admin/pages/AmusementBusinessDayPage.test.tsx",
+      "apps/web/src/admin/pages/AmusementDeviceLedgerSection.test.tsx",
       "apps/web/src/admin/pages/AmusementFaultCompensationPage.test.tsx",
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.test.tsx",
       "apps/web/src/admin/pages/AmusementInspectionRulesSection.test.tsx",
       "apps/web/src/admin/pages/AmusementInspectionTasksPage.test.tsx",
+      "apps/web/src/admin/pages/AmusementOverCapacityPolicySection.test.tsx",
       "apps/web/src/admin/pages/AmusementParkWideFaultPage.test.tsx",
       "apps/web/src/admin/pages/AmusementProjects.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.evidence.test.tsx",
@@ -443,8 +445,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 382,
-    "test_count_from_source": 2120
+    "file_count": 384,
+    "test_count_from_source": 2128
   },
   "web_build": {
     "dist_index_exists": true,
@@ -465,15 +467,15 @@
     "asset_count": 176,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-Bx9BISZC.js",
+        "path": "apps/web/dist/assets/main-Bv-H3_lr.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-24T14:53:13.318Z"
+        "mtime": "2026-11-24T15:16:02.171Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-24T14:53:13.321Z"
+      "mtime": "2026-11-24T15:16:02.174Z"
     },
     "no_main_bundle_warning_expected": true
   },

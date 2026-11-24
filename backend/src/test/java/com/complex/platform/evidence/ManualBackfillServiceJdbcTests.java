@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -243,7 +243,7 @@ class ManualBackfillServiceJdbcTests {
         String key = "mbf-x-" + suffix;
         actAs("out", otherMerchant);
         Throwable denied = catchThrowable(() -> service.submit("trace_handover_step", "tgt_" + suffix, "kitchen_receive",
-                new ManualBackfillService.Request(key, "现场漏扫", user("out"), List.of(photo), null, null, null, null, null, null, null)));
+                new ManualBackfillService.Request(key, "现场漏扫", user("out"), List.of(photo), null, null, null, null, null, null, null, null)));
         assertThat(denied).isInstanceOf(ApiException.class);
         assertThat(((ApiException) denied).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN");
         assertThat(rows()).isEqualTo(1);
@@ -335,12 +335,12 @@ class ManualBackfillServiceJdbcTests {
 
     private ManualBackfillService.Request request(String key, List<String> files, Instant recording) {
         return new ManualBackfillService.Request("mbf-" + key + "-" + suffix, "现场漏扫", user("clerk"), files, recording, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     private static ManualBackfillService.Request withReason(ManualBackfillService.Request base, String key, String reason, String responsible) {
         return new ManualBackfillService.Request(base.idempotencyKey() + key, reason, responsible, base.evidenceAttachmentIds(),
-                base.recordingStartedAt(), null, null, null, null, null, null);
+                base.recordingStartedAt(), null, null, null, null, null, null, null);
     }
 
     private int rows() {

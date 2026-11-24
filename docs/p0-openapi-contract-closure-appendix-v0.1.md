@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.16
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.17
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1420 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 446 | 人工权限矩阵正文未覆盖 345 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2840 | 人工事件矩阵正文未覆盖 2791 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1420 | 人工任务映射正文未逐项覆盖 1414 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 869 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1425 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 447 | 人工权限矩阵正文未覆盖 346 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2850 | 人工事件矩阵正文未覆盖 2801 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1425 | 人工任务映射正文未逐项覆盖 1419 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 872 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -48,8 +48,9 @@
 | `amusement.capacity_config.manage` | staff-token | project-amusement | 3 | listAmusementCapacityConfigs, createAmusementCapacityConfig, disableAmusementCapacityConfig | OpenAPI 补充，以本附录为准 |
 | `amusement.compensation_policy.manage` | staff-token | project | 1 | configureAmusementCompensationPolicy | OpenAPI 补充，以本附录为准 |
 | `amusement.device_status.view` | staff-token | project | 1 | listAmusementDeviceStatuses | 已在权限矩阵正文出现 |
-| `amusement.device.manage` | staff-token | project-amusement | 1 | createAmusementDevice | 已在权限矩阵正文出现 |
-| `amusement.device.view` | staff-token | project-amusement | 1 | listAmusementDevices | 已在权限矩阵正文出现 |
+| `amusement.device.continue_judge` | staff-token | project-amusement | 1 | judgeAmusementDeviceContinue | OpenAPI 补充，以本附录为准 |
+| `amusement.device.manage` | staff-token | project-amusement | 2 | createAmusementDevice, requestAmusementDeviceClassChange | 已在权限矩阵正文出现 |
+| `amusement.device.view` | staff-token | project-amusement | 3 | listAmusementDevices, listAmusementDeviceClassChanges, listAmusementDeviceStops | 已在权限矩阵正文出现 |
 | `amusement.entitlement_session.claim` | staff-token | merchant | 1 | claimAmusementEntitlementSession | OpenAPI 补充，以本附录为准 |
 | `amusement.entitlement_session.initiate` | staff-token | merchant | 1 | initiateAmusementEntitlementSession | OpenAPI 补充，以本附录为准 |
 | `amusement.entitlement_session.view` | staff-token | merchant | 2 | listAmusementEntitlementSessions, getAmusementEntitlementSession | OpenAPI 补充，以本附录为准 |
@@ -76,7 +77,7 @@
 | `amusement.reservation.manage` | staff-token | project-amusement | 2 | createAmusementReservation, changeAmusementReservationStatus | OpenAPI 补充，以本附录为准 |
 | `amusement.reservation.view` | staff-token | project | 1 | listAmusementReservations | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.approve_reopen` | staff-token | project-amusement | 1 | approveAmusementReopen | 已在权限矩阵正文出现 |
-| `amusement.safety_inspection.create` | staff-token | project-amusement | 2 | createAmusementSafetyInspection, checkAmusementInspectionPoint | 已在权限矩阵正文出现 |
+| `amusement.safety_inspection.create` | staff-token | project-amusement | 3 | createAmusementSafetyInspection, checkAmusementInspectionPoint, submitAmusementInspectionPointBackfill | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.recheck` | staff-token | project-amusement | 1 | recheckAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.rectify` | staff-token | project-amusement | 1 | rectifyAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.submit` | staff-token | project-amusement | 1 | submitAmusementSafetyInspection | 已在权限矩阵正文出现 |
@@ -541,12 +542,16 @@
 | `amusement.capacity_config.changed` | success | `disableAmusementCapacityConfig` | `POST` | `/api/v1/amusement/capacity-config/{configId}/disable` | AMU-游乐安全 | `amusement.capacity_config.manage` | 接口级事件，以本附录为准 |
 | `amusement.capacity_config.view_failed` | failure | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | AMU-游乐安全 | `amusement.capacity_config.manage` | 接口级事件，以本附录为准 |
 | `amusement.capacity_config.viewed` | success | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | AMU-游乐安全 | `amusement.capacity_config.manage` | 接口级事件，以本附录为准 |
+| `amusement.device_class.change_failed` | failure | `requestAmusementDeviceClassChange` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/classification-changes` | AMU-游乐安全 | `amusement.device.manage` | 接口级事件，以本附录为准 |
+| `amusement.device_class.change_submitted` | success | `requestAmusementDeviceClassChange` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/classification-changes` | AMU-游乐安全 | `amusement.device.manage` | 接口级事件，以本附录为准 |
 | `amusement.device_registry_backlog.view_failed` | failure | `listAmusementProjectsWithoutDeviceRegistry` | `GET` | `/api/v1/amusement/projects/without-device-registry` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.device_registry_backlog.viewed` | success | `listAmusementProjectsWithoutDeviceRegistry` | `GET` | `/api/v1/amusement/projects/without-device-registry` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.device_status.viewed` | success | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | AMU-游乐安全 | `amusement.device_status.view` | 接口级事件，以本附录为准 |
 | `amusement.device_status.viewed_failed` | failure | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | AMU-游乐安全 | `amusement.device_status.view` | 接口级事件，以本附录为准 |
 | `amusement.device.change_failed` | failure | `createAmusementDevice` | `POST` | `/api/v1/amusement/projects/{id}/devices` | AMU-游乐安全 | `amusement.device.manage` | 接口级事件，以本附录为准 |
 | `amusement.device.changed` | success | `createAmusementDevice` | `POST` | `/api/v1/amusement/projects/{id}/devices` | AMU-游乐安全 | `amusement.device.manage` | 接口级事件，以本附录为准 |
+| `amusement.device.continue_judge_failed` | failure | `judgeAmusementDeviceContinue` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/continue-judgements` | AMU-游乐安全 | `amusement.device.continue_judge` | 接口级事件，以本附录为准 |
+| `amusement.device.continue_judged` | success | `judgeAmusementDeviceContinue` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/continue-judgements` | AMU-游乐安全 | `amusement.device.continue_judge` | 接口级事件，以本附录为准 |
 | `amusement.device.view_failed` | failure | `listAmusementDevices` | `GET` | `/api/v1/amusement/projects/{id}/devices` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
 | `amusement.device.viewed` | success | `listAmusementDevices` | `GET` | `/api/v1/amusement/projects/{id}/devices` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
 | `amusement.entitlement_session.claim_failed` | failure | `claimAmusementEntitlementSession` | `POST` | `/api/v1/amusement/entitlement-sessions/{id}/claim` | AMU-游乐安全 | `amusement.entitlement_session.claim` | 接口级事件，以本附录为准 |
@@ -1517,9 +1522,11 @@
 | `evidence.manual_backfill_policy_update_failed` | failure | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_policy_updated` | success | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submit_failed` | failure | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submit_failed` | failure | `submitAmusementInspectionPointBackfill` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill` | AMU-游乐安全 | `amusement.safety_inspection.create` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submit_failed` | failure | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submit_failed` | failure | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submitted` | success | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submitted` | success | `submitAmusementInspectionPointBackfill` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill` | AMU-游乐安全 | `amusement.safety_inspection.create` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submitted` | success | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
 | `evidence.manual_backfill_submitted` | success | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `evidence.review_create_failed` | failure | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | EVD-事件证据 | `evidence.review.create` | 接口级事件，以本附录为准 |
@@ -2357,6 +2364,10 @@
 | `not_applicable` | failure | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.grant_request.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAccessUsers` | `GET` | `/api/v1/access/users` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listAmusementDeviceClassChanges` | `GET` | `/api/v1/amusement/projects/{id}/devices/classification-changes` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listAmusementDeviceClassChanges` | `GET` | `/api/v1/amusement/projects/{id}/devices/classification-changes` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listAmusementDeviceStops` | `GET` | `/api/v1/amusement/projects/{id}/devices/stops` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listAmusementDeviceStops` | `GET` | `/api/v1/amusement/projects/{id}/devices/stops` | AMU-游乐安全 | `amusement.device.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementFaultCompensationBatches` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listAmusementFaultCompensationItems` | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementFaultCompensationItems` | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
@@ -3373,13 +3384,16 @@
 | AMU-游乐安全 | `initiateAmusementFaultCompensationBatch` | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | 发起全园故障补偿批次（第一岗位：快照受影响人份） | `amusement.park_fault.confirm_as_head` | `amusement.fault_compensation.batch_initiated` / `amusement.fault_compensation.batch_initiate_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `initiateAmusementParkWideFault` | `POST` | `/api/v1/amusement/park-wide-faults` | 发起全园故障状态（第一岗位） | `amusement.park_fault.confirm_as_head` | `amusement.park_fault.initiated` / `amusement.park_fault.initiate_failed` | web, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `initiateAmusementParkWideFaultLift` | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/initiate-lift` | 发起解除全园故障状态（第一岗位） | `amusement.park_fault.confirm_as_head` | `amusement.park_fault.lift_initiated` / `amusement.park_fault.lift_initiate_failed` | web, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `judgeAmusementDeviceContinue` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/continue-judgements` | 判定辅助设备停用后项目能否继续运行（留痕） | `amusement.device.continue_judge` | `amusement.device.continue_judged` / `amusement.device.continue_judge_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementBusinessDayConfigs` | `GET` | `/api/v1/amusement/business-day-configs` | 查看授权综合体的游乐营业日配置目录与版本 | `amusement.business_day.view` | `amusement.business_day.viewed` / `amusement.business_day.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | 查询游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.viewed` / `amusement.capacity_config.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCapacitySnapshots` | `GET` | `/api/v1/amusement/capacity-snapshots` | 查看游乐项目当前在场人数与硬容量 | `amusement.verification.view` | `amusement.verification.viewed` / `amusement.verification.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | 按事件类型查询补偿批次（含场次提前结束） | `amusement.park_fault.view` | `amusement.fault_compensation.viewed` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCountReleases` | `GET` | `/api/v1/amusement/count-releases` | 查看场次及日切人数释放记录 | `amusement.verification.view` | `amusement.session.viewed` / `amusement.session.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
+| AMU-游乐安全 | `listAmusementDeviceClassChanges` | `GET` | `/api/v1/amusement/projects/{id}/devices/classification-changes` | 查询游乐项目设备分级申请与历史 | `amusement.device.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDevices` | `GET` | `/api/v1/amusement/projects/{id}/devices` | 查询游乐项目游乐设备 | `amusement.device.view` | `amusement.device.viewed` / `amusement.device.view_failed` | web, kiosk, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | 查询游乐设备状态 | `amusement.device_status.view` | `amusement.device_status.viewed` / `amusement.device_status.viewed_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `listAmusementDeviceStops` | `GET` | `/api/v1/amusement/projects/{id}/devices/stops` | 查询游乐项目当前停用的设备 | `amusement.device.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementEntitlementSessions` | `GET` | `/api/v1/amusement/entitlement-sessions` | 查询权益会话列表（merchant scope） | `amusement.entitlement_session.view` | `amusement.entitlement_session.listed` / `amusement.entitlement_session.list_failed` | web, kiosk | operation 级补充 |
 | AMU-游乐安全 | `listAmusementFaultCompensationBatches` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | 查询某次全园故障的补偿批次 | `amusement.park_fault.view` | `amusement.fault_compensation.viewed` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementFaultCompensationItems` | `GET` | `/api/v1/amusement/compensation-batches/{batch_id}/items` | 查询补偿批次的补偿记录 | `amusement.park_fault.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -3410,10 +3424,12 @@
 | AMU-游乐安全 | `releaseAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | Release P2 amusement group booking and free locked capacity | `amusement.group_booking.manage` | `amusement_group_booking.released.success` / `amusement_group_booking.released.failure` | web | operation 级补充 |
 | AMU-游乐安全 | `removeAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/remove` | 解除游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `replaceAmusementProjectInspectionPoints` | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | 整份替换游乐项目巡检点位清单 | `amusement.safety_template.manage` | `amusement.inspection_points.configured` / `amusement.inspection_points.configure_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `requestAmusementDeviceClassChange` | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/classification-changes` | 申请变更游乐设备分级（经工程或安全复核后生效） | `amusement.device.manage` | `amusement.device_class.change_submitted` / `amusement.device_class.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `requestDeleteAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/delete-request` | 发起游乐项目权益绑定删除申请 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `saveAmusementSpotCheckPolicy` | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人） | `amusement.safety_template.manage` | `amusement.spot_check_policy.updated` / `amusement.spot_check_policy.update_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `setAmusementProjectInternalPriceItem` | `PUT` | `/api/v1/amusement/projects/{id}/internal-price-item` | 游乐项目引用内部结算价目录条目 | `amusement.session.manage` | `amusement.project.internal_price_ref.updated` / `amusement.project.internal_price_ref.update_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementBusinessDayConfig` | `POST` | `/api/v1/amusement/business-day-configs` | 提交综合体游乐营业日最高权限审批 | `amusement.business_day.manage` | `amusement.business_day.submit_completed` / `amusement.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
+| AMU-游乐安全 | `submitAmusementInspectionPointBackfill` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill` | 游乐巡检点位缺扫码人工补录（附证据、进主管复核，通过后才生效） | `amusement.safety_inspection.create` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `unarchiveAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/unarchive` | 恢复游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | ANA-风控分析 | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | 锁定经营复盘快照 | `analytics.review.lock` | `analytics.review.locked` / `analytics.review.lock_failed` | web | operation 级补充 |

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.42
+// 文件版本：V0.43
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -84,6 +84,10 @@ public class SupervisorReviewService {
                     List.of("reason"), "active", "specific_role", "bar.payroll.approve"),
             new SupervisorReviewPolicyRecord("amusement_business_day", "amusement.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批 CF 段第 407 条 407-R1（BSM:1271「登记内容变更须经工程或安全审批」；决策台账「项目首次上线前……工程或安全岗位复核通过后生效」）：
+            // 游乐设备关键／辅助分级首次登记与每次变更，审批人须经角色持有分级复核权限（工程或安全岗位）。
+            new SupervisorReviewPolicyRecord("amusement_device_class_change", "amusement.device.class.change", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "amusement.device.class.approve"),
             new SupervisorReviewPolicyRecord("bar_business_day", "bar.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
             // 第十八批 AQ 段第 234 条 234-R1（PGM:666「持股分红的方案配置……由最高权限审批，提交人不能审批自己的单据」；BSM:521 涉钱配置新版本审批通过后按
@@ -181,6 +185,9 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("manual_backfill_bar_sales", "bar.sales.backfill", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "bar.sales_backfill.review"),
             new SupervisorReviewPolicyRecord("manual_backfill_bar_service", "bar.service.backfill", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 CF 段第 404 条 404-R1（BSM:1300「确需补录的一律须附证据……并经主管复核后方生效」）：游乐巡检点位补录由提交人的直接上级复核。
+            new SupervisorReviewPolicyRecord("manual_backfill_amusement_inspection_point", "amusement.inspection.point_backfill", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // HP-P01（BSM L1438「免费放行和减免须经物业主管审批」）：恒阻断；最终审批人须经角色持有停车减免审批权限（物业主管）。
             new SupervisorReviewPolicyRecord("parking_release_waive", "parking.release.waive", 0, 1, true,

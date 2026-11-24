@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.net.URI
 import java.net.URLEncoder
@@ -151,6 +151,10 @@ class TerminalApiClient(
 
   fun checkAmusementInspectionPoint(projectId: String, seq: Int, request: AmusementInspectionPointCheckRequest): AmusementInspectionPoints =
     post("/api/v1/amusement/projects/${urlEncode(projectId)}/inspection-points/$seq/check", request)
+
+  /** 第十八批 CF 段第 404 条 404-R2：点位缺扫码补录（附证据、进主管复核，通过后才算该点位已记），返回补录单。 */
+  fun submitAmusementInspectionPointBackfill(projectId: String, seq: Int, request: AmusementInspectionPointBackfillRequest): TraceHandoverBackfillRow =
+    post("/api/v1/amusement/projects/${urlEncode(projectId)}/inspection-points/$seq/backfill", request)
 
   // 酒吧一体机/平板：点酒下单
   fun createBarOrder(request: BarOrderRequest): BarOrderRecord =

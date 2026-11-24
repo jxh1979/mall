@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -579,12 +579,12 @@ class AmusementServiceTests {
         AmusementProjectRecord missing = projectWithTemplate("t33-missing");
         AmusementProjectRecord archived = projectWithTemplate("t33-archived");
         service.createDevice(archived.id(), new AmusementDeviceRequest(
-                "t33-archived-dev", null, List.of(), archived.id(),
-                "DEV-T33-A", "过山车", "active", 24, null));
+                "t33-archived-dev", "建档分级", List.of(), archived.id(),
+                "DEV-T33-A", "过山车", "active", 24, null, "auxiliary", null, null));
         // 退役设备不在役，missing 仅有 retired 设备仍属待建档。
         service.createDevice(missing.id(), new AmusementDeviceRequest(
-                "t33-missing-retired", null, List.of(), missing.id(),
-                "DEV-T33-R", "退役设备", "retired", 24, null));
+                "t33-missing-retired", "建档分级", List.of(), missing.id(),
+                "DEV-T33-R", "退役设备", "retired", 24, null, "auxiliary", null, null));
 
         assertThat(service.listProjectsMissingDeviceRegistry().items())
                 .extracting(AmusementProjectDeviceRegistryBacklogRecord::id)
@@ -593,8 +593,8 @@ class AmusementServiceTests {
 
         // 补一台在役设备 → 移出待建档清单。
         service.createDevice(missing.id(), new AmusementDeviceRequest(
-                "t33-missing-active", null, List.of(), missing.id(),
-                "DEV-T33-M", "旋转木马", "active", 24, null));
+                "t33-missing-active", "建档分级", List.of(), missing.id(),
+                "DEV-T33-M", "旋转木马", "active", 24, null, "auxiliary", null, null));
         assertThat(service.listProjectsMissingDeviceRegistry().items())
                 .extracting(AmusementProjectDeviceRegistryBacklogRecord::id)
                 .doesNotContain(missing.id());
@@ -608,8 +608,8 @@ class AmusementServiceTests {
         submitPassingInspection(project, "dev-expiry");
         AmusementSessionRecord session = createSession("dev-expiry-session", project.id(), 5, "open");
         service.createDevice(project.id(), new AmusementDeviceRequest(
-                "dev-expiry-create", null, List.of(), project.id(),
-                "DEV-EXP-1", "过山车A", "active", 24, null));
+                "dev-expiry-create", "建档分级", List.of(), project.id(),
+                "DEV-EXP-1", "过山车A", "active", 24, null, "auxiliary", null, null));
         registerAmusementEntitlement("credential-dev-expiry", 1);
         assertThatThrownBy(() -> service.createVerification(verification(
                         "verify-dev-expiry", project.id(), session.id(), "credential-dev-expiry")))
@@ -625,8 +625,8 @@ class AmusementServiceTests {
         submitPassingInspection(project, "dev-retired");
         AmusementSessionRecord session = createSession("dev-retired-session", project.id(), 5, "open");
         service.createDevice(project.id(), new AmusementDeviceRequest(
-                "dev-retired-create", null, List.of(), project.id(),
-                "DEV-RET-1", "退役设备", "retired", 24, null));
+                "dev-retired-create", "建档分级", List.of(), project.id(),
+                "DEV-RET-1", "退役设备", "retired", 24, null, "auxiliary", null, null));
         registerAmusementEntitlement("credential-dev-retired", 1);
         AmusementVerificationRecord response = service.createVerification(verification(
                 "verify-dev-retired", project.id(), session.id(), "credential-dev-retired"));
@@ -1054,12 +1054,13 @@ class AmusementServiceTests {
     void configureOverCapacityPolicyActuallyEnablesSoftWarnDuringVerification() {
         // 关键端到端：配 operating_capacity 软上限后，达软上限走【告警放行】分支（不阻断）；
         // 硬上限（安全容量=项目 capacity）设足够大不触发硬阻断，验证 hasOperatingCapacity 软告警链已接线。
+        // 第十八批 CF 段 409-R1（BSM:1267「「仅提示」（只在现场提示、不生成异常事件）」）：留痕断言改用「记录异常事件」方式（block_hard，出厂默认）。
         AmusementProjectRecord project = createProject("ocp-warn", createTemplate("ocp-warn-tpl").id(), "open", 100);
         submitPassingInspection(project, "ocp-warn");
         AmusementSessionRecord session = createSession("ocp-warn-session", project.id(), 100, "open");
         service.configureOverCapacityPolicy(project.id(),
                 new ConfigureOverCapacityPolicyRequest("ocp-warn-key", null, List.of(),
-                        1, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true));
+                        1, AmusementOverCapacityPolicy.MODE_BLOCK_HARD, true));
         registerAmusementEntitlement("credential-ocp-warn-1", 1);
         registerAmusementEntitlement("credential-ocp-warn-2", 1);
 

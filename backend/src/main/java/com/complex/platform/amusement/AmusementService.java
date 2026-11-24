@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1227,9 +1227,14 @@ public class AmusementService {
         if (actual.safetyCheckIntervalHours() != null) {
             positiveInteger(actual.safetyCheckIntervalHours(), "safety_check_interval_hours");
         }
+        // 第十八批 CF 段第 407 条 407-R1（BSM:1271「须在设备台账中登记」；决策台账「项目首次上线前，由游乐公司提出设备关键／辅助分类，工程或安全岗位
+        // 复核通过后生效」）：建档必带分级（关键带依赖关系）与理由（operator_note），分级随建档进工程或安全复核，通过后才写入设备。
+        String dependency = trimToNull(actual.dependency());
+        AmusementDeviceClassService.validate(actual.safetyClass(), dependency);
+        String classReason = requireText(actual.operatorNote(), "operator_note");
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
-        return repository.saveDevice(new AmusementDeviceRecord(
+        AmusementDeviceRecord saved = repository.saveDevice(new AmusementDeviceRecord(
                 "amusement_device_" + slug(actual.idempotencyKey()),
                 projectId,
                 deviceCode,
@@ -1242,6 +1247,11 @@ public class AmusementService {
                 now,
                 now
         ));
+        if (deviceClasses != null) {
+            deviceClasses.submitInitial(saved, actual.safetyClass(), dependency, classReason, actual.evidenceAttachmentIds(),
+                    actual.finalApproverId(), actual.idempotencyKey());
+        }
+        return saved;
     }
 
     private AmusementCapacityConfigRecord disableCapacityConfigInternal(String configId) {
@@ -1483,8 +1493,10 @@ public class AmusementService {
             }
             throw exception;
         }
-        // 软上限（运营容量）告警：放行后项目在场人数达到运营容量时留痕，不阻断。
+        // 软上限（运营容量）告警：放行后项目在场人数达到运营容量时留痕，不阻断。第十八批 CF 段 409-R1（BSM:1267「「仅提示」（只在现场提示、不生成
+        // 异常事件）」）：处置方式为「仅提示」（warn_only）时不生成异常事件，现场提示随核销结果带回（409-R3）。
         if (policy.hasOperatingCapacity()
+                && !AmusementOverCapacityPolicy.MODE_WARN_ONLY.equals(policy.disposalMode())
                 && repository.findProjectInPlayCount(project.id()).orElse(0) >= policy.operatingCapacity()) {
             recordOverCapacity(project, session, deviceId, "soft", "operating_capacity", policy);
         }
@@ -1808,6 +1820,18 @@ public class AmusementService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     AmusementInspectionPointService inspectionPoints;
 
+    // 第十八批 CF 段第 405、406 条：开放判定的巡检一段按「当日有合格巡检、且没有任何未复检或待批准阻断项」判（字段注入免改构造点；单测未注入即照旧看最新一条）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementInspectionDayGate inspectionDayGate;
+
+    // 第十八批 CF 段第 407 条 407-R2：按设备分级判停机范围（字段注入免改构造点；单测未注入即照旧在役设备超期整项目拦）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementDeviceStopScope deviceStopScope;
+
+    // 第十八批 CF 段第 407 条 407-R1：建档时首次分级进工程或安全复核（字段注入免改构造点；单测未注入即只校验分级）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementDeviceClassService deviceClasses;
+
     // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.gate.SensitiveLocationGuard locationGuard;
@@ -1890,49 +1914,66 @@ public class AmusementService {
         if (!"open".equals(project.openStatus()) && !hardCapacityRecovery) {
             reasons.add("PROJECT_NOT_OPEN");
         }
-        repository.latestSafetyInspectionForProject(projectId)
-                .ifPresentOrElse(inspection -> {
-                    if ("pass".equals(inspection.overallResult())) {
-                        if (!"submitted".equals(inspection.inspectionStatus())) {
-                            reasons.add("SAFETY_INSPECTION_NOT_SUBMITTED");
+        if (inspectionDayGate != null) {
+            reasons.addAll(inspectionDayGate.reasons(projectId, Instant.now()));
+        } else {
+            repository.latestSafetyInspectionForProject(projectId)
+                    .ifPresentOrElse(inspection -> {
+                        if ("pass".equals(inspection.overallResult())) {
+                            if (!"submitted".equals(inspection.inspectionStatus())) {
+                                reasons.add("SAFETY_INSPECTION_NOT_SUBMITTED");
+                            } else if ("pending_approval".equals(inspection.reopenStatus())) {
+                                // 第十八批 CF 段 405-R1（BSM:1300「检修后必须主管确认才能恢复营业（禁止巡检员单人闭环）」）：复检通过、主管未批准前按未复检阻断项拦。
+                                reasons.add("SAFETY_REOPEN_PENDING");
+                            }
+                        } else if (!"approved".equals(inspection.reopenStatus())) {
+                            reasons.add("SAFETY_REOPEN_PENDING");
                         }
-                    } else if (!"approved".equals(inspection.reopenStatus())) {
-                        reasons.add("SAFETY_REOPEN_PENDING");
+                    }, () -> reasons.add("MISSING_SAFETY_INSPECTION"));
+        }
+        // 第十八批 CF 段第 407 条 407-R2（BSM:1271「按其类别处置」）：注入停机范围时按设备分级判——指定设备停用即拦（SAFETY_INSPECTION_EXPIRED），
+        // 项目级按分级未生效的超期、关键设备依赖关系、辅助设备有无「可继续运行」判定报原因；未注入走下面原两段。
+        if (deviceStopScope != null) {
+            Instant stopAt = Instant.now();
+            if (deviceId != null && deviceStopScope.deviceStopped(projectId, deviceId, stopAt)) {
+                reasons.add("SAFETY_INSPECTION_EXPIRED");
+            }
+            deviceStopScope.projectReasons(projectId, stopAt).stream().filter(reason -> !reasons.contains(reason)).forEach(reasons::add);
+        } else {
+            // F-OPS-04（裁决#6）：设备级巡检有效期。核销针对具体已注册设备时，校验该设备最近 PASS 巡检在周期内；
+            // 周期取设备级配置（缺省回退项目级，默认 24h）。设备未注册主数据则跳过（向后兼容存量自由 device_id）。
+            if (deviceId != null) {
+                repository.findDeviceByCode(projectId, deviceId).ifPresent(device -> {
+                    int intervalHours = device.safetyCheckIntervalHours() != null
+                            ? device.safetyCheckIntervalHours()
+                            : repository.findProjectSafetyCheckIntervalHours(projectId);
+                    Instant lastPass = device.lastPassInspectionAt();
+                    if (lastPass == null
+                            || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(Instant.now())) {
+                        reasons.add("SAFETY_INSPECTION_EXPIRED");
                     }
-                }, () -> reasons.add("MISSING_SAFETY_INSPECTION"));
-        // F-OPS-04（裁决#6）：设备级巡检有效期。核销针对具体已注册设备时，校验该设备最近 PASS 巡检在周期内；
-        // 周期取设备级配置（缺省回退项目级，默认 24h）。设备未注册主数据则跳过（向后兼容存量自由 device_id）。
-        if (deviceId != null) {
-            repository.findDeviceByCode(projectId, deviceId).ifPresent(device -> {
-                int intervalHours = device.safetyCheckIntervalHours() != null
-                        ? device.safetyCheckIntervalHours()
-                        : repository.findProjectSafetyCheckIntervalHours(projectId);
-                Instant lastPass = device.lastPassInspectionAt();
-                if (lastPass == null
-                        || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(Instant.now())) {
+                });
+            }
+            // P0-3 修复（F-OPS-04 项目级兜底）：核销请求的 deviceId 由客户端可选传入、且存量可为未注册自由字符串，
+            // 仅靠上方单设备校验可被「不传 / 乱传未注册 deviceId」整体绕过。此处不依赖 deviceId——只要项目下存在
+            // 「在役(active)」设备且其最近 PASS 巡检超期或从未巡检，即阻断该项目核销入场（业务红线：设备巡检超期 →
+            // 停止该设备/项目核销入场，直到完成合格巡检）。退役/停用/检修(inactive/retired/maintenance)设备不在役、不参与兜底。
+            if (!reasons.contains("SAFETY_INSPECTION_EXPIRED")) {
+                int projectIntervalHours = repository.findProjectSafetyCheckIntervalHours(projectId);
+                Instant safetyNow = Instant.now();
+                boolean anyActiveDeviceExpired = repository.listDevicesByProject(projectId).stream()
+                        .filter(device -> "active".equals(device.status()))
+                        .anyMatch(device -> {
+                            int intervalHours = device.safetyCheckIntervalHours() != null
+                                    ? device.safetyCheckIntervalHours()
+                                    : projectIntervalHours;
+                            Instant lastPass = device.lastPassInspectionAt();
+                            return lastPass == null
+                                    || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(safetyNow);
+                        });
+                if (anyActiveDeviceExpired) {
                     reasons.add("SAFETY_INSPECTION_EXPIRED");
                 }
-            });
-        }
-        // P0-3 修复（F-OPS-04 项目级兜底）：核销请求的 deviceId 由客户端可选传入、且存量可为未注册自由字符串，
-        // 仅靠上方单设备校验可被「不传 / 乱传未注册 deviceId」整体绕过。此处不依赖 deviceId——只要项目下存在
-        // 「在役(active)」设备且其最近 PASS 巡检超期或从未巡检，即阻断该项目核销入场（业务红线：设备巡检超期 →
-        // 停止该设备/项目核销入场，直到完成合格巡检）。退役/停用/检修(inactive/retired/maintenance)设备不在役、不参与兜底。
-        if (!reasons.contains("SAFETY_INSPECTION_EXPIRED")) {
-            int projectIntervalHours = repository.findProjectSafetyCheckIntervalHours(projectId);
-            Instant safetyNow = Instant.now();
-            boolean anyActiveDeviceExpired = repository.listDevicesByProject(projectId).stream()
-                    .filter(device -> "active".equals(device.status()))
-                    .anyMatch(device -> {
-                        int intervalHours = device.safetyCheckIntervalHours() != null
-                                ? device.safetyCheckIntervalHours()
-                                : projectIntervalHours;
-                        Instant lastPass = device.lastPassInspectionAt();
-                        return lastPass == null
-                                || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(safetyNow);
-                    });
-            if (anyActiveDeviceExpired) {
-                reasons.add("SAFETY_INSPECTION_EXPIRED");
             }
         }
         // T3.2（A4 根因修，默认关）：强制建档——项目无任何在役注册设备（设备档案为空）时拒核销，

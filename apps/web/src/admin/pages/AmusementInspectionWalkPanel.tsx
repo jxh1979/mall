@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { cnDate } from "../components/RowDetailDrawer";
 import type { AdminApiClient } from "../types";
@@ -6,9 +6,11 @@ import type { AdminApiClient } from "../types";
 // 第十八批 BS 段第 373 条 373-R3、373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、
 // 不得标记为已完成」；第十八批裁决 76「巡检员用工作手机按顺序扫码后记结果」）：安全巡检页新建弹窗里只读显示所选游乐项目的走点进度，
 // 点位在工作手机上逐个扫码记录；项目配了点位时检查项取走完的点位，不再手填检查项说明。
+// 第十八批 CF 段第 404 条 404-R2（BSM:1642「补录记录与原始记录并列展示，标明“人工补录”」）：主管复核通过的点位补录落的走点行（带补录单编号）标「人工补录」。
 
 export type InspectionPoint = { seq: number; pointName: string; pointCode?: string };
-export type InspectionWalkPoint = { seq: number; pointName: string; result: string; note?: string | null; checkedBy?: string; checkedAt?: string };
+export type InspectionWalkPoint = { seq: number; pointName: string; result: string; note?: string | null; checkedBy?: string; checkedAt?: string;
+  backfillId?: string | null };
 export type InspectionPointsView = { projectId?: string; points: InspectionPoint[]; walk: InspectionWalkPoint[] };
 
 export function inspectionPointsPath(projectId: string): string {
@@ -45,7 +47,7 @@ export function AmusementInspectionWalkPanel({ view }: { view: InspectionPointsV
               <tr key={point.seq} data-testid={`amusement-inspection-walk-row-${point.seq}`}>
                 <td>{point.seq}</td>
                 <td>{point.pointName}</td>
-                <td>{row ? (row.result === "pass" ? "通过" : "不通过") : "未记录"}</td>
+                <td>{row ? `${row.result === "pass" ? "通过" : "不通过"}${row.backfillId ? "（人工补录）" : ""}` : "未记录"}</td>
                 <td>{row ? cnDate(row.checkedAt) : "—"}</td>
               </tr>
             );

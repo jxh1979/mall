@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -174,7 +174,7 @@ public class AnalyticsService {
             new MetricCatalogEntry("supply.received", "inventory", "quantity_by_item_unit", true,
                     "按商品及单位分列，不出标量快照"),
             new MetricCatalogEntry(DashboardAggregationJob.RISK_MANUAL_BACKFILL, "governance", "count", true,
-                    "补录申请提交即计数（锁账后补录、无可信领取时刻补证、交接扫码补录、销售归属补录、服务责任补录），状态另列")
+                    "补录申请提交即计数（锁账后补录、无可信领取时刻补证、交接扫码补录、销售归属补录、服务责任补录、游乐巡检点位补录），状态另列")
     );
 
     /**

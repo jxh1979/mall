@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.16
+# P0 OpenAPI Operation 验收矩阵 V1.17
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1420 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1425 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -67,6 +67,7 @@
 | amusement | `GET` | `/api/v1/amusement/projects/{id}/inspection-points` | `getAmusementProjectInspectionPoints` | 查询游乐项目巡检点位清单与本轮走点 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | amusement | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | `replaceAmusementProjectInspectionPoints` | 整份替换游乐项目巡检点位清单 | `AmusementInspectionPointsReplaceRequest` | `amusement.safety_template.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.inspection_points.configured` | `amusement.inspection_points.configure_failed` |
 | amusement | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/check` | `checkAmusementInspectionPoint` | 按序扫码记录一个巡检点位 | `AmusementInspectionPointCheckRequest` | `amusement.safety_inspection.create` | `staff-token` | `project-amusement` | staff_work_phone | 是 | `amusement.inspection_point.checked` | `amusement.inspection_point.check_failed` |
+| amusement | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/backfill` | `submitAmusementInspectionPointBackfill` | 游乐巡检点位缺扫码人工补录（附证据、进主管复核，通过后才生效） | `AmusementInspectionPointBackfillRequest` | `amusement.safety_inspection.create` | `staff-token` | `project-amusement` | staff_work_phone | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
 | amusement | `GET` | `/api/v1/amusement/spot-check-policies/{project_id}` | `getAmusementSpotCheckPolicy` | 查询营业中抽检间隔（按综合体项目） | `-` | `amusement.safety_inspection.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | amusement | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | `saveAmusementSpotCheckPolicy` | 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人） | `AmusementSpotCheckPolicyRequest` | `amusement.safety_template.manage` | `staff-token` | `project` | web | 是 | `amusement.spot_check_policy.updated` | `amusement.spot_check_policy.update_failed` |
 | amusement | `GET` | `/api/v1/amusement/spot-check-misses` | `listAmusementSpotCheckMisses` | 查询当班未抽检记录 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web | 否 | `not_applicable` | `not_applicable` |
@@ -540,6 +541,10 @@
 | amusement | `POST` | `/api/v1/amusement/capacity-config/{configId}/disable` | `disableAmusementCapacityConfig` | 停用游乐容量配置 | `StatusChangeRequest` | `amusement.capacity_config.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.capacity_config.changed` | `amusement.capacity_config.change_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/{id}/devices` | `listAmusementDevices` | 查询游乐项目游乐设备 | `-` | `amusement.device.view` | `staff-token` | `project-amusement` | web, kiosk, staff_work_phone | 否 | `amusement.device.viewed` | `amusement.device.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/projects/{id}/devices` | `createAmusementDevice` | 维护游乐项目游乐设备 | `AmusementDeviceRequest` | `amusement.device.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.device.changed` | `amusement.device.change_failed` |
+| amusement | `GET` | `/api/v1/amusement/projects/{id}/devices/classification-changes` | `listAmusementDeviceClassChanges` | 查询游乐项目设备分级申请与历史 | `-` | `amusement.device.view` | `staff-token` | `project-amusement` | web | 否 | `not_applicable` | `not_applicable` |
+| amusement | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/classification-changes` | `requestAmusementDeviceClassChange` | 申请变更游乐设备分级（经工程或安全复核后生效） | `AmusementDeviceClassChangeRequest` | `amusement.device.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.device_class.change_submitted` | `amusement.device_class.change_failed` |
+| amusement | `GET` | `/api/v1/amusement/projects/{id}/devices/stops` | `listAmusementDeviceStops` | 查询游乐项目当前停用的设备 | `-` | `amusement.device.view` | `staff-token` | `project-amusement` | web | 否 | `not_applicable` | `not_applicable` |
+| amusement | `POST` | `/api/v1/amusement/projects/{id}/devices/{device_id}/continue-judgements` | `judgeAmusementDeviceContinue` | 判定辅助设备停用后项目能否继续运行（留痕） | `AmusementDeviceContinueJudgementRequest` | `amusement.device.continue_judge` | `staff-token` | `project-amusement` | web | 是 | `amusement.device.continue_judged` | `amusement.device.continue_judge_failed` |
 | bar | `PUT` | `/api/v1/bar/tables/{table_id}/space` | `assignBarTableSpace` | 卡座/桌台空间指派（回填） | `BarTableSpaceAssignmentRequest` | `bar.table.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.table_space.assigned` | `bar.table_space.assign_failed` |
 | bar | `GET` | `/api/v1/bar/tables/without-space` | `listBarTablesWithoutSpace` | 未回填空间的卡座/桌台清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.table_space_backlog.viewed` | `bar.table_space_backlog.view_failed` |
 | bar | `GET` | `/api/v1/bar/tables/space-options` | `listBarTableSpaceOptions` | 台位可选空间清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar` | web | 否 | `bar.table_space_option.viewed` | `bar.table_space_option.view_failed` |

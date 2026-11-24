@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -96,6 +96,10 @@ public class TicketVerificationService {
     // 字段注入免改构造点；内存仓单测（无 Spring）为 null 不预警。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     TicketFrequentEntryAlertService frequentEntryAlerts;
+
+    // 第十八批 CF 段第 409 条 409-R3：游乐入场放行后是否已达运营容量，随核销结果带回现场提示。字段注入免改构造点；未注入（内存单测）为空。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.amusement.AmusementOperatingCapacityNotice operatingCapacityNotice;
 
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
@@ -917,7 +921,8 @@ public class TicketVerificationService {
                     "核销点或设备未关联真实游乐项目，不能核销游乐权益"));
         VerificationRecord fact=repository.findVerificationById(ticketIdForAmusement(admission.id()))
             .orElseThrow(()->ApiException.conflict("AMUSEMENT_ADMISSION_FACT_REQUIRED","游乐入场未生成对应票务核销事实"));
-        return new VerificationResponse(fact.id(),fact.verificationNo(),fact.status(),fact.resultReason());
+        return new VerificationResponse(fact.id(),fact.verificationNo(),fact.status(),fact.resultReason(),
+                operatingCapacityNotice==null?null:operatingCapacityNotice.reached(admission.projectId()));
     }
 
 

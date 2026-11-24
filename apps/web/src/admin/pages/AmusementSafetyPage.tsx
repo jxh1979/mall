@@ -14,6 +14,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { AmusementInspectionWalkPanel, readInspectionWalk, walkComplete, type InspectionPointsView } from "./AmusementInspectionWalkPanel";
 import { AmusementInspectionRulesSection } from "./AmusementInspectionRulesSection";
+import { AmusementDeviceLedgerSection } from "./AmusementDeviceLedgerSection";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -87,9 +88,9 @@ function evidenceList(row: AmusementSafetyInspectionRow) {
   return (row.evidenceAttachmentIds ?? row.attachmentIds ?? []).join(", ") || "-";
 }
 
-// 第十八批 BS 段第 373 条 373-R3：按点位走点建的巡检（检查项带记录时间），明细逐点列结果与记录时间。
+// 第十八批 BS 段第 373 条 373-R3：按点位走点建的巡检（检查项带记录时间），明细逐点列结果与记录时间；第十八批 CF 段 404-R2：补录落的点位标「人工补录」。
 function pointRecords(row: AmusementSafetyInspectionRow): string {
-  return (row.items ?? []).map((item) => `${String(item.itemName ?? "")}：${item.result === "pass" ? "通过" : "不通过"}（${cnDate(String(item.checkedAt ?? ""))}）`).join("；");
+  return (row.items ?? []).map((item) => `${String(item.itemName ?? "")}：${item.result === "pass" ? "通过" : "不通过"}${item.backfillId ? "（人工补录）" : ""}（${cnDate(String(item.checkedAt ?? ""))}）`).join("；");
 }
 
 function displayNo(row: AmusementSafetyInspectionRow) {
@@ -573,6 +574,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
         <AmusementInspectionRulesSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError}
           effectivePermissions={effectivePermissions} projects={projects} />
       )}
+      {kpiFocus ? null : <AmusementDeviceLedgerSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} projects={projects} />}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
