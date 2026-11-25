@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 import type { DownloadedFile } from "../types";
@@ -153,7 +153,16 @@ const MERCHANT_APP_EXPORT_ENDPOINTS = new Set(["export", "monthly-export", "edit
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // 第 23 条 23-R2、23-R5：外壳自发的页面打开留痕。不是用户的一次操作，不进操作编号登记、不撤下「已完成」提示（M725-F03），每次带新编号。
-const PAGE_VIEWS_PATH = "/api/v1/security/page-views";
+// 第 448 条 448-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」、M725-F03）：手机号走请求体的查询（AUD-020，
+// 后端标为查询、不扣单次授权）同样不是用户的一次写操作，不进操作编号登记、不撤下「已完成」提示，每次带新编号——储值退卡页退卡后会按
+// 手机号重查卡，原先提示会被立刻撤下。提示的撤下时点是「下一次提交开始」，查询不算提交（按字面定）；预览类是下一次操作的开始，不列入。
+const NOT_WRITE_OPERATION_PATHS = new Set([
+  "/api/v1/security/page-views",
+  "/api/v1/loyalty/stored-value/refund-cards/lookup",
+  "/api/v1/loyalty/stored-value/ledger/query",
+  "/api/v1/customer-accounts/lookup",
+  "/api/v1/inventory/saved-bottles/lookup",
+]);
 
 export class AdminApi {
   private readonly apiBaseUrl = getApiBaseUrl();
@@ -292,7 +301,7 @@ export class AdminApi {
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
     // M725-F02：请求编号跟着「一次操作」走（见 shared/operationKey）——上一次没拿到明确结果时，
     // 再提交同一内容沿用原编号；401 刷新后的重放也沿用同一编号（服务端按请求编号去重）。
-    const operation = body && path !== PAGE_VIEWS_PATH ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
+    const operation = body && !NOT_WRITE_OPERATION_PATHS.has(path) ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
     const stableBody = body && operation ? { ...body, idempotencyKey: operation.key } : body;
     // 认证域自身（登录/刷新/登出）失败不再走刷新，避免自递归。
     const isAuthEndpoint = path.includes("/auth/");

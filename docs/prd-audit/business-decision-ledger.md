@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.51
+文档版本：V1.52
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -13927,3 +13927,46 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 测试：本组只改文档。node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 干净。
 - 18CC 合并前变基（2026-11-25）：本段自 28ec1bcf 变基到 origin/main 65b7a02d；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.22、决策台账 V1.51，Flyway 最新 V770（共 639 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CC 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 2364c49b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7488 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2132；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 23:35 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CS 落地位置补记（2026-11-20）：第十八批 CS 段（batch117）按 18CS 只读设计实现待开发清单第 425、448、449 条（已完成提示组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CS 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CS 段，batch117）实现待开发清单第 425、448、449 条（18CS 只读设计 b117-audit/d8-cs.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 425-R1、448-R1、449-R1（顺序照设计 batching）。本段工作树开工前快进到现主干，设计里的行号以现码 grep 为准；按字面或常理定的各点照设计 notes 执行。设计范围外旁见已登记待开发清单第 464 条（待核实），本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 f447ef87 开工（第八轮），变基到 65b7a02d 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CS 落地位置补记（第十八批 CS 段，第 425、448、449 条）：
+  - 425-R1（发起人对已撤回的门票转赠再撤回时，返回该转赠并提示已完成）
+    - 改法：TicketTransferService.revoke 的两处已撤回分支（条件更新前读到已撤回；条件更新 0 行、重读为已撤回）在返回前调 IdempotentReplayContext.markCurrentReplayed()，响应带 replayed=true，message 为「该操作已完成（重复提交，返回首次结果）」，不再重复留痕 ticket_transfer.revoked。排在转赠不存在、非发起人与综合体开关之后。不接幂等层，x-idempotency-required 仍为 false。
+    - 落地位置：后端 ticketing 包 TicketTransferService.revoke；契约 revokeCustomerTicketTransfer 只在 description 末尾补一句（本段新增操作 0 个）。
+    - 依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」。revoked 只由发起人撤回写入，发起人再撤回就是同一次操作的重复提交（按常理定，与 18CA 393-R1 同口径）。
+    - 测试：TicketTransferRevokeReplayJdbcIntegrationTests.revokingAnAlreadyRevokedTicketTransferAgainReturnsItAndSaysItIsAlreadyCompleted、TicketTransferRevokeReplayJdbcIntegrationTests.aSameKeyRevokeArrivingWhileTheFirstIsRunningSaysItIsAlreadyCompleted。
+  - 448-R1（后台以提交方式实现的查询不进写操作编号登记、不撤下「已完成」提示）
+    - 改法：AdminApi.request 原来只排除外壳页面打开留痕一条路径，改为排除一个路径集合 NOT_WRITE_OPERATION_PATHS，内容是 page-views 加四个以提交方式实现的查询：储值退卡查卡（lookupStoredValueRefundCards）、储值台账查询（queryStoredValueLedger）、客人账号按手机号查询（CustomerAccountAdminController.lookup）、存酒按手机号检索（lookupSavedBottles）。这几个请求不进写操作编号登记、不撤下「已完成」提示，每次带新编号。预览类不列入。
+    - 落地位置：后台网页客户端 AdminApi.request（商户手机应用共用）。
+    - 依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PRD §2A.3 M725 补记「下一次提交开始即撤下」，查询不算提交（按字面定）。
+    - 测试：adminClient.test.ts「以提交方式实现的查询（储值退卡查卡）不撤下「已完成」提示，每次带新的请求编号」；StoredValueRefundPage.test.tsx「退卡重复提交拿回第一次的结果：提示已完成，随后按手机号重查卡不撤下提示」。
+  - 449-R1（小程序订阅已完成提示，重复提交拿回第一次结果时弹窗提示）
+    - 改法：客人小程序 lib/api.js 订阅 core.onReplayedNotice，收到已完成提示时调 wx.showModal（标题「提示」，只有确定按钮），页面照常按成功处理；空提示不处理。页面与 core 不改。
+    - 落地位置：客人小程序 miniprogram/lib/api.js。
+    - 依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；BSM:852「客人端包括 App 和小程序，两者同步建设。」。用弹窗属技术选型：小程序各页没有共用的页面顶部，页面成功后会马上弹自己的轻提示，已完成提示若也用轻提示会被盖掉。
+    - 测试：customer-miniapp test/transfer.test.js 的 repeatedRevokeShowsAlreadyCompletedModal、firstRevokeShowsNoAlreadyCompletedModal。
+  - 本段：无迁移（不占 V816～V819），新增操作 0 个，不新增字段键、权限码与页面矩阵行。
+- 契约（425-R1）：revokeCustomerTicketTransfer（POST /api/v1/customer/ticket-transfers/{transfer_id}/revoke）在现有 description 末尾补一句：「发起人对已撤回的转赠再撤回（重复点击、网络重发，含同时到达）：返回该转赠并带 replayed=true、提示已完成，不再留痕 ticket_transfer.revoked（第十八批 CS 段第 425 条 425-R1；PGM:303、PGM:528⑤）。」接法与 revokeCustomerVoucherTransfer 的 393-R1 句相同。x-idempotency-required 仍为 false，其余属性与响应码不变。对应实现是 TicketTransferService.revoke 两处已撤回分支调 IdempotentReplayContext.markCurrentReplayed()。依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528⑤。本段新增操作 0 个，无迁移；448-R1、449-R1 无契约变化。
+- 18CS 汇合（J）：e2e 不改。本段只改了 AdminApi.request 里不进操作编号登记的查询路径集合、小程序 lib/api.js 订阅 onReplayedNotice、TicketTransferService.revoke 标记重复提交，没有改任何页面的外观或 testid。tests/e2e 的选择器、断言与 mock 都不依赖这几处（mock-api 对 customer-accounts/lookup 不读请求编号；full-admin-remaining 唯一的 idempotency_key 断言属积分豁免写操作），所以不重拍视觉基线。门禁结论如下（在 f447ef87 基线上实跑）：
+  - 后端全量（--fresh）：0 红。北京 07:00 前跑时，AmusementHardCapacityAutoReopenJdbcIntegrationTests 与 AmusementExitReleaseJdbcIntegrationTests 因 AmusementInspectionDayGate.reasons 按闭店时点算「当日」而落时段红，属既有，07:00 后复跑全绿。
+  - 前端：typecheck 与 vitest 全量全过。
+  - 客人：App、小程序、customer-core 三个工作区单测全过。
+  - 安卓：员工端单测全过，android-app 编译通过。
+  - e2e：chromium 跑五份后台 spec 全过。
+  - 契约：四份生成物重生成后没有差异；verify:p0-contract 通过；yaml 与 json 深比较一致；本段新增操作 0 个，只就地改 revokeCustomerTicketTransfer 的 description；本段没有迁移（预留号 V816～V819 未用）。
+- 18CS 文档组（第 425、448、449 条，无迁移，新增操作 0 个）：
+  改法：两份 PRD 各补一条实现现状，修订表各加一行，标题版本各升一次。没有新增业务规则；人工权限矩阵、契约包、任务映射表、事件矩阵都不扩表。
+  落地位置：
+  - 票务产品 PRD（docs/ticketing-entitlement-checkin-product-prd-v0.1.md）§12 已确认第 10 条「票务权益转赠」：补 425-R1。撤回转赠（revokeCustomerTicketTransfer，TicketTransferService.revoke）的「已撤回」只由发起人撤回写入。发起人对已撤回的转赠再撤回（重复点击、网络重发，含两笔同时到达），返回该转赠并提示「该操作已完成（重复提交，返回首次结果）」（replayed=true），不重复留痕 ticket_transfer.revoked。转赠不存在 404 TICKET_TRANSFER_NOT_FOUND、非发起人 403 TICKET_TRANSFER_NOT_INITIATOR、综合体客人端已关 403 TERMINAL_DISABLED 等拒绝照旧在前，不带该标记；已领取、已作废照旧 409（TICKET_TRANSFER_ALREADY_CLAIMED、TICKET_TRANSFER_VOIDED）。
+  - 平台治理 PRD（docs/platform-governance-prd-v0.1.md）§2A.3 M725 补记之后：补 448-R1、449-R1。
+    - 448-R1：后台以提交方式实现的四个查询，即储值退卡查卡 lookupStoredValueRefundCards、储值台账查询 queryStoredValueLedger、客人账号按手机号查询 lookupCustomerAccountByPhone、存酒按手机号检索 lookupSavedBottlesByPhone（AdminApi.request 的 NOT_WRITE_OPERATION_PATHS），与外壳的页面打开登记同样处理：不进写操作请求编号登记，不撤下「该操作已完成（重复提交，返回首次结果）」提示，每次带新编号。
+    - 449-R1：客人小程序收到 replayed=true 时弹窗提示已完成，只有确定按钮，页面照常按成功处理（customer-miniapp lib/api.js 订阅 core.onReplayedNotice）。小程序各页没有共用的页面顶部，所以用弹窗代替 M725 补记所说的页面顶部提示，弹窗由客人点确定关闭。
+  依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；449 另据 BSM:852「客人端包括 App 和小程序，两者同步建设。」
+  测试：本组不新增测试。行为由 S1 段的这些用例覆盖：
+  - TicketTransferRevokeReplayJdbcIntegrationTests（revokingAnAlreadyRevokedTicketTransferAgainReturnsItAndSaysItIsAlreadyCompleted、aSameKeyRevokeArrivingWhileTheFirstIsRunningSaysItIsAlreadyCompleted）
+  - adminClient.test.ts 与 StoredValueRefundPage.test.tsx 新增的已完成提示不被查询撤下用例
+  - customer-miniapp transfer.test.js 的 repeatedRevokeShowsAlreadyCompletedModal、firstRevokeShowsNoAlreadyCompletedModal
+- 18CS 合并前变基（2026-11-25）：本段自 65b7a02d 变基到 origin/main 4ba0b82c；合并时 OpenAPI 共 1425 个操作（主干 1425）、info.version V1.23、决策台账 V1.52，Flyway 最新 V770（共 639 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18CS 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 9d5bb0b6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7490 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2134；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-25 11:16 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

@@ -394,6 +394,30 @@ describe("AdminApi 同一次操作的请求编号", () => {
     off();
   });
 
+  // 第十八批 CS 段第 448 条 448-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：手机号走请求体的查询（AUD-020）
+  // 不是用户的下一次提交，不撤下「已完成」提示、不进操作编号登记，每次带新编号（储值退卡页退卡后会按手机号重查卡）。
+  it("以提交方式实现的查询（储值退卡查卡）不撤下「已完成」提示，每次带新的请求编号", async () => {
+    const notices: Array<string | null> = [];
+    const off = onReplayedNotice((notice) => notices.push(notice));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(replayedResponse({ id: "svtxn_1" }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new AdminApi();
+
+    await api.post("/api/v1/loyalty/stored-value/cus_1/counter-refund", { merchantId: "mch_1", amountCent: 4000, idempotencyKey: "counter-refund-cus_1" });
+    expect(notices[notices.length - 1]).toBe(REPLAYED_NOTICE);
+    await api.post("/api/v1/loyalty/stored-value/refund-cards/lookup", { phone: "13900001234" });
+    await api.post("/api/v1/loyalty/stored-value/refund-cards/lookup", { phone: "13900001234" });
+
+    expect(notices[notices.length - 1]).toBe(REPLAYED_NOTICE);
+    expect(sentKey(fetchMock, 1)).toMatch(/^admin-web-/);
+    expect(sentKey(fetchMock, 2)).toMatch(/^admin-web-/);
+    expect(sentKey(fetchMock, 2)).not.toBe(sentKey(fetchMock, 1));
+    off();
+  });
+
   // PUT 改写的是路径所指的那个对象。关开关没拿到结果（其实已关），操作员重新读数后打开、再关，
   // 第三次正文与第一次逐字相同，但已不是同一个操作：不能沿用第一次的编号被当成重放（服务端不执行，开关仍开着）。
   it("同一对象的 PUT 改写成功后，之前对它没拿到结果的登记作废：关（丢响应）→ 开 → 再关，第三次换新编号、真正执行", async () => {
